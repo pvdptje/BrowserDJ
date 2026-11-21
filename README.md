@@ -19,6 +19,10 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 
 `window.BrowserDJ.project` is the live project, the natural hook for an AI helper later.
 
+## Examples
+
+`examples/` holds project files to load with **Open**, such as `gabber-in-de-browser.browserdj.json` (185 BPM hardcore).
+
 ## Model
 
 - **Tracks** are instruments: a synth (piano roll) or a drum kit (step sequencer).
