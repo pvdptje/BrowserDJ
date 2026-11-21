@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BrowserDJ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Browser<span>DJ</span></h1>
+    <p>Hum a melody, shape it in the piano roll, put a beat under it, and take it to your music program.</p>
+    <div class="hactions">
+      <button id="newBtn" class="btn small" type="button">New</button>
+      <button id="openBtn" class="btn small" type="button">Open</button>
+      <button id="saveBtn" class="btn small" type="button" title="Save the project as a file">Save</button>
+      <button id="wavBtn" class="btn small" type="button" title="Render the song to a WAV file">Export WAV</button>
+      <button id="midiBtn" class="btn primary" type="button" title="Melody and drums as a MIDI file">Download MIDI</button>
+    </div>
+  </header>
+
+  <section class="transport" aria-label="Transport">
+    <div class="tgroup">
+      <button id="playBtn" class="btn play" type="button" title="Play from the marker (Space)"><span class="ico" aria-hidden="true">&#9654;</span><span id="playLabel">Play</span></button>
+      <button id="stopBtn" class="btn" type="button" title="Stop and move the marker back to the start">&#9632;<span class="sr">Stop</span></button>
+      <span id="pos" class="pos" aria-label="Position">1.1.1</span>
+      <label class="check" for="loop"><input id="loop" type="checkbox" checked> Loop</label>
+      <label class="check" for="click"><input id="click" type="checkbox"> Click</label>
+    </div>
+    <div class="tgroup">
+      <label for="bpm" class="lab">Tempo</label>
+      <input id="bpm" type="number" min="40" max="240" step="1" value="120">
+      <button id="tapBtn" class="btn small" type="button" title="Tap along to set the tempo">Tap</button>
+    </div>
+    <div class="tgroup">
+      <label for="root" class="lab">Key</label>
+      <select id="root"></select>
+      <select id="scale"></select>
+      <button id="detectKey" class="btn small" type="button">Detect</button>
+    </div>
+    <div class="tgroup">
+      <button id="undoBtn" class="btn small" type="button" title="Undo (Ctrl+Z)">Undo</button>
+      <button id="redoBtn" class="btn small" type="button" title="Redo (Ctrl+Shift+Z)">Redo</button>
+    </div>
+  </section>
+
+  <section class="capture" aria-label="Record">
+    <div class="caprow">
+      <button id="recBtn" type="button"><span class="dot"></span><span id="recLabel">Record</span></button>
+      <div class="live">
+        <div id="liveNote" class="idle" aria-label="Note being heard">--</div>
+        <div class="meterbox">
+          <div class="meter"><div id="level"></div></div>
+          <div id="recTime">0:00</div>
+        </div>
+      </div>
+      <label class="check" for="playBeat" title="Hear the drums while you hum, after a one-bar count-in. Use headphones so the microphone only hears you."><input id="playBeat" type="checkbox"> Hum over the beat <span class="muted">(headphones)</span></label>
+      <div class="loader">
+        <span>or drop a voice memo here</span>
+        <button id="fileBtn" class="btn small" type="button">Load a recording</button>
+      </div>
+    </div>
+    <div class="takerow" id="takeRow">
+      <span class="lab">Your take</span>
+      <label for="detail" class="lab2">Note detail</label>
+      <span class="rangebox"><span class="end">Smoother</span><input id="detail" type="range" min="0" max="100" value="50"><span class="end">More notes</span></span>
+      <label class="check" for="fixTuning"><input id="fixTuning" type="checkbox" checked> Correct my tuning</label>
+      <span id="tuningInfo" class="muted"></span>
+      <span class="spacer"></span>
+      <button id="guessTempo" class="btn small" type="button">Guess tempo</button>
+      <button id="rereadBtn" class="btn small" type="button" title="Throw away edits and rebuild the notes from the recording">Rebuild notes</button>
+      <button id="playTakeBtn" class="btn small" type="button">Play my recording</button>
+    </div>
+  </section>
+  <p id="status" role="status" aria-live="polite"></p>
+
+  <section class="panel" aria-label="Melody">
+    <div class="phead">
+      <h2>Melody</h2>
+      <span id="takeChip" class="chip" hidden></span>
+      <span id="summary" class="summary"></span>
+      <span class="spacer"></span>
+      <label for="instrument" class="lab">Sound</label>
+      <select id="instrument"></select>
+      <label class="check" for="echo"><input id="echo" type="checkbox" checked> Echo</label>
+      <input id="melVol" type="range" min="0" max="100" value="80" class="vol" aria-label="Melody volume" title="Melody volume">
+      <button id="melMute" class="tog" type="button" aria-pressed="false" title="Mute melody">M</button>
+    </div>
+    <div class="ptools">
+      <label for="snap" class="lab">Snap</label>
+      <select id="snap">
+        <option value="0">Off</option>
+        <option value="4">1/4</option>
+        <option value="8">1/8</option>
+        <option value="16" selected>1/16</option>
+        <option value="32">1/32</option>
+      </select>
+      <label for="bars" class="lab">Bars</label>
+      <input id="bars" type="number" min="1" max="128" step="1" value="4">
+      <span class="lab">Octave</span>
+      <button id="octDown" class="btn small" type="button" title="Down an octave">&minus;</button>
+      <button id="octUp" class="btn small" type="button" title="Up an octave">+</button>
+      <span class="sep"></span>
+      <button id="quantBtn" class="btn small" type="button" title="Snap note starts and ends to the grid (Q)">Quantize</button>
+      <button id="keyBtn" class="btn small" type="button" title="Move notes into the key">Fit to key</button>
+      <button id="legatoBtn" class="btn small" type="button" title="Stretch each note up to the next one">Legato</button>
+      <button id="clearMelBtn" class="btn small" type="button">Clear</button>
+      <button id="fitBtn" class="btn small" type="button" title="Zoom to the whole song">Zoom to fit</button>
+      <span class="hint">Edits apply to the selected notes, or all notes if none are selected.</span>
+    </div>
+    <div id="rollWrap"><canvas id="roll" tabindex="0" aria-label="Piano roll. Click to add notes, drag to move, drag the right edge to resize, right-click to delete."></canvas></div>
+  </section>
+
+  <section class="panel" aria-label="Drums">
+    <div class="phead">
+      <h2>Drums</h2>
+      <label for="preset" class="lab">Pattern</label>
+      <select id="preset"><option value="">Load a pattern…</option></select>
+      <label for="drumBars" class="lab">Length</label>
+      <select id="drumBars">
+        <option value="1">1 bar</option>
+        <option value="2">2 bars</option>
+        <option value="4">4 bars</option>
+      </select>
+      <label for="swing" class="lab">Swing</label>
+      <input id="swing" type="range" min="0" max="60" value="0" class="vol">
+      <span class="spacer"></span>
+      <button id="drumClear" class="btn small" type="button">Clear</button>
+      <input id="drumVol" type="range" min="0" max="100" value="85" class="vol" aria-label="Drums volume" title="Drums volume">
+      <button id="drumMute" class="tog" type="button" aria-pressed="false" title="Mute drums">M</button>
+    </div>
+    <div id="rack" class="rack"></div>
+  </section>
+
+  <details class="help">
+    <summary>Mouse and keyboard</summary>
+    <div class="helpgrid">
+      <div><h3>Piano roll</h3>
+        <ul>
+          <li><b>Click</b> an empty spot to add a note, and keep dragging to place it</li>
+          <li><b>Drag</b> a note to move it, or drag its <b>right edge</b> to change its length</li>
+          <li><b>Right-click</b> a note to delete it. Right-drag deletes several</li>
+          <li><b>Ctrl+drag</b> draws a selection box. <b>Shift+click</b> adds or removes a note from the selection</li>
+          <li><b>Double-click</b> a note to select every note at that pitch</li>
+          <li>Drag in the <b>VEL</b> lane to set how loud notes are</li>
+          <li>Hold <b>Alt</b> while dragging to ignore the snap grid</li>
+          <li>Click the top <b>ruler</b> to choose where playback starts</li>
+        </ul></div>
+      <div><h3>Keys</h3>
+        <ul>
+          <li><b>Space</b> play or stop &nbsp; <b>Ctrl+Z</b> undo &nbsp; <b>Ctrl+Shift+Z</b> redo</li>
+          <li><b>&uarr; &darr;</b> transpose (<b>Shift</b> for an octave) &nbsp; <b>&larr; &rarr;</b> nudge</li>
+          <li><b>Delete</b> remove &nbsp; <b>Ctrl+A</b> select all &nbsp; <b>Esc</b> deselect</li>
+          <li><b>Ctrl+C / X / V</b> copy, cut, paste at the marker &nbsp; <b>Ctrl+D</b> duplicate</li>
+          <li><b>Q</b> quantize</li>
+          <li><b>Wheel</b> scroll &nbsp; <b>Shift+wheel</b> scroll sideways &nbsp; <b>Ctrl+wheel</b> zoom &nbsp; <b>Alt+wheel</b> row height &nbsp; <b>Middle-drag</b> pan</li>
+        </ul></div>
+      <div><h3>Drums</h3>
+        <ul>
+          <li><b>Click</b> or drag across steps to turn them on or off</li>
+          <li><b>Right-click</b> a step to make it an accent or a soft ghost hit</li>
+          <li><b>Click a name</b> to hear the sound. <b>Drop an audio file</b> on a row to use your own</li>
+        </ul></div>
+    </div>
+  </details>
+
+  <footer>Everything runs in this page. Your recording never leaves your computer, and your project is saved in this browser. For the cleanest notes, use headphones or a quiet room and keep the microphone close.</footer>
+</div>
+
+<input id="fileInput" class="hiddenfile" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac" tabindex="-1">
+<input id="projectInput" class="hiddenfile" type="file" accept=".json,.bdj,application/json" tabindex="-1">
+<input id="sampleInput" class="hiddenfile" type="file" accept="audio/*,.wav,.mp3,.ogg,.flac" tabindex="-1">
+
+<script src="js/engine.js"></script>
+<script src="js/sound.js"></script>
+<script src="js/project.js"></script>
+<script src="js/pianoroll.js"></script>
+<script src="js/drums.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
