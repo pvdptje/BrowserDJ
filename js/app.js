@@ -981,7 +981,7 @@
   /* ---------- example songs ----------
      The library lives in examples/examples.js, loaded the first time it is needed. A script tag works even
      when the page is opened straight from disk, where fetch() is not allowed. */
-  const FIRST_EXAMPLE = 'hemelhoog';
+  const FIRST_EXAMPLE = 'firstlight';
   let examplesReady = null;
   function loadExamples() {
     if (BDJ.EXAMPLES) return Promise.resolve(BDJ.EXAMPLES);
