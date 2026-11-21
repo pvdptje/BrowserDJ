@@ -35,6 +35,19 @@ BDJ.DrumRack = (() => {
 
     get p() { return this.host.project(); }
     get kit() { return this.host.track().kit; }
+    /* rolls of a row (2, 3 or 4 hits in a step; 0 = a single hit), made on first use */
+    rolls(id) {
+      const pat = this.host.pattern(), n = pat.bars * BDJ.Project.STEPS_PER_BAR;
+      pat.rolls = pat.rolls || {};
+      return pat.rolls[id] || (pat.rolls[id] = new Array(n).fill(0));
+    }
+    /* drop empty roll rows, so patterns without rolls stay as small as before */
+    tidyRolls() {
+      const pat = this.host.pattern();
+      if (!pat.rolls) return;
+      for (const id of Object.keys(pat.rolls)) if (!pat.rolls[id].some((v) => v)) delete pat.rolls[id];
+      if (!Object.keys(pat.rolls).length) delete pat.rolls;
+    }
     steps(id) { const pat = this.host.pattern(); return pat.steps[id] || (pat.steps[id] = new Array(pat.bars * BDJ.Project.STEPS_PER_BAR).fill(0)); }
 
     render() {
@@ -43,7 +56,7 @@ BDJ.DrumRack = (() => {
       const anySolo = this.kit.some((r) => r.solo);
       const html = [];
       for (const row of this.kit) {
-        const steps = this.steps(row.id);
+        const steps = this.steps(row.id), rl = (this.host.pattern().rolls || {})[row.id] || [];
         const def = BDJ.Sound.DRUMS.find((d) => d.id === row.id);
         const sample = this.host.sampleName(row.id);
         const silent = row.mute || (anySolo && !row.solo);
@@ -61,7 +74,8 @@ BDJ.DrumRack = (() => {
         for (let i = 0; i < n; i++) {
           const v = steps[i] || 0;
           const cls = 'step' + (v ? ' on' : '') + (v >= 127 ? ' acc' : v && v < 80 ? ' ghost' : '') + (Math.floor(i / 4) % 2 ? ' alt' : '') + (i === this.cur ? ' now' : '');
-          html.push(`<button type="button" class="${cls}" data-i="${i}" aria-label="${esc(def.name)} step ${i + 1}" aria-pressed="${!!v}"></button>`);
+          const r = v && rl[i] > 1 ? rl[i] : 0;
+          html.push(`<button type="button" class="${cls}" data-i="${i}"${r ? ` data-r="${r}"` : ''} aria-label="${esc(def.name)} step ${i + 1}${r ? ', roll of ' + r : ''}" aria-pressed="${!!v}"></button>`);
         }
         html.push(`</div></div>`);
       }
@@ -102,6 +116,17 @@ BDJ.DrumRack = (() => {
         this.render();
         return;
       }
+      if (this.host.rollMode && this.host.rollMode()) {
+        // Rolls mode: one step at a time, 1 -> 2 -> 3 -> 4 -> 1 hits (an empty step starts at 2)
+        const st = this.steps(row.id), ro = this.rolls(row.id);
+        if (!st[i]) { st[i] = 100; ro[i] = 2; } else ro[i] = (ro[i] || 1) >= 4 ? 0 : (ro[i] || 1) + 1;
+        this.tidyRolls();
+        this.host.end(before);
+        this.host.changed('drums');
+        this.render();
+        this.host.previewDrum(row.id, st[i]);
+        return;
+      }
       const val = this.steps(row.id)[i] ? 0 : 100;
       this.paint = { val, before, touched: new Set() };
       this.apply(st);
@@ -121,6 +146,8 @@ BDJ.DrumRack = (() => {
       this.paint.touched.add(key);
       const row = this.rowOf(st), i = +st.dataset.i;
       this.steps(row.id)[i] = this.paint.val;
+      const pr = this.host.pattern().rolls;
+      if (!this.paint.val && pr && pr[row.id]) { pr[row.id][i] = 0; st.removeAttribute('data-r'); }
       st.classList.toggle('on', !!this.paint.val);
       st.classList.remove('acc', 'ghost');
       st.setAttribute('aria-pressed', String(!!this.paint.val));
@@ -131,6 +158,7 @@ BDJ.DrumRack = (() => {
       if (!this.paint) return;
       const P = this.paint;
       this.paint = null;
+      this.tidyRolls();
       this.host.end(P.before);
       this.host.changed('drums');
     }

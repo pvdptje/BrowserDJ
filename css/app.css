@@ -136,6 +136,9 @@ input[type="range"].vol { width: 84px; }
 /* drum rack */
 .rack { overflow-x: auto; padding: 10px 14px 14px; display: flex; flex-direction: column; gap: 5px; }
 .drow { display: grid; grid-template-columns: 236px 1fr; gap: 10px; align-items: center; min-width: calc(246px + var(--steps, 16) * 24px); border-radius: 8px; }
+.step[data-r] { position: relative; }
+.step[data-r]::after { content: attr(data-r); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 700 11px/1 var(--font-mono); color: var(--note-ink, #15131f); pointer-events: none; }
+.step[data-r]::before { content: ''; position: absolute; inset: 3px; border-left: 1px dashed rgba(0,0,0,0.35); border-right: 1px dashed rgba(0,0,0,0.35); pointer-events: none; }
 .drow.drop { outline: 2px dashed var(--trace); outline-offset: 2px; }
 .drow.silent .steps { opacity: 0.4; }
 .dhead { display: flex; align-items: center; gap: 5px; }

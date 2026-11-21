@@ -385,6 +385,40 @@ test('audio tracks: takes follow the tempo, play once, catch up mid-clip, surviv
   eq([jp[1].audio.start, jp[1].audio.end, jp[1].audio.gain], [3.99, 4, 8]);
 });
 
+test('drum kits and rolls: defaults, roll hits inside the step, resize, presets, round trip', () => {
+  const p = PJ.blank();
+  const t = p.tracks.find((x) => x.type === 'drums'), pat = PJ.patternsOf(p, t.id)[0];
+  assert.strictEqual(t.kitStyle, 'classic');
+  assert.ok(['classic', '808', 'acoustic', 'lofi'].every((id) => ctx.BDJ.Sound.KITS.some((k) => k.id === id)));
+  assert.strictEqual(pat.rolls, undefined); // patterns without rolls stay as they were
+  pat.steps.snare[4] = 100; pat.steps.chat[0] = 90;
+  pat.rolls = { snare: new Array(16).fill(0) };
+  pat.rolls.snare[4] = 4;
+  p.clips = []; PJ.addClip(p, pat, 0);
+  const hits = [];
+  PJ.eventsIn(p, PJ.playItems(p, 'song').items, 0, 4, (ev) => hits.push([ev.drum, ev.at, ev.vel]));
+  eq(hits.filter((h) => h[0] === 'snare'), [['snare', 1, 100], ['snare', 1.0625, 80], ['snare', 1.125, 80], ['snare', 1.1875, 80]]);
+  eq(hits.filter((h) => h[0] === 'chat'), [['chat', 0, 90]]);
+  // MIDI gets the roll as separate notes
+  const midi = PJ.midiTracks(p, 'song').find((m) => m.channel === 9);
+  assert.strictEqual(midi.notes.filter((n) => n.pitch === 38).length, 4);
+  // growing the pattern repeats the rolls with the steps
+  PJ.setDrumBars(pat, 2);
+  assert.strictEqual(pat.rolls.snare.length, 32);
+  assert.strictEqual(pat.rolls.snare[20], 4);
+  // round trip; bad roll values and empty rows are dropped; unknown kits fall back
+  t.kitStyle = '808';
+  pat.rolls.chat = new Array(32).fill(7);
+  const back = PJ.normalize(JSON.parse(PJ.serialize(p)));
+  const bt = back.tracks.find((x) => x.type === 'drums'), bp = PJ.patternsOf(back, bt.id)[0];
+  assert.strictEqual(bt.kitStyle, '808');
+  eq(Object.keys(bp.rolls), ['snare']);
+  assert.strictEqual(PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'drums', kitStyle: 'tr909x' }] }).tracks[0].kitStyle, 'classic');
+  // a preset replaces the rolls too
+  PJ.applyPreset(p, pat, 'house');
+  assert.strictEqual(pat.rolls, undefined);
+});
+
 test('movement (LFO): off by default, round trip, bad values cleaned up', () => {
   const p = PJ.blank();
   const syn = p.tracks.find((t) => t.type === 'synth'), drums = p.tracks.find((t) => t.type === 'drums');

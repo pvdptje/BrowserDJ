@@ -69,7 +69,7 @@ BDJ.Project = (() => {
       auto: {}, autoOpen: false, autoParam: 'volume',
       echoSend: type !== 'synth' || opts.echo === false ? 0 : 1,
     };
-    if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; }
+    if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; t.kitStyle = 'classic'; }
     else if (type === 'audio') { /* recordings: everything lives in its patterns (takes) */ }
     else { t.instrument = opts.instrument || 'pluck'; t.shape = { ...BDJ.Sound.SHAPE, ...(opts.shape || {}) }; t.lfo = { target: 'off', rate: '1/8', depth: 0.6 }; }
     p.tracks.push(t);
@@ -140,6 +140,7 @@ BDJ.Project = (() => {
       const s = pre.rows[d.id] || '';
       pat.steps[d.id] = Array.from({ length: n }, (_, i) => (s ? STEP_VEL[s[i % s.length]] || 0 : 0));
     }
+    delete pat.rolls;
     const t = track(p, pat.trackId);
     if (pre.swing != null) t.swing = pre.swing;
   }
@@ -152,6 +153,7 @@ BDJ.Project = (() => {
       // growing repeats what is there, shrinking keeps the start
       pat.steps[id] = Array.from({ length: n }, (_, i) => src[i % old] || 0);
     }
+    for (const id of Object.keys(pat.rolls || {})) { const src = pat.rolls[id]; pat.rolls[id] = Array.from({ length: n }, (_, i) => src[i % old] || 0); }
     pat.bars = bars;
   }
 
@@ -247,7 +249,15 @@ BDJ.Project = (() => {
           for (const k of t.kit) {
             const v = (pat.steps[k.id] || [])[local];
             if (!v || k.mute || (anySolo && !k.solo)) continue;
-            fn({ track: t, pattern: pat, item: it, kind: 'drum', at, len: 0.2, drum: k.id, vel: v, gain: k.vol });
+            const r = pat.rolls && pat.rolls[k.id] ? pat.rolls[k.id][local] || 0 : 0;
+            if (r > 1) {
+              // a roll: r even hits inside the step, the later ones a little softer
+              for (let j = 0; j < r; j++) {
+                const aj = at + (j * 0.25) / r;
+                if (aj >= clipEnd - EPS) break;
+                fn({ track: t, pattern: pat, item: it, kind: 'drum', at: aj, len: 0.2 / r, drum: k.id, vel: j ? Math.max(1, Math.round(v * 0.8)) : v, gain: k.vol });
+              }
+            } else fn({ track: t, pattern: pat, item: it, kind: 'drum', at, len: 0.2, drum: k.id, vel: v, gain: k.vol });
           }
         }
       } else {
@@ -412,6 +422,7 @@ BDJ.Project = (() => {
       };
       if (t.type === 'drums') {
         nt.swing = num(t.swing, 0, 0, 0.6);
+        nt.kitStyle = BDJ.Sound.KITS.some((x) => x.id === t.kitStyle) ? t.kitStyle : 'classic';
         const k = Array.isArray(t.kit) ? t.kit : [];
         nt.kit = kit().map((d) => {
           const r = k.find((x) => x && x.id === d.id) || {};
@@ -449,6 +460,13 @@ BDJ.Project = (() => {
         np.bars = num(x.bars, 1, 1, 8) | 0;
         const n = np.bars * STEPS_PER_BAR, st = x.steps && typeof x.steps === 'object' ? x.steps : {};
         np.steps = Object.fromEntries(BDJ.Sound.DRUMS.map((d) => [d.id, Array.from({ length: n }, (_, i) => num((st[d.id] || [])[i], 0, 0, 127) | 0)]));
+        // rolls: 2, 3 or 4 hits in a step; kept only for rows that have one
+        const ro = x.rolls && typeof x.rolls === 'object' ? x.rolls : {};
+        for (const d of BDJ.Sound.DRUMS) {
+          if (!Array.isArray(ro[d.id])) continue;
+          const row = Array.from({ length: n }, (_, i) => ([2, 3, 4].includes(+ro[d.id][i]) ? +ro[d.id][i] : 0));
+          if (row.some((v) => v)) (np.rolls = np.rolls || {})[d.id] = row;
+        }
       } else {
         np.bars = num(x.bars, 2, 1, 128) | 0;
         np.notes = normNotes(x.notes, p);

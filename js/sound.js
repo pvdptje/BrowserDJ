@@ -32,6 +32,15 @@ BDJ.Sound = (() => {
     { id: 'crash', name: 'Crash', gm: 49 },
   ];
 
+  /* Drum kit styles: the same nine sounds, made differently. Classic is the original kit; the others replace the
+     sounds they have their own take on and play Classic for the rest. */
+  const KITS = [
+    { id: 'classic', name: 'Classic' },
+    { id: '808', name: '808' },
+    { id: 'acoustic', name: 'Acoustic' },
+    { id: 'lofi', name: 'Lo-fi' },
+  ];
+
   /* ---------- shared bits ---------- */
   const noiseCache = new WeakMap();
   function noise(ac) {
@@ -528,7 +537,7 @@ BDJ.Sound = (() => {
     }
   }
 
-  function drumHit(ac, out, id, when, vel, sample, live, gain = 1) {
+  function drumHit(ac, out, id, when, vel, sample, live, gain = 1, style = 'classic') {
     const amt = Math.pow(Math.max(1, vel) / 127, 1.4) * gain;
     if (sample) {
       const s = ac.createBufferSource();
@@ -539,6 +548,9 @@ BDJ.Sound = (() => {
       track(live, s, when + sample.duration + 0.05);
       return;
     }
+    if (style === '808' && KIT808[id]) { KIT808[id](ac, out, when, amt, live); return; }
+    if (style === 'acoustic' && KITAC[id]) { KITAC[id](ac, out, when, amt, live); return; }
+    if (style === 'lofi') out = lofi(ac, out);
     if (id === 'kick') {
       const o = ac.createOscillator();
       o.frequency.setValueAtTime(165, when);
@@ -617,6 +629,98 @@ BDJ.Sound = (() => {
     }
   }
 
+  /* helpers for the kits below */
+  function tone(ac, dest, type, f0, f1, glide, when, dur, live) {
+    const o = ac.createOscillator();
+    o.type = type;
+    o.frequency.setValueAtTime(f0, when);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, when + glide);
+    o.connect(dest);
+    o.start(when); track(live, o, when + dur);
+    return o;
+  }
+  function filt(ac, type, freq, q, dest) {
+    const b = ac.createBiquadFilter();
+    b.type = type; b.frequency.value = freq; if (q != null) b.Q.value = q;
+    b.connect(dest);
+    return b;
+  }
+  /* Lo-fi: fewer bits, no sparkle, a little grit; the Classic sounds go through it */
+  let crushCurve = null;
+  function lofi(ac, out) {
+    if (!crushCurve) {
+      crushCurve = new Float32Array(4096);
+      for (let i = 0; i < crushCurve.length; i++) { const x = (i / (crushCurve.length - 1)) * 2 - 1; crushCurve[i] = Math.round(Math.tanh(1.6 * x) * 12) / 12 * 0.9; }
+    }
+    const sh = ac.createWaveShaper(); sh.curve = crushCurve;
+    const lp = filt(ac, 'lowpass', 3400, 0.9, out);
+    const hp = filt(ac, 'highpass', 70, 0.7, lp);
+    sh.connect(hp);
+    return sh;
+  }
+
+  /* 808: long sine kick, two-tone snare, thin metallic hats, sine toms, the classic rimshot ping */
+  const KIT808 = {
+    kick(ac, out, when, amt, live) {
+      const sh = ac.createWaveShaper(); sh.curve = clipCurve(1.4);
+      sh.connect(env(ac, out, when, 0.95 * amt, 1.1));
+      const o = tone(ac, sh, 'sine', 128, 50, 0.07, when, 1.2, live);
+      o.frequency.exponentialRampToValueAtTime(44, when + 1.0);
+    },
+    snare(ac, out, when, amt, live) {
+      const g = env(ac, out, when, 0.3 * amt, 0.13);
+      tone(ac, g, 'triangle', 185, 175, 0.1, when, 0.16, live);
+      tone(ac, g, 'triangle', 330, 320, 0.1, when, 0.16, live);
+      noiseSrc(ac, when, 0.25, live).connect(filt(ac, 'highpass', 1800, 0.7, env(ac, out, when, 0.5 * amt, 0.2)));
+    },
+    chat(ac, out, when, amt, live) { KIT808.hat(ac, out, when, amt, live, 0.045); },
+    ohat(ac, out, when, amt, live) { KIT808.hat(ac, out, when, amt, live, 0.5); },
+    hat(ac, out, when, amt, live, dur) {
+      const hp = filt(ac, 'highpass', 6500, 0.7, env(ac, out, when, 0.5 * amt, dur));
+      const bp = filt(ac, 'bandpass', 8200, 1.2, hp);
+      metal(ac, bp, when, dur + 0.05, live);
+    },
+    tom(ac, out, when, amt, live) { tone(ac, env(ac, out, when, 0.85 * amt, 0.45), 'sine', 220, 135, 0.18, when, 0.5, live); },
+    rim(ac, out, when, amt, live) {
+      const hp = filt(ac, 'highpass', 300, 0.7, env(ac, out, when, 0.45 * amt, 0.035));
+      tone(ac, hp, 'sine', 455, 455, 0, when, 0.05, live);
+      tone(ac, hp, 'sine', 1667, 1667, 0, when, 0.05, live);
+    },
+  };
+
+  /* Acoustic-ish: a kick with a beater, a snare with wires, airy hats, toms with a stick attack, a long crash */
+  const KITAC = {
+    kick(ac, out, when, amt, live) {
+      tone(ac, env(ac, out, when, 0.95 * amt, 0.3), 'sine', 98, 52, 0.045, when, 0.35, live);
+      tone(ac, env(ac, out, when, 0.3 * amt, 0.2), 'triangle', 62, 55, 0.1, when, 0.25, live);
+      noiseSrc(ac, when, 0.04, live).connect(filt(ac, 'lowpass', 3000, 0.7, env(ac, out, when, 0.4 * amt, 0.018)));
+    },
+    snare(ac, out, when, amt, live) {
+      tone(ac, env(ac, out, when, 0.32 * amt, 0.07), 'triangle', 195, 178, 0.06, when, 0.1, live);
+      noiseSrc(ac, when, 0.35, live).connect(filt(ac, 'bandpass', 3000, 0.6, env(ac, out, when, 0.6 * amt, 0.26)));
+      noiseSrc(ac, when, 0.4, live).connect(filt(ac, 'highpass', 6000, 0.7, env(ac, out, when, 0.22 * amt, 0.34)));
+    },
+    chat(ac, out, when, amt, live) { KITAC.hat(ac, out, when, amt, live, 0.09); },
+    ohat(ac, out, when, amt, live) { KITAC.hat(ac, out, when, amt, live, 0.7); },
+    hat(ac, out, when, amt, live, dur) {
+      metal(ac, filt(ac, 'bandpass', 11000, 0.6, filt(ac, 'highpass', 7500, 0.7, env(ac, out, when, 0.35 * amt, dur))), when, dur + 0.05, live);
+      noiseSrc(ac, when, dur + 0.05, live).connect(filt(ac, 'highpass', 9000, 0.7, env(ac, out, when, 0.22 * amt, dur)));
+    },
+    tom(ac, out, when, amt, live) {
+      tone(ac, env(ac, out, when, 0.75 * amt, 0.55), 'triangle', 132, 104, 0.3, when, 0.6, live);
+      noiseSrc(ac, when, 0.05, live).connect(filt(ac, 'lowpass', 2000, 0.7, env(ac, out, when, 0.2 * amt, 0.04)));
+    },
+    rim(ac, out, when, amt, live) {
+      const bp = filt(ac, 'bandpass', 1500, 2, env(ac, out, when, 0.55 * amt, 0.045));
+      tone(ac, bp, 'triangle', 1900, 1900, 0, when, 0.06, live);
+      tone(ac, bp, 'sine', 520, 520, 0, when, 0.06, live);
+    },
+    crash(ac, out, when, amt, live) {
+      noiseSrc(ac, when, 2.4, live).connect(filt(ac, 'highpass', 4000, 0.7, env(ac, out, when, 0.34 * amt, 2.2, 0.003)));
+      metal(ac, filt(ac, 'highpass', 5000, 0.7, env(ac, out, when, 0.2 * amt, 1.8, 0.003)), when, 1.9, live);
+    },
+  };
+
   /* ---------- WAV ---------- */
   /* A recording (audio clip): plays dur seconds of buffer from offset seconds, at when, with tiny fades so a cut
      never clicks. A start in the past (catching up with a clip already under way) begins now, further in. */
@@ -660,5 +764,5 @@ BDJ.Sound = (() => {
     return new Blob([data], { type: 'audio/wav' });
   }
 
-  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, PARAMS, SHAPE, attackTime, releaseTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, audioClip, encodeWav, midiToHz };
+  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, KITS, PARAMS, SHAPE, attackTime, releaseTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, audioClip, encodeWav, midiToHz };
 })();

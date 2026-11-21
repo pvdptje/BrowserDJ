@@ -262,7 +262,7 @@
     try {
       const ac = audio(), t = curTrack();
       const k = (t.kit || []).find((r) => r.id === id);
-      SND.drumHit(ac, liveMixer().channel(t), id, ac.currentTime + 0.01, vel || 110, sampleBuf(t, id), null, k ? k.vol : 0.8);
+      SND.drumHit(ac, liveMixer().channel(t), id, ac.currentTime + 0.01, vel || 110, sampleBuf(t, id), null, k ? k.vol : 0.8, t.kitStyle);
     } catch (err) { /* sound is optional */ }
   }
 
@@ -309,7 +309,7 @@
     const out = liveMixer().channel(t), now = ac.currentTime + 0.003;
     if (t.type === 'drums') {
       const id = drumFor(pitch, source), k = t.kit.find((r) => r.id === id);
-      SND.drumHit(ac, out, id, now, vel, sampleBuf(t, id), null, k ? k.vol : 0.8);
+      SND.drumHit(ac, out, id, now, vel, sampleBuf(t, id), null, k ? k.vol : 0.8, t.kitStyle);
       rack.flash(id);
       const pos = recPos();
       if (pos != null) {
@@ -376,7 +376,7 @@
         if (buf && len > 0) SND.audioClip(ac, out, buf, when, au.start + ev.offset * bps, len * bps, au.gain, M.live);
       } else if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, voiceShape(ev.track), samplerFor(ev.track));
       else {
-        SND.drumHit(ac, out, ev.drum, when, ev.vel, sampleBuf(ev.track, ev.drum), M.live, ev.gain);
+        SND.drumHit(ac, out, ev.drum, when, ev.vel, sampleBuf(ev.track, ev.drum), M.live, ev.gain, ev.track.kitStyle);
         // every kick pumps the tracks that have Pump turned up
         if (ev.drum === 'kick' || ev.drum === 'hkick') M.pumpAt(when, ev.track.id);
       }
@@ -1385,6 +1385,7 @@
       syncSampler();
     } else {
       $('drumBars').value = pat.bars;
+      $('kitStyle').value = t.kitStyle || 'classic';
       $('swing').value = Math.round((t.swing || 0) * 100);
     }
     document.getElementById('editor').style.setProperty('--tc', t.color);
@@ -1610,6 +1611,7 @@
     track: curTrack,
     pattern: curPat,
     begin, end, changed, previewDrum,
+    rollMode: () => rollMode,
     loadSample, clearSample,
     pickSample: (id) => { sampleTarget = id; $('sampleInput').click(); },
     sampleName: (id) => { const k = curTrack().kit.find((r) => r.id === id); return k && k.sample ? k.sample.name + (decoded.has(k.sample.hash) ? '' : ' (missing)') : null; },
@@ -1683,6 +1685,7 @@
   for (const k of ['major', 'minor', 'minorPent', 'majorPent', 'dorian', 'phrygian', 'harmonicMinor', 'chromatic']) $('scale').add(new Option(E.SCALES[k].name, k));
   for (const i of SND.INSTRUMENTS) $('instrument').add(new Option(i.name, i.id));
   for (const [k, pre] of Object.entries(PJ.PRESETS)) if (k !== 'empty') $('preset').add(new Option(pre.name, k));
+  for (const k of SND.KITS) $('kitStyle').add(new Option(k.name, k.id));
 
   const on = (id, ev, fn) => $(id).addEventListener(ev, fn);
 
@@ -2065,6 +2068,21 @@
   });
   on('drumBars', 'change', () => commit(() => PJ.setDrumBars(curPat(), +$('drumBars').value)));
   on('drumClear', 'click', () => commit(() => PJ.applyPreset(P, curPat(), 'empty')));
+  on('kitStyle', 'change', () => {
+    const t = curTrack(), v = $('kitStyle').value;
+    commit(() => { t.kitStyle = v; });
+    // a quick taste: kick, hat, snare, hat
+    ['kick', 'chat', 'snare', 'chat'].forEach((id, i) => setTimeout(() => previewDrum(id, 110), i * 160));
+    say('The ' + t.name + ' track now plays the ' + $('kitStyle').selectedOptions[0].text + ' kit. Your own sounds on a row stay as they are.');
+  });
+  // Rolls: while on, clicking a step makes it 2, 3 or 4 quick hits (a fourth click goes back to one)
+  let rollMode = false;
+  on('rollMode', 'click', () => {
+    rollMode = !rollMode;
+    $('rollMode').classList.toggle('on', rollMode);
+    $('rollMode').setAttribute('aria-pressed', String(rollMode));
+    say(rollMode ? 'Rolls: click a step to split it into 2, 3 or 4 quick hits; click again for more, a fourth time to go back. Turn Rolls off to paint steps again.' : 'Rolls off: clicking steps paints them again.');
+  });
   let swingBefore = null;
   on('swing', 'input', () => { if (swingBefore == null) swingBefore = begin(); curTrack().swing = +$('swing').value / 100; });
   on('swing', 'change', () => { if (swingBefore != null) { end(swingBefore); swingBefore = null; autosave(); } });

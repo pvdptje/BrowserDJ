@@ -172,6 +172,8 @@
         <label class="check" for="echo"><input id="echo" type="checkbox" checked> Echo</label>
       </span>
       <span id="drumCtl" class="ctl" hidden>
+        <label for="kitStyle" class="lab">Kit</label>
+        <select id="kitStyle" title="How the kit sounds: the same nine drums, made differently"></select>
         <label for="preset" class="sr">Load a drum pattern</label>
         <select id="preset"><option value="">Load a beat…</option></select>
         <label for="drumBars" class="lab">Length</label>
@@ -183,6 +185,7 @@
         </select>
         <label for="swing" class="lab">Swing</label>
         <input id="swing" type="range" min="0" max="60" value="0" class="vol">
+        <button id="rollMode" class="btn small tgl" type="button" aria-pressed="false" title="While on, clicking a step turns it into a roll: 2, 3 or 4 quick hits">Rolls</button>
         <button id="drumClear" class="btn small" type="button">Clear</button>
       </span>
     </div>
@@ -348,6 +351,8 @@
         <ul>
           <li><b>Click</b> or drag across steps to turn them on or off</li>
           <li><b>Right-click</b> a step to make it an accent or a soft ghost hit</li>
+          <li><b>Kit</b> picks how the drums sound: Classic, 808 (booming kick, snappy snare), Acoustic or Lo-fi (crunchy and dark)</li>
+          <li>Turn on <b>Rolls</b> and click a step to split it into 2, 3 or 4 quick hits, for hi-hat rolls and snare build-ups</li>
           <li><b>Click a name</b> to hear the sound. <b>Drop an audio file</b> on a row (or use its &#8613; button) to use your own; &times; goes back to the built-in sound</li>
           <li>Your own sounds are kept in this browser, and <b>Save</b> puts them inside the project file so it opens complete anywhere</li>
         </ul></div>
