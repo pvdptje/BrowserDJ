@@ -17,6 +17,7 @@ BDJ.Sound = (() => {
     { id: 'supersaw', name: 'Supersaw', program: 82 },
     { id: 'acid', name: 'Acid', program: 39 },
     { id: 'organ', name: 'Organ', program: 17 },
+    { id: 'sampler', name: 'Sampler (your sound)', program: 52 },
   ];
 
   const DRUMS = [
@@ -306,8 +307,8 @@ BDJ.Sound = (() => {
 
   /* ---------- melody voices ---------- */
   /* A note of known length: {pitch, vel}, when/dur in seconds. */
-  function melodyNote(ac, out, note, when, dur, preset, live, shape) {
-    voiceStart(ac, out, note, when, preset, live, Math.max(0.03, dur), shape).release(when + Math.max(0.03, dur), true);
+  function melodyNote(ac, out, note, when, dur, preset, live, shape, sampler) {
+    voiceStart(ac, out, note, when, preset, live, Math.max(0.03, dur), shape, sampler).release(when + Math.max(0.03, dur), true);
   }
 
   /* A track's sound shape, on top of the instrument's own character:
@@ -318,7 +319,10 @@ BDJ.Sound = (() => {
 
   /* Starts a voice and returns {release(at, planned)}. A live key calls release when it is let go;
      planned releases (known length) are scheduled straight away. maxDur keeps short notes' attack short. */
-  function voiceStart(ac, out, note, when, preset, live, maxDur, shape) {
+  /* sampler: {buffer, root (MIDI pitch of the recording, may be fractional), gain} for the Sampler instrument */
+  function voiceStart(ac, out, note, when, preset, live, maxDur, shape, sampler) {
+    // a Sampler without a sound yet plays soft keys, so the track is never silent
+    if (preset === 'sampler' && !(sampler && sampler.buffer)) preset = 'soft';
     const f = midiToHz(note.pitch), a = when;
     const v = Math.pow(note.vel / 127, 1.3) * 0.3;
     const filt = ac.createBiquadFilter();
@@ -378,6 +382,16 @@ BDJ.Sound = (() => {
       filt.frequency.setValueAtTime(open, a);
       filt.frequency.exponentialRampToValueAtTime(Math.max(180, f * 1.3), a + 0.16 + 0.1 * (note.vel / 127));
       att = 0.003; rel = 0.05; peak = v * 0.8;
+    } else if (preset === 'sampler') {
+      // your own sound, sped up or slowed down to the note's pitch
+      const src = ac.createBufferSource();
+      src.buffer = sampler.buffer;
+      src.playbackRate.value = Math.pow(2, (note.pitch - sampler.root) / 12);
+      const g = ac.createGain();
+      g.gain.value = sampler.gain || 1;
+      src.connect(g); g.connect(filt);
+      mine.push(src);
+      filt.frequency.value = 18000; att = 0.004; rel = 0.12; peak = v * 2.4;
     } else if (preset === 'organ') {
       // drawbar-style stack of sine harmonics
       for (const [h, l] of [[1, 0.5], [2, 0.32], [3, 0.22], [4, 0.14], [6, 0.08], [8, 0.06]]) {

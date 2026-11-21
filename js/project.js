@@ -410,6 +410,9 @@ BDJ.Project = (() => {
         nt.instrument = BDJ.Sound.INSTRUMENTS.some((i) => i.id === t.instrument) ? t.instrument : 'pluck';
         const sh = t.shape || {};
         nt.shape = { attack: num(sh.attack, 0, 0, 1), release: num(sh.release, 0, 0, 1), tone: num(sh.tone, 0.5, 0, 1) };
+        // the Sampler's sound: a reference into the browser's sample store, the note it was recorded at, a level fix
+        const sm = t.sampler;
+        if (sm && /^[0-9a-f]{8,64}$/.test(sm.hash)) nt.sampler = { hash: sm.hash, name: str(sm.name, 'sound', 120), root: num(sm.root, 60, 0, 127), gain: num(sm.gain, 1, 0.05, 20) };
       }
       tMap.set(t.id, nt);
       p.tracks.push(nt);

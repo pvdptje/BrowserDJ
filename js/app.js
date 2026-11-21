@@ -250,7 +250,7 @@
     if (T.on) return;
     try {
       const ac = audio(), t = curTrack();
-      SND.melodyNote(ac, liveMixer().channel(t), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, t.instrument || 'pluck', null, t.shape);
+      SND.melodyNote(ac, liveMixer().channel(t), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, t.instrument || 'pluck', null, t.shape, samplerFor(t));
     } catch (err) { /* sound is optional */ }
   }
   function previewDrum(id, vel) {
@@ -315,7 +315,7 @@
       return;
     }
     noteOff(pitch);
-    const voice = SND.voiceStart(ac, out, { pitch, vel }, now, t.instrument || 'pluck', null, undefined, t.shape);
+    const voice = SND.voiceStart(ac, out, { pitch, vel }, now, t.instrument || 'pluck', null, undefined, t.shape, samplerFor(t));
     held.set(pitch, { voice, start: recPos(), vel });
     if (recArmed && !T.on) say('Press Play (or Space) to start recording.');
     roll.draw();
@@ -362,7 +362,7 @@
     const bps = 60 / bpm;
     PJ.eventsIn(P, items, lo, hi, (ev) => {
       const out = M.channel(ev.track), when = timeOf(ev.at + off);
-      if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, ev.track.shape);
+      if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, ev.track.shape, samplerFor(ev.track));
       else {
         SND.drumHit(ac, out, ev.drum, when, ev.vel, sampleBuf(ev.track, ev.drum), M.live, ev.gain);
         // every kick pumps the tracks that have Pump turned up
@@ -782,6 +782,19 @@
   /* decoding needs a context; an offline one works before the user has clicked anything (no autoplay warning) */
   let decoder = null;
   const decodeCtx = () => actx || decoder || (decoder = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 1, 48000));
+  function soundRefs() {
+    const out = [];
+    for (const t of P.tracks) {
+      for (const k of t.kit || []) if (k.sample) out.push(k.sample);
+      if (t.sampler) out.push(t.sampler);
+    }
+    return out;
+  }
+  /* what the Sampler instrument of track t plays: {buffer, root, gain}, or null while it has no sound */
+  function samplerFor(t) {
+    const sm = t && t.sampler, buffer = sm && decoded.get(sm.hash);
+    return buffer ? { buffer, root: sm.root, gain: sm.gain } : null;
+  }
   function sampleBuf(t, id) {
     const k = t && t.kit && t.kit.find((r) => r.id === id);
     return k && k.sample ? decoded.get(k.sample.hash) || null : null;
@@ -790,9 +803,9 @@
   async function ensureSamples() {
     const missing = [];
     const jobs = [];
-    for (const t of P.tracks) for (const k of t.kit || []) {
-      if (!k.sample || decoded.has(k.sample.hash)) continue;
-      const h = k.sample.hash;
+    for (const ref of soundRefs()) {
+      if (decoded.has(ref.hash)) continue;
+      const h = ref.hash;
       if (!decoding.has(h)) {
         decoding.set(h, (async () => {
           const rec = await BDJ.Samples.get(h);
@@ -800,12 +813,111 @@
           try { decoded.set(h, await decodeCtx().decodeAudioData(rec.bytes.slice(0))); return true; } catch (err) { return false; }
         })().finally(() => decoding.delete(h)));
       }
-      jobs.push(decoding.get(h).then((ok) => { if (!ok) missing.push(k.sample.name); }));
+      jobs.push(decoding.get(h).then((ok) => { if (!ok) missing.push(ref.name); }));
     }
     if (!jobs.length) return;
     await Promise.all(jobs);
     rack.render();
-    if (missing.length) say('This browser does not have ' + [...new Set(missing)].join(', ') + '. Drop the file on its drum row again, or open a saved project file that contains it.', 'warn');
+    if (curTrack().type === 'synth') syncSampler();
+    if (missing.length) say('This browser does not have ' + [...new Set(missing)].join(', ') + '. Load the sound again, or open a saved project file that contains it.', 'warn');
+  }
+
+  /* ---------- the Sampler: your own sound as an instrument ---------- */
+  /* Finds the note a sound was played at, with the same pitch tracker the humming uses. null: no clear pitch. */
+  function findRoot(buffer) {
+    const d = buffer.getChannelData(0), n = Math.min(d.length, Math.round(buffer.sampleRate * 4));
+    const an = new E.Analyzer(buffer.sampleRate);
+    an.push(d.subarray(0, n));
+    an.process();
+    const F = an.frames(), good = [];
+    let peak = 0;
+    for (const r of F.rms) peak = Math.max(peak, r);
+    for (let i = 0; i < F.midi.length; i++) if (F.conf[i] < 0.2 && F.rms[i] > peak * 0.2 && isFinite(F.midi[i])) good.push(F.midi[i]);
+    if (good.length < 5) return null;
+    good.sort((a, b) => a - b);
+    return good[good.length >> 1];
+  }
+  function peakOf(buffer) {
+    let pk = 0;
+    for (let c = 0; c < buffer.numberOfChannels; c++) { const d = buffer.getChannelData(c); for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i])); }
+    return pk;
+  }
+  async function useSamplerSound(bytes, name, type) {
+    const t = curTrack();
+    if (t.type !== 'synth') return;
+    let buffer;
+    try { buffer = await audio().decodeAudioData(bytes.slice(0)); } catch (err) { say('Could not read "' + name + '" as audio.', 'warn'); return; }
+    if (buffer.duration < 0.05) { say('That sound is too short to play.', 'warn'); return; }
+    const found = findRoot(buffer), root = found == null ? 60 : Math.round(found * 100) / 100;
+    let ref;
+    try { ref = await BDJ.Samples.put(name, type, bytes); } catch (err) { say('Could not keep "' + name + '": ' + err.message + '.', 'warn'); return; }
+    decoded.set(ref.hash, buffer);
+    const gain = Math.min(20, 0.7 / Math.max(0.01, peakOf(buffer)));
+    commit(() => { t.instrument = 'sampler'; t.sampler = { hash: ref.hash, name, root, gain }; });
+    preview(Math.round(root));
+    say('"' + name + '" is now the ' + t.name + ' sound. ' + (found == null
+      ? 'It has no clear pitch, so it plays as C4 on the C4 key.'
+      : 'It was played at ' + E.noteName(Math.round(found)) + ', so every key plays it in tune.') + ' Play it from the keyboard or the piano roll.');
+  }
+
+  /* Record a sound with the microphone: press once to start, once to stop. Silence at the ends is trimmed. */
+  let soundRec = null;
+  async function toggleRecordSound() {
+    if (soundRec) { soundRec.stop(); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) { say('This browser cannot record here. Load a sound file instead.', 'warn'); return; }
+    let stream;
+    try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } }); }
+    catch (err) { say(micHelp(err), 'warn'); return; }
+    const chunks = [], mr = new MediaRecorder(stream);
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+    mr.onstop = async () => {
+      stream.getTracks().forEach((x) => x.stop());
+      soundRec = null; clearTimeout(timer);
+      $('smpRec').classList.remove('on'); $('smpRec').textContent = '\u25cf Record a sound';
+      try {
+        const raw = await audio().decodeAudioData(await new Blob(chunks).arrayBuffer());
+        const trimmed = trimSilence(raw);
+        if (!trimmed) { say('I did not hear anything. Sing or play one note close to the microphone.', 'warn'); return; }
+        const wav = await SND.encodeWav(trimmed).arrayBuffer();
+        useSamplerSound(wav, 'My sound ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.wav', 'audio/wav');
+      } catch (err) { say('Could not use that recording: ' + (err && err.message ? err.message : err) + '.', 'warn'); }
+    };
+    mr.start();
+    soundRec = mr;
+    const timer = setTimeout(() => { if (soundRec) soundRec.stop(); }, 6000); // a sound, not a song
+    $('smpRec').classList.add('on'); $('smpRec').textContent = '\u25a0 Stop';
+    say('Recording a sound: sing or play one steady note (up to 6 seconds), then press Stop.');
+  }
+  /* cut leading and trailing silence; null if there is nothing */
+  function trimSilence(buf) {
+    const d = buf.getChannelData(0), sr = buf.sampleRate;
+    let pk = 0;
+    for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i]));
+    if (pk < 0.01) return null;
+    const th = pk * 0.06;
+    let a = 0, z = d.length - 1;
+    while (a < d.length && Math.abs(d[a]) < th) a++;
+    while (z > a && Math.abs(d[z]) < th) z--;
+    a = Math.max(0, a - Math.round(sr * 0.005)); z = Math.min(d.length - 1, z + Math.round(sr * 0.05));
+    const n = z - a + 1;
+    if (n < sr * 0.05) return null;
+    const out = new AudioBuffer({ length: n, numberOfChannels: 1, sampleRate: sr });
+    const o = out.getChannelData(0);
+    for (let i = 0; i < n; i++) {
+      // short fades so the cut never clicks
+      const f = Math.min(1, i / (sr * 0.003), (n - i) / (sr * 0.02));
+      o[i] = d[a + i] * f;
+    }
+    return out;
+  }
+  /* the Sampler line in the Shape row */
+  function syncSampler() {
+    const t = curTrack(), on = t.type === 'synth' && t.instrument === 'sampler';
+    $('samplerBox').hidden = !on;
+    if (!on) return;
+    const sm = t.sampler;
+    $('smpName').textContent = sm ? sm.name + (decoded.has(sm.hash) ? '' : ' (missing)') + ' · plays at ' + E.noteName(Math.round(sm.root)) : 'no sound yet: load a file or record one';
+    $('smpName').classList.toggle('none', !sm);
   }
 
   async function loadSample(id, file) {
@@ -938,7 +1050,7 @@
     if (name.trim()) commit(() => { P.name = name.trim().slice(0, 80); });
     // your own sounds go inside the file so it opens complete anywhere
     const hashes = new Set();
-    for (const t of P.tracks) for (const k of t.kit || []) if (k.sample) hashes.add(k.sample.hash);
+    for (const ref of soundRefs()) hashes.add(ref.hash);
     const sampleData = await BDJ.Samples.pack([...hashes]);
     const n = Object.keys(sampleData).length;
     const file = n ? { ...P, sampleData } : P;
@@ -1133,13 +1245,13 @@
       panel.innerHTML = '<p class="exnote">Could not make a link here: ' + (err && err.message ? err.message : 'unknown error') + '.</p>';
       return;
     }
-    const ownSounds = P.tracks.some((t) => (t.kit || []).some((k) => k.sample));
+    const ownSounds = soundRefs().length > 0; // drum samples and Sampler sounds stay home
     panel.innerHTML =
       '<p class="sharehead">Anyone with this link hears "' + escHtml(P.name) + '" and can change it. Nothing is uploaded: the song travels inside the link.</p>' +
       '<div class="sharerow"><input id="shareLink" type="text" readonly aria-label="Share link"><button id="shareCopy" class="btn primary small" type="button">Copy link</button></div>' +
       '<p class="exnote">' + link.length.toLocaleString() + ' characters.' +
       (location.protocol === 'file:' ? ' It opens on browserdj.dev.' : '') +
-      (ownSounds ? ' Your own drum sounds do not fit in a link; there the built-in sounds play. Use Save to pass them on.' : '') + '</p>';
+      (ownSounds ? ' Your own sounds do not fit in a link; there the built-in sounds play. Use Save to pass them on.' : '') + '</p>';
     const input = $('shareLink');
     input.value = link;
     input.focus(); input.select();
@@ -1232,6 +1344,7 @@
       $('instrument').value = t.instrument;
       $('echo').checked = (t.echoSend || 0) > 0;
       syncShape();
+      syncSampler();
     } else {
       $('drumBars').value = pat.bars;
       $('swing').value = Math.round((t.swing || 0) * 100);
@@ -1563,7 +1676,12 @@
   });
 
   // editor: synth
-  on('instrument', 'change', () => { commit(() => { curTrack().instrument = $('instrument').value; }); preview(60); });
+  on('instrument', 'change', () => {
+    commit(() => { curTrack().instrument = $('instrument').value; });
+    syncSampler();
+    if ($('instrument').value === 'sampler' && !curTrack().sampler) say('Sampler: load a sound file or record one, and it plays in tune across the keyboard.');
+    else preview(60);
+  });
   // the mixer sets the exact amount; this checkbox is the quick on/off
   on('echo', 'change', () => commit(() => { curTrack().echoSend = $('echo').checked ? 1 : 0; }));
   on('snap', 'change', () => commit(() => { P.snap = +$('snap').value; if (takeFresh()) rederive(); }));
@@ -1621,6 +1739,13 @@
       $(id).dispatchEvent(new Event('change'));
     });
   }
+  on('smpLoad', 'click', () => $('samplerInput').click());
+  on('samplerInput', 'change', async (e) => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (f) useSamplerSound(await f.arrayBuffer(), f.name, f.type);
+  });
+  on('smpRec', 'click', toggleRecordSound);
   on('shReset', 'click', () => { commit(() => { curTrack().shape = { ...SND.SHAPE }; }); preview(60); });
 
   // live keys

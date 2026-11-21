@@ -500,6 +500,22 @@ test('MIDI import: every example survives export -> import, note for note', () =
   assert.throws(() => MI.toProject(new Uint8Array([1, 2, 3, 4]), 'x.mid'), /not a MIDI file/);
 });
 
+test('Sampler sound reference: kept when valid, cleaned up, dropped when not', () => {
+  const p = PJ.blank();
+  const syn = p.tracks.find((t) => t.type === 'synth');
+  syn.instrument = 'sampler';
+  syn.sampler = { hash: 'abcdef012345', name: 'ooh.wav', root: 69.2, gain: 3 };
+  let back = PJ.normalize(JSON.parse(PJ.serialize(p))).tracks.find((t) => t.type === 'synth');
+  assert.strictEqual(back.instrument, 'sampler');
+  eq(back.sampler, { hash: 'abcdef012345', name: 'ooh.wav', root: 69.2, gain: 3 });
+  syn.sampler = { hash: 'nope', name: 'x' };
+  back = PJ.normalize(JSON.parse(PJ.serialize(p))).tracks.find((t) => t.type === 'synth');
+  assert.strictEqual(back.sampler, undefined);
+  syn.sampler = { hash: 'abcdef012345', root: 500, gain: 0 };
+  back = PJ.normalize(JSON.parse(PJ.serialize(p))).tracks.find((t) => t.type === 'synth');
+  eq(back.sampler, { hash: 'abcdef012345', name: 'sound', root: 127, gain: 0.05 });
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

@@ -196,6 +196,13 @@
       <label class="shp" title="Darker or brighter than the instrument's own sound (double-click to reset)"><span>Tone</span><input id="shTone" type="range" min="0" max="100" value="50"><output id="shToneOut">as is</output></label>
       <button id="shReset" class="btn small" type="button">Reset</button>
       <span class="hint">Shapes the instrument for this track. Hold a key to hear it as you go.</span>
+      <div id="samplerBox" class="samplerbox" hidden>
+        <span class="lab">Sound</span>
+        <span id="smpName" class="smpname">no sound yet</span>
+        <button id="smpLoad" class="btn small" type="button" title="Any audio file: a note, a voice, a synth hit">Load a sound</button>
+        <button id="smpRec" class="btn small tgl rec" type="button" title="Sing or play one note into the microphone">&#9679; Record a sound</button>
+        <span class="hint">BrowserDJ finds the note it was played at, so every key plays it in tune.</span>
+      </div>
     </div>
     <p id="notInSong" class="edhint" hidden>This pattern is not in the song yet. Click its lane in the playlist to place it, or <button id="addToSong" class="linkbtn" type="button">add it after the last clip</button>.</p>
     <div class="ptools" id="rollTools">
@@ -266,6 +273,7 @@
           <li>Drag in the <b>VEL</b> lane to set how loud notes are</li>
           <li>Hold <b>Alt</b> while dragging to ignore the snap grid</li>
           <li><b>Draw</b> picks what a click places: a note, or a <b>triad</b>, <b>seventh</b>, <b>power</b> chord or <b>octave</b>, built in the song&rsquo;s key</li>
+          <li>Pick <b>Sampler</b> as the sound to play <b>your own sound</b>: load any audio file or press <b>Record a sound</b> and sing one note. BrowserDJ finds its pitch, so every key plays it in tune</li>
           <li><b>Arpeggiate</b> turns chords into running notes on the snap grid (up, down, up-down). <b>Humanize</b> loosens velocities a little</li>
           <li>Click the top <b>ruler</b> to choose where playback starts</li>
         </ul></div>
@@ -322,6 +330,7 @@
 <input id="fileInput" class="hiddenfile" type="file" accept="audio/*,.wav,.mp3,.m4a,.ogg,.webm,.flac" tabindex="-1">
 <input id="projectInput" class="hiddenfile" type="file" accept=".json,.bdj,application/json,.mid,.midi,audio/midi" tabindex="-1">
 <input id="sampleInput" class="hiddenfile" type="file" accept="audio/*,.wav,.mp3,.ogg,.flac" tabindex="-1">
+<input id="samplerInput" class="hiddenfile" type="file" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" tabindex="-1">
 
 <script src="js/engine.js"></script>
 <script src="js/sound.js"></script>
