@@ -966,6 +966,7 @@
     },
     trace: hostTrace,
     held: () => held,
+    chord: () => $('chordType').value,
   });
 
   const rack = new BDJ.DrumRack($('rack'), {
@@ -1183,6 +1184,13 @@
   on('quantBtn', 'click', () => { if (!roll.quantize()) say('Pick a Snap value first, then Quantize lines the notes up to it.', 'warn'); });
   on('keyBtn', 'click', () => { if (P.scale === 'chromatic') say('Pick a key first. Chromatic has no wrong notes to fix.', 'warn'); else roll.fitToKey(); });
   on('legatoBtn', 'click', () => roll.legato());
+  on('arpBtn', 'click', () => {
+    if (roll.arpeggiate($('arpMode').value)) say('Chords turned into arpeggios on the ' + (P.snap ? '1/' + P.snap : '1/16') + ' grid. Undo puts the chords back.');
+    else say('Arpeggiate works on chords: notes that start at the same time. Draw some with Draw: Triad.', 'warn');
+  });
+  on('humanBtn', 'click', () => { roll.humanize(); say('Velocities loosened up a little. Do it again for more.'); });
+  on('chordType', 'change', () => { try { localStorage.setItem('browserdj.ui.chord', $('chordType').value); } catch (err) { /* storage blocked */ } });
+  try { const c = localStorage.getItem('browserdj.ui.chord'); if (c) $('chordType').value = c; } catch (err) { /* storage blocked */ }
   on('clearMelBtn', 'click', () => {
     const pat = curPat();
     if (!pat.notes.length) return;

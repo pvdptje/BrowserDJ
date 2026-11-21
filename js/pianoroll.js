@@ -175,6 +175,60 @@ BDJ.PianoRoll = (() => {
       const p = this.p, t = this.targets();
       this.edit(() => { for (const n of t) n.pitch = clamp(E.snapPitch(n.pitch, p.root, p.scale), 0, 127); });
     }
+    /* ---------- writing helpers ---------- */
+    /* the pitches a click places: one note, or a chord built in the song's key (chromatic counts as major) */
+    chordFor(pitch) {
+      const kind = this.host.chord ? this.host.chord() : 'single';
+      const p = this.p;
+      if (kind === 'power') return [pitch, pitch + 7, pitch + 12].filter((q) => q <= 127);
+      if (kind === 'octave') return [pitch, pitch + 12].filter((q) => q <= 127);
+      if (kind !== 'triad' && kind !== 'seventh') return [pitch];
+      const scale = p.scale === 'chromatic' ? 'major' : p.scale;
+      const steps = E.SCALES[scale].steps;
+      const inKey = (q) => steps.includes((((q - p.root) % 12) + 12) % 12);
+      const up = (q, n) => { let r = q; for (let i = 0; i < n; i++) { do { r++; } while (!inKey(r) && r < 140); } return r; };
+      const root = E.snapPitch(pitch, p.root, scale);
+      // stack every other scale step: root, third, fifth (and seventh)
+      const out = [root, up(root, 2), up(root, 4)];
+      if (kind === 'seventh') out.push(up(root, 6));
+      return out.filter((q) => q >= 0 && q <= 127);
+    }
+
+    /* Notes that start together become an arpeggio across their length, one note per grid step. */
+    arpeggiate(mode = 'up') {
+      const t = this.targets();
+      const groups = new Map();
+      for (const n of t) {
+        const k = Math.round(n.start * 1000);
+        if (!groups.has(k)) groups.set(k, []);
+        groups.get(k).push(n);
+      }
+      const chords = [...groups.values()].filter((g) => g.length > 1);
+      if (!chords.length) return false;
+      const step = this.step() || 0.25;
+      this.edit(() => {
+        const gone = new Set();
+        this.sel.clear();
+        for (const g of chords) {
+          const up = g.map((n) => n.pitch).sort((a, b) => a - b);
+          const seq = mode === 'down' ? up.slice().reverse() : mode === 'updown' ? up.concat(up.slice(1, -1).reverse()) : up;
+          const s = g[0].start, len = Math.max(...g.map((n) => n.len)), vel = Math.max(...g.map((n) => n.vel));
+          const count = Math.max(1, Math.round(len / step));
+          for (const n of g) gone.add(n.id);
+          for (let i = 0; i < count; i++) this.sel.add(this.addNote(s + i * step, seq[i % seq.length], step, i === 0 ? vel : Math.max(1, vel - 12)).id);
+        }
+        this.notes = this.notes.filter((n) => !gone.has(n.id));
+      });
+      return true;
+    }
+
+    /* small random velocity changes, so repeated notes stop sounding like a machine */
+    humanize() {
+      const t = this.targets();
+      if (!t.length) return;
+      this.edit(() => { for (const n of t) n.vel = clamp(Math.round(n.vel + (Math.random() * 2 - 1) * 14), 20, 127); });
+    }
+
     legato() {
       const t = this.targets().slice().sort((a, b) => a.start - b.start);
       this.edit(() => {
@@ -265,14 +319,17 @@ BDJ.PianoRoll = (() => {
           this.startMove(h.edge ? 'resize' : 'move', n, px, py);
           if (!h.edge) this.host.preview(n.pitch);
         } else {
-          // draw a new note and keep dragging it
+          // draw a new note (or a whole chord) and keep dragging it
           const before = this.host.begin();
           const start = this.snapFloor(this.beatAt(px), free);
-          const n = this.addNote(start, this.pitchAt(py), this.lastLen);
-          this.sel.clear(); this.sel.add(n.id);
+          const pitches = this.chordFor(this.pitchAt(py));
+          this.sel.clear();
+          const made = pitches.map((q) => this.addNote(start, q, this.lastLen));
+          for (const m of made) this.sel.add(m.id);
+          const n = made[0];
           this.startMove('move', n, px, py, before);
           this.drag.changed = true;
-          this.host.preview(n.pitch);
+          for (const m of made) this.host.preview(m.pitch);
         }
       }
       if (this.drag) this.c.setPointerCapture(e.pointerId);

@@ -168,10 +168,28 @@
       <span class="lab">Octave</span>
       <button id="octDown" class="btn small" type="button" title="Down an octave">&minus;</button>
       <button id="octUp" class="btn small" type="button" title="Up an octave">+</button>
+      <label for="chordType" class="lab">Draw</label>
+      <select id="chordType" title="What a click in the piano roll places: one note, or a chord in the song's key">
+        <option value="single">Note</option>
+        <option value="triad">Triad</option>
+        <option value="seventh">Seventh</option>
+        <option value="power">Power</option>
+        <option value="octave">Octave</option>
+      </select>
       <span class="sep"></span>
       <button id="quantBtn" class="btn small" type="button" title="Snap note starts and ends to the grid (Q)">Quantize</button>
       <button id="keyBtn" class="btn small" type="button" title="Move notes into the key">Fit to key</button>
       <button id="legatoBtn" class="btn small" type="button" title="Stretch each note up to the next one">Legato</button>
+      <span class="arpbox">
+        <button id="arpBtn" class="btn small" type="button" title="Turn chords (notes that start together) into an arpeggio on the snap grid">Arpeggiate</button>
+        <label for="arpMode" class="sr">Arpeggio direction</label>
+        <select id="arpMode" title="Arpeggio direction">
+          <option value="up">up</option>
+          <option value="down">down</option>
+          <option value="updown">up-down</option>
+        </select>
+      </span>
+      <button id="humanBtn" class="btn small" type="button" title="Small random velocity changes so repeats sound played, not programmed">Humanize</button>
       <button id="clearMelBtn" class="btn small" type="button">Clear</button>
       <button id="fitBtn" class="btn small" type="button" title="Zoom to the whole pattern">Zoom to fit</button>
       <span class="hint">Edits apply to the selected notes, or all notes if none are selected.</span>
@@ -202,6 +220,8 @@
           <li><b>Double-click</b> a note to select every note at that pitch</li>
           <li>Drag in the <b>VEL</b> lane to set how loud notes are</li>
           <li>Hold <b>Alt</b> while dragging to ignore the snap grid</li>
+          <li><b>Draw</b> picks what a click places: a note, or a <b>triad</b>, <b>seventh</b>, <b>power</b> chord or <b>octave</b>, built in the song&rsquo;s key</li>
+          <li><b>Arpeggiate</b> turns chords into running notes on the snap grid (up, down, up-down). <b>Humanize</b> loosens velocities a little</li>
           <li>Click the top <b>ruler</b> to choose where playback starts</li>
         </ul></div>
       <div><h3>Keys</h3>
