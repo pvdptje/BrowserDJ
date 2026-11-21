@@ -395,7 +395,13 @@ BDJ.Project = (() => {
       if (t.type === 'drums') {
         nt.swing = num(t.swing, 0, 0, 0.6);
         const k = Array.isArray(t.kit) ? t.kit : [];
-        nt.kit = kit().map((d) => { const r = k.find((x) => x && x.id === d.id) || {}; return { id: d.id, vol: num(r.vol, 0.8, 0, 1), mute: !!r.mute, solo: !!r.solo }; });
+        nt.kit = kit().map((d) => {
+          const r = k.find((x) => x && x.id === d.id) || {};
+          const row = { id: d.id, vol: num(r.vol, 0.8, 0, 1), mute: !!r.mute, solo: !!r.solo };
+          // your own sound: a reference into the browser's sample store
+          if (r.sample && /^[0-9a-f]{8,64}$/.test(r.sample.hash)) row.sample = { hash: r.sample.hash, name: str(r.sample.name, 'sample', 120) };
+          return row;
+        });
       } else {
         nt.instrument = BDJ.Sound.INSTRUMENTS.some((i) => i.id === t.instrument) ? t.instrument : 'pluck';
         const sh = t.shape || {};

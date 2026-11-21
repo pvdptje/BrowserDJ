@@ -339,6 +339,18 @@ test('synth shape: defaults, round trip, clamping; new instruments are known', (
   eq(old.tracks[0].shape, { attack: 0, release: 0, tone: 0.5 });
 });
 
+test('kit sample references: kept when valid, dropped when not', () => {
+  const p = PJ.blank();
+  const dt = p.tracks.find((t) => t.type === 'drums');
+  dt.kit.find((k) => k.id === 'snare').sample = { hash: '0fe912a76f03ec8026170740', name: 'tone.wav' };
+  dt.kit.find((k) => k.id === 'kick').sample = { hash: 'not a hash!', name: 'x.wav' };
+  dt.kit.find((k) => k.id === 'clap').sample = { hash: 'abcdef0123', name: '' };
+  const back = PJ.normalize(JSON.parse(PJ.serialize(p))).tracks.find((t) => t.type === 'drums').kit;
+  eq(back.find((k) => k.id === 'snare').sample, { hash: '0fe912a76f03ec8026170740', name: 'tone.wav' });
+  assert.strictEqual(back.find((k) => k.id === 'kick').sample, undefined);
+  eq(back.find((k) => k.id === 'clap').sample, { hash: 'abcdef0123', name: 'sample' });
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

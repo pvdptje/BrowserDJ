@@ -143,6 +143,7 @@ input[type="range"].vol { width: 84px; }
 }
 .dname:hover { background: var(--panel-2); }
 .dname i { font-style: normal; font: 400 11px/1.2 var(--font-mono); color: var(--trace); }
+.dname .miss { font: 700 10px/1.2 var(--font-body); color: var(--note); text-transform: uppercase; letter-spacing: 0.04em; }
 .dvol { width: 62px !important; min-width: 0 !important; }
 .tog.small { font-size: 13px; }
 .steps { display: grid; grid-template-columns: repeat(var(--steps, 16), minmax(20px, 1fr)); gap: 3px; touch-action: pan-y; }

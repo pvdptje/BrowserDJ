@@ -49,7 +49,10 @@ BDJ.DrumRack = (() => {
         const silent = row.mute || (anySolo && !row.solo);
         html.push(`<div class="drow${silent ? ' silent' : ''}" data-id="${row.id}">`);
         html.push(`<div class="dhead">`);
-        html.push(`<button type="button" class="dname" data-act="hit" title="${sample ? 'Sample: ' + esc(sample) + '. ' : ''}Click to hear it. Drop an audio file on this row to use your own sound.">${esc(def.name)}${sample ? '<i>' + esc(shorten(sample)) + '</i>' : ''}</button>`);
+        // "(missing)" is shown on its own so shortening a long name can never hide it
+        const missing = !!sample && / \(missing\)$/.test(sample), base = sample ? sample.replace(/ \(missing\)$/, '') : '';
+        const tip = sample ? (missing ? 'This browser does not have ' + esc(base) + '. Drop the file on this row again, or open a saved project that contains it. ' : 'Sample: ' + esc(base) + '. ') : '';
+        html.push(`<button type="button" class="dname" data-act="hit" title="${tip}Click to hear it. Drop an audio file on this row to use your own sound.">${esc(def.name)}${sample ? '<i>' + esc(shorten(base)) + '</i>' : ''}${missing ? '<b class="miss">missing</b>' : ''}</button>`);
         html.push(`<button type="button" class="tog${row.mute ? ' on' : ''}" data-act="mute" aria-pressed="${row.mute}" title="Mute">M</button>`);
         html.push(`<button type="button" class="tog solo${row.solo ? ' on' : ''}" data-act="solo" aria-pressed="${row.solo}" title="Solo">S</button>`);
         html.push(`<input type="range" class="dvol" min="0" max="100" value="${Math.round(row.vol * 100)}" aria-label="${esc(def.name)} volume" title="Volume">`);

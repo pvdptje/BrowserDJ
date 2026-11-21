@@ -10,7 +10,7 @@
   /* ---------- state ---------- */
   let P = null;                 // the project (plain JSON)
   let take = null;              // the last hum: {frames, raw, track, tuning, audio, anchor, aligned, shift, bpm, patternId}
-  const samples = new Map();    // 'trackId:drumId' -> {buffer, name}
+  const decoded = new Map();    // sample hash -> decoded AudioBuffer (the audio itself lives in BDJ.Samples)
   const H = new PJ.History();
   let patCursor = 0;            // where pattern playback starts, in beats
   let songCursor = 0;           // where song playback starts, in beats
@@ -53,6 +53,7 @@
     roll.pruneSel();
     updateUndo();
     changed('all');
+    ensureSamples();
   }
   function undo() { const s = H.back(snap()); if (s) { restore(s); say('Undone.'); } }
   function redo() { const s = H.forward(snap()); if (s) { restore(s); say('Redone.'); } }
@@ -183,8 +184,7 @@
     try {
       const ac = audio(), t = curTrack();
       const k = (t.kit || []).find((r) => r.id === id);
-      const s = samples.get(t.id + ':' + id);
-      SND.drumHit(ac, liveMixer().channel(t), id, ac.currentTime + 0.01, vel || 110, s && s.buffer, null, k ? k.vol : 0.8);
+      SND.drumHit(ac, liveMixer().channel(t), id, ac.currentTime + 0.01, vel || 110, sampleBuf(t, id), null, k ? k.vol : 0.8);
     } catch (err) { /* sound is optional */ }
   }
 
@@ -228,8 +228,8 @@
     try { ac = audio(); } catch (err) { return; }
     const t = curTrack(), out = liveMixer().channel(t), now = ac.currentTime + 0.003;
     if (t.type === 'drums') {
-      const id = drumFor(pitch, source), k = t.kit.find((r) => r.id === id), smp = samples.get(t.id + ':' + id);
-      SND.drumHit(ac, out, id, now, vel, smp && smp.buffer, null, k ? k.vol : 0.8);
+      const id = drumFor(pitch, source), k = t.kit.find((r) => r.id === id);
+      SND.drumHit(ac, out, id, now, vel, sampleBuf(t, id), null, k ? k.vol : 0.8);
       rack.flash(id);
       const pos = recPos();
       if (pos != null) {
@@ -291,8 +291,7 @@
       const out = M.channel(ev.track), when = timeOf(ev.at + off);
       if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, ev.track.shape);
       else {
-        const smp = samples.get(ev.track.id + ':' + ev.drum);
-        SND.drumHit(ac, out, ev.drum, when, ev.vel, smp && smp.buffer, M.live, ev.gain);
+        SND.drumHit(ac, out, ev.drum, when, ev.vel, sampleBuf(ev.track, ev.drum), M.live, ev.gain);
       }
     }, { skipTrack });
   }
@@ -690,8 +689,40 @@
     ingest(an.frames(), buf, null, curTrack().type === 'synth' ? P.sel.patternId : null);
   }
 
-  /* ---------- drum samples ---------- */
+  /* ---------- drum samples ----------
+     A kit row with your own sound has k.sample = {hash, name}; the audio lives in BDJ.Samples (IndexedDB),
+     decoded buffers are cached here by hash. */
   let sampleTarget = null;
+  const decoding = new Map(); // hash -> Promise
+  /* decoding needs a context; an offline one works before the user has clicked anything (no autoplay warning) */
+  let decoder = null;
+  const decodeCtx = () => actx || decoder || (decoder = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(2, 1, 48000));
+  function sampleBuf(t, id) {
+    const k = t && t.kit && t.kit.find((r) => r.id === id);
+    return k && k.sample ? decoded.get(k.sample.hash) || null : null;
+  }
+  /* decode every sample the project uses that is not decoded yet; reports any the browser does not have */
+  async function ensureSamples() {
+    const missing = [];
+    const jobs = [];
+    for (const t of P.tracks) for (const k of t.kit || []) {
+      if (!k.sample || decoded.has(k.sample.hash)) continue;
+      const h = k.sample.hash;
+      if (!decoding.has(h)) {
+        decoding.set(h, (async () => {
+          const rec = await BDJ.Samples.get(h);
+          if (!rec) return false;
+          try { decoded.set(h, await decodeCtx().decodeAudioData(rec.bytes.slice(0))); return true; } catch (err) { return false; }
+        })().finally(() => decoding.delete(h)));
+      }
+      jobs.push(decoding.get(h).then((ok) => { if (!ok) missing.push(k.sample.name); }));
+    }
+    if (!jobs.length) return;
+    await Promise.all(jobs);
+    rack.render();
+    if (missing.length) say('This browser does not have ' + [...new Set(missing)].join(', ') + '. Drop the file on its drum row again, or open a saved project file that contains it.', 'warn');
+  }
+
   async function loadSample(id, file) {
     if (!file) return;
     if (!/^audio\//.test(file.type) && !/\.(wav|mp3|ogg|flac|m4a|aif|aiff)$/i.test(file.name)) {
@@ -700,16 +731,18 @@
     }
     const t = curTrack();
     try {
-      const buffer = await audio().decodeAudioData(await file.arrayBuffer());
-      samples.set(t.id + ':' + id, { buffer, name: file.name });
-      rack.render();
+      const bytes = await file.arrayBuffer();
+      const buffer = await audio().decodeAudioData(bytes.slice(0)); // decoding takes the buffer over, so give it a copy
+      const ref = await BDJ.Samples.put(file.name, file.type, bytes);
+      decoded.set(ref.hash, buffer);
+      commit(() => { t.kit.find((r) => r.id === id).sample = ref; });
       previewDrum(id, 110);
-      say('The ' + SND.DRUMS.find((d) => d.id === id).name.toLowerCase() + ' in ' + t.name + ' now plays ' + file.name + '. Your own sounds are not saved with the project yet, so load them again next time.');
+      say('The ' + SND.DRUMS.find((d) => d.id === id).name.toLowerCase() + ' in ' + t.name + ' now plays ' + file.name + '. It is kept in this browser and goes into saved project files.');
     } catch (err) {
-      say('Could not read "' + file.name + '" as audio.', 'warn');
+      say('Could not use "' + file.name + '": ' + (err && err.message && /too big/.test(err.message) ? err.message : 'it does not read as audio') + '.', 'warn');
     }
   }
-  function clearSample(id) { samples.delete(curTrack().id + ':' + id); rack.render(); }
+  function clearSample(id) { commit(() => { delete curTrack().kit.find((r) => r.id === id).sample; }); }
 
   /* ---------- project files and export ---------- */
   const slug = () => (P.name || 'song').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'song';
@@ -783,19 +816,27 @@
     }
   }
 
-  function saveProject() {
+  async function saveProject() {
     const name = prompt('Name this project', P.name === 'Untitled' || P.name === 'Example' ? '' : P.name);
     if (name === null) return;
     if (name.trim()) commit(() => { P.name = name.trim().slice(0, 80); });
-    downloadBlob(new Blob([JSON.stringify(P, null, 1)], { type: 'application/json' }), slug() + '.browserdj.json');
-    say('Saved ' + slug() + '.browserdj.json. Open it here any time to keep working.');
+    // your own sounds go inside the file so it opens complete anywhere
+    const hashes = new Set();
+    for (const t of P.tracks) for (const k of t.kit || []) if (k.sample) hashes.add(k.sample.hash);
+    const sampleData = await BDJ.Samples.pack([...hashes]);
+    const n = Object.keys(sampleData).length;
+    const file = n ? { ...P, sampleData } : P;
+    downloadBlob(new Blob([JSON.stringify(file, null, n ? undefined : 1)], { type: 'application/json' }), slug() + '.browserdj.json');
+    say('Saved ' + slug() + '.browserdj.json' + (n ? ' with ' + n + (n === 1 ? ' sample' : ' samples') + ' inside' : '') + '. Open it here any time to keep working.');
   }
 
   async function openProject(file) {
     try {
       const obj = JSON.parse(await file.text());
       stopAll();
+      if (obj && obj.sampleData) await BDJ.Samples.unpack(obj.sampleData);
       commit(() => { P = PJ.normalize(obj); take = null; });
+      ensureSamples();
       patCursor = songCursor = 0;
       roll.sel.clear();
       roll.fit();
@@ -932,7 +973,7 @@
     begin, end, changed, previewDrum,
     loadSample, clearSample,
     pickSample: (id) => { sampleTarget = id; $('sampleInput').click(); },
-    sampleName: (id) => (samples.get(curTrack().id + ':' + id) || {}).name,
+    sampleName: (id) => { const k = curTrack().kit.find((r) => r.id === id); return k && k.sample ? k.sample.name + (decoded.has(k.sample.hash) ? '' : ' (missing)') : null; },
   });
 
   const playlist = new BDJ.Playlist($('plHeads'), $('plCanvas'), {
@@ -1022,7 +1063,7 @@
   on('newBtn', 'click', () => {
     stopAll();
     commit(() => { P = PJ.blank(); take = null; });
-    samples.clear(); patCursor = songCursor = 0; roll.sel.clear(); roll.fit(); playlist.fit();
+    patCursor = songCursor = 0; roll.sel.clear(); roll.fit(); playlist.fit();
     say('A fresh project with a melody track and a drum track. Hum something, draw notes, or load a drum pattern. Undo brings the old one back.');
   });
   on('openBtn', 'click', () => $('projectInput').click());
@@ -1255,4 +1296,5 @@
   say(restored
     ? 'Welcome back, your last project is loaded. Press Space to play.'
     : 'This is an example song. Press Space to hear it. Click a clip in the playlist to edit its pattern below, or press Record and hum a new idea.');
+  ensureSamples(); // your own drum sounds, from this browser's sample store
 })();
