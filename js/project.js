@@ -255,7 +255,7 @@ BDJ.Project = (() => {
     return {
       version: 2, name: 'Untitled', bpm: 120, root: 0, scale: 'major', snap: 16, loop: true, click: false, mode: 'pattern',
       capture: { detail: 0.5, fixTuning: true, playBeat: false },
-      master: 0.85, region: null, markers: [],
+      master: 0.85, loud: 0, region: null, markers: [],
       tracks: [], patterns: [], clips: [], sel: { trackId: 0, patternId: 0 }, nextId: 1,
     };
   }
@@ -370,6 +370,7 @@ BDJ.Project = (() => {
     const c = o.capture || {};
     p.capture = { detail: num(c.detail, 0.5, 0, 1), fixTuning: c.fixTuning !== false, playBeat: !!c.playBeat };
     p.master = num(o.master, 0.85, 0, 1);
+    p.loud = num(o.loud, 0, 0, 1);
     if (o.region && isFinite(+o.region.start) && isFinite(+o.region.end) && +o.region.end - +o.region.start >= 0.25) {
       p.region = { start: num(o.region.start, 0, 0, 100000), end: num(o.region.end, 4, 0.25, 100000) };
     }

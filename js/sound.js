@@ -136,17 +136,42 @@ BDJ.Sound = (() => {
     return b;
   }
 
+  /* Master ceiling: straight up to 0.78, then a soft knee that levels off near 0.92 (safely under full scale). */
+  let ceilCurve = null;
+  function ceiling() {
+    if (!ceilCurve) {
+      ceilCurve = new Float32Array(4096);
+      for (let i = 0; i < ceilCurve.length; i++) {
+        const x = (i / (ceilCurve.length - 1)) * 2 - 1, a = Math.abs(x);
+        // tops out near 0.92 so oversampling overshoot still stays well under full scale
+        ceilCurve[i] = a <= 0.78 ? x : Math.sign(x) * (0.78 + 0.16 * Math.tanh((a - 0.78) / 0.16));
+      }
+    }
+    return ceilCurve;
+  }
+  /* Loud 0..1 -> up to +12 dB pushed into the compressor and limiter */
+  const pushGain = (loud) => Math.pow(10, (12 * Math.max(0, Math.min(1, loud || 0))) / 20);
+
   /* ---------- mixer ---------- */
   /* One channel per track (volume + echo send), a shared echo, and a gentle compressor on the master. */
   function createMixer(ac, opts = {}) {
     const dest = opts.destination || ac.destination;
     const master = ac.createGain();
     master.gain.value = opts.master == null ? 0.85 : opts.master;
-    // the master fader sits before the compressor; the compressor keeps the mix from clipping
+    // master: fader -> push (Loud) -> glue compressor -> limiter -> soft-clip ceiling -> out
+    const push = ac.createGain();
+    push.gain.value = pushGain(opts.loud);
     const comp = ac.createDynamicsCompressor();
     comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.15;
-    master.connect(comp);
-    comp.connect(dest);
+    const limiter = ac.createDynamicsCompressor();
+    limiter.threshold.value = -2; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.001; limiter.release.value = 0.08;
+    const clip = ac.createWaveShaper();
+    clip.curve = ceiling(); clip.oversample = '2x';
+    master.connect(push); push.connect(comp); comp.connect(limiter); limiter.connect(clip); clip.connect(dest);
+    // stems: with opts.only set, every other track plays into a silent sink (its kicks still drive the pump)
+    const sink = ac.createGain();
+    sink.gain.value = 0;
+    const heard = (track) => opts.only == null || opts.only === track.id;
 
     const echoIn = ac.createGain();
     const dl = ac.createDelay(2), fb = ac.createGain(), lp = ac.createBiquadFilter(), wet = ac.createGain();
@@ -163,10 +188,10 @@ BDJ.Sound = (() => {
     revIn.connect(revHp); revHp.connect(conv); conv.connect(revWet); revWet.connect(master);
     let bpm = opts.bpm || 120;
 
-    // master meter, after the compressor
+    // master meter, at the very end
     const masterTap = ac.createAnalyser();
     masterTap.fftSize = 512;
-    comp.connect(masterTap);
+    clip.connect(masterTap);
 
     const channels = new Map();
     /* track: {id, volume, pan, echoSend, drive, filter} -> the node to play into.
@@ -185,12 +210,12 @@ BDJ.Sound = (() => {
         lp.Q.value = 1.4; hp.Q.value = 1.4; // a little resonance makes sweeps sing
         pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(duck); duck.connect(gain);
         tap.fftSize = 512;
-        if (pan) { gain.connect(pan); pan.connect(master); pan.connect(tap); }
-        else { gain.connect(master); gain.connect(tap); }
+        const out = heard(track) ? master : sink;
+        if (pan) { gain.connect(pan); pan.connect(out); pan.connect(tap); }
+        else { gain.connect(out); gain.connect(tap); }
         gain.connect(send);
-        send.connect(echoIn);
         gain.connect(rsend);
-        rsend.connect(revIn);
+        if (heard(track)) { send.connect(echoIn); rsend.connect(revIn); }
         ch = { pre, shaper, post, lp, hp, duck, gain, send, rsend, pan, tap, buf: new Float32Array(512), auto: new Set(), pump: track.pump || 0 };
         channels.set(track.id, ch);
         for (const prm of PARAMS) setParam(ch, prm.id, trackParam(track, prm.id), null);
@@ -260,6 +285,7 @@ BDJ.Sound = (() => {
         if (!ch.pump) { ch.duck.gain.cancelScheduledValues(ac.currentTime); ch.duck.gain.setTargetAtTime(1, ac.currentTime, 0.02); }
       },
       setMaster(v) { master.gain.setTargetAtTime(v, ac.currentTime, 0.02); },
+      setLoud(v) { push.gain.setTargetAtTime(pushGain(v), ac.currentTime, 0.02); },
       /* current peak level (0..1+) of a track's channel, or of the master when id is null */
       level(id) {
         if (id == null) return peak(masterTap, masterBuf);
@@ -273,7 +299,7 @@ BDJ.Sound = (() => {
         master.gain.setTargetAtTime(0, now, 0.015);
         for (const n of live) { try { n.stop(now + 0.1); } catch (err) { /* already stopped */ } }
         live.clear();
-        setTimeout(() => { try { master.disconnect(); comp.disconnect(); conv.disconnect(); } catch (err) { /* gone */ } }, 500);
+        setTimeout(() => { try { master.disconnect(); clip.disconnect(); conv.disconnect(); } catch (err) { /* gone */ } }, 500);
       },
     };
   }

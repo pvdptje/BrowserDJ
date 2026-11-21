@@ -16,7 +16,7 @@ BDJ.Mixer = (() => {
   const meterH = (pk) => (pk <= 0.00001 ? 0 : clamp((20 * Math.log10(pk) + 48) / 48, 0, 1));
 
   class Mixer {
-    /* host: { project(), begin(), end(before), changed(kind), trackChanged(track), masterChanged(v), select(trackId) } */
+    /* host: { project(), begin(), end(before), changed(kind), trackChanged(track), masterChanged(), select(trackId) } */
     constructor(el, host) {
       this.el = el;
       this.host = host;
@@ -52,6 +52,7 @@ BDJ.Mixer = (() => {
       html.push(`<div class="strip master" data-id="master">`);
       html.push(`<div class="sname">Master</div>`);
       html.push(this.faderHtml(p.master, 'Master'));
+      html.push(`<label class="knob loud" title="Push the mix into the limiter: louder and punchier, up to +12 dB (double-click for none)"><span>Loud</span><input type="range" class="lud" min="0" max="100" value="${Math.round((p.loud || 0) * 100)}" aria-label="Master loudness"><output>+${(12 * (p.loud || 0)).toFixed(1)} dB</output></label>`);
       html.push(`<p class="mnote">A limiter on the master keeps the mix from clipping.</p>`);
       html.push('</div>');
       this.el.innerHTML = html.join('');
@@ -73,9 +74,14 @@ BDJ.Mixer = (() => {
       if (this.before == null) this.before = this.host.begin();
       const v = +e.target.value / 100, out = e.target.parentElement.querySelector('output');
       if (id === 'master') {
-        this.p.master = v;
-        e.target.closest('.strip').querySelector('.db').textContent = dbText(v);
-        this.host.masterChanged(v);
+        if (e.target.classList.contains('lud')) {
+          this.p.loud = v;
+          if (out) out.textContent = '+' + (12 * v).toFixed(1) + ' dB';
+        } else {
+          this.p.master = v;
+          e.target.closest('.strip').querySelector('.db').textContent = dbText(v);
+        }
+        this.host.masterChanged();
         return;
       }
       const t = this.trackOf(id);
@@ -101,7 +107,7 @@ BDJ.Mixer = (() => {
       const id = this.stripOf(e.target);
       if (!id || e.target.tagName !== 'INPUT') return;
       const c = e.target.classList;
-      const value = c.contains('flt') ? 50 : c.contains('pan') || c.contains('drv') || c.contains('rvb') || c.contains('pmp') ? 0 : c.contains('fader') ? (id === 'master' ? 85 : 80) : null;
+      const value = c.contains('flt') ? 50 : c.contains('pan') || c.contains('drv') || c.contains('rvb') || c.contains('pmp') || c.contains('lud') ? 0 : c.contains('fader') ? (id === 'master' ? 85 : 80) : null;
       if (value == null) return;
       e.target.value = value;
       this.input({ target: e.target });

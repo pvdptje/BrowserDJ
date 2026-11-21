@@ -201,6 +201,7 @@ input[type="range"].vol { width: 84px; }
 .knob.filter input { accent-color: var(--trace); }
 .knob.reverb input { accent-color: #5fb4ff; }
 .knob.pump input { accent-color: var(--select); }
+.knob.loud input { accent-color: var(--rec); }
 .tog.x { font-size: 15px; }
 .tog:disabled { opacity: 0.3; cursor: default; }
 .pllanes { position: relative; min-width: 0; background: var(--roll); }

@@ -170,7 +170,7 @@
   let liveM = null;
   function liveMixer() {
     const ac = audio();
-    if (!liveM) liveM = SND.createMixer(ac, { bpm: P.bpm, master: P.master });
+    if (!liveM) liveM = SND.createMixer(ac, { bpm: P.bpm, master: P.master, loud: P.loud });
     return liveM;
   }
   function preview(pitch) {
@@ -337,7 +337,7 @@
     Object.assign(T, {
       on: true, rec: !!opts.rec, mode, bpm: P.bpm, L, S: lr.start, E: lr.end,
       t0: ac.currentTime + 0.08, beat0: from, sched: from, from, skipTrack: opts.skipTrack || null,
-      M: SND.createMixer(ac, { bpm: P.bpm, master: P.master }),
+      M: SND.createMixer(ac, { bpm: P.bpm, master: P.master, loud: P.loud }),
     });
     for (const t of P.tracks) T.M.channel(t);
     T.timer = setInterval(pump, 25);
@@ -492,7 +492,8 @@
 
   function updateMixer() {
     if (T.on && T.M) for (const t of P.tracks) T.M.update(t);
-    if (liveM) { for (const t of P.tracks) liveM.update(t); liveM.setMaster(P.master); }
+    if (liveM) { for (const t of P.tracks) liveM.update(t); liveM.setMaster(P.master); liveM.setLoud(P.loud); }
+    if (T.on && T.M) { T.M.setMaster(P.master); T.M.setLoud(P.loud); }
   }
 
   function playTake() {
@@ -765,56 +766,87 @@
     say('Saved ' + name + ' with ' + whatPlays() + ': ' + tracks.length + (tracks.length === 1 ? ' track' : ' tracks') + ', drums on channel 10. Set your music program to ' + P.bpm + ' BPM.');
   }
 
-  async function exportWav() {
-    stopAll();
+  /* Renders what Play plays to an AudioBuffer, a few seconds at a time: the renderer pauses at each chunk
+     boundary, we add the next chunk's notes and report progress. Far fewer nodes exist at once, which also
+     makes it much faster. `only` renders one track (a stem); `label` prefixes the progress message. */
+  async function renderAudio(opts = {}) {
     const sr = 44100, { items, length: L } = PJ.playItems(P, P.mode), secs = L * 60 / P.bpm;
     const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
-    if (!Ctx) { say('This browser cannot render audio files.', 'warn'); return; }
+    if (!Ctx) throw new Error('this browser cannot render audio files');
+    const label = opts.label || 'Rendering ' + whatPlays();
+    const total = secs + 2.5;
+    const oac = new Ctx(2, Math.ceil(total * sr), sr);
+    const M = SND.createMixer(oac, { bpm: P.bpm, master: P.master, loud: P.loud, only: opts.only });
+    M.live = null;
+    for (const t of P.tracks) M.channel(t);
+    const tOf = (b) => 0.02 + b * 60 / P.bpm;
+    const song = P.mode === 'song';
+    const CHUNK = 3, chunkBeats = CHUNK * P.bpm / 60;
+    let next = 0;
+    const scheduleChunk = () => {
+      const a = next, b = Math.min(L, next + chunkBeats);
+      if (a < b) { scheduleEvents(oac, M, items, a, b, 0, tOf, P.bpm); if (song) scheduleAuto(M, a, b, 0, tOf); }
+      next = b;
+    };
+    let chunked = typeof oac.suspend === 'function';
+    if (chunked) {
+      try {
+        scheduleChunk();
+        for (let k = 1; k * CHUNK < secs; k++) {
+          const at = k * CHUNK;
+          oac.suspend(at).then(() => {
+            if (chunked) scheduleChunk();
+            say(label + '… ' + Math.round((at / total) * 100) + '%');
+            oac.resume();
+          });
+        }
+      } catch (err) { chunked = false; }
+    }
+    // no suspend support (or it failed): schedule whatever is left in one go
+    if (!chunked && next < L) { scheduleEvents(oac, M, items, next, L, 0, tOf, P.bpm); if (song) scheduleAuto(M, next, L, 0, tOf); next = L; }
+    const t0 = performance.now();
+    const buf = await oac.startRendering();
+    if (next < L - 1e-9) throw new Error('rendering stopped early');
+    console.debug('BrowserDJ: rendered ' + total.toFixed(1) + ' s in ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s');
+    return { buf, secs };
+  }
+
+  async function exportWav() {
+    stopAll();
     say('Rendering ' + whatPlays() + '…');
     $('wavBtn').disabled = true;
     try {
-      const total = secs + 2.5;
-      const oac = new Ctx(2, Math.ceil(total * sr), sr);
-      const M = SND.createMixer(oac, { bpm: P.bpm, master: P.master });
-      M.live = null;
-      for (const t of P.tracks) M.channel(t);
-      const tOf = (b) => 0.02 + b * 60 / P.bpm;
-      const song = P.mode === 'song';
-      // Schedule a few seconds at a time: the renderer pauses at each chunk boundary, we add the next
-      // chunk's notes and report progress. Far fewer nodes exist at once, which also makes it faster.
-      const CHUNK = 3, chunkBeats = CHUNK * P.bpm / 60;
-      let next = 0;
-      const scheduleChunk = () => {
-        const a = next, b = Math.min(L, next + chunkBeats);
-        if (a < b) { scheduleEvents(oac, M, items, a, b, 0, tOf, P.bpm); if (song) scheduleAuto(M, a, b, 0, tOf); }
-        next = b;
-      };
-      let chunked = typeof oac.suspend === 'function';
-      if (chunked) {
-        try {
-          scheduleChunk();
-          for (let k = 1; k * CHUNK < secs; k++) {
-            const at = k * CHUNK;
-            oac.suspend(at).then(() => {
-              if (chunked) scheduleChunk();
-              say('Rendering ' + whatPlays() + '… ' + Math.round((at / total) * 100) + '%');
-              oac.resume();
-            });
-          }
-        } catch (err) { chunked = false; }
-      }
-      // no suspend support (or it failed): schedule whatever is left in one go
-      if (!chunked && next < L) { scheduleEvents(oac, M, items, next, L, 0, tOf, P.bpm); if (song) scheduleAuto(M, next, L, 0, tOf); next = L; }
-      const t0 = performance.now();
-      const buf = await oac.startRendering();
-      if (next < L - 1e-9) throw new Error('rendering stopped early');
-      console.debug('BrowserDJ: rendered ' + total.toFixed(1) + ' s in ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s');
+      const { buf, secs } = await renderAudio();
       downloadBlob(SND.encodeWav(buf), slug() + '.wav');
       say('Saved ' + slug() + '.wav with ' + whatPlays() + ' (' + secs.toFixed(1) + ' s at ' + P.bpm + ' BPM).');
     } catch (err) {
       say('Rendering failed: ' + (err && err.message ? err.message : err), 'warn');
     } finally {
       $('wavBtn').disabled = false;
+    }
+  }
+
+  /* One WAV per track that plays something, each with its own effects, all the same length so they line up
+     in another program. Drum kicks still drive the pump in the other stems. */
+  async function exportStems() {
+    stopAll();
+    const { items } = PJ.playItems(P, P.mode);
+    const tracks = P.tracks.filter((t) => !t.mute && items.some((it) => it.track === t));
+    if (!tracks.length) { say('There is nothing to export in ' + whatPlays() + ' yet.', 'warn'); return; }
+    $('stemsBtn').disabled = true; $('wavBtn').disabled = true;
+    say('Rendering ' + tracks.length + ' stems. Your browser may ask once whether this page may download several files: allow it.');
+    try {
+      for (let i = 0; i < tracks.length; i++) {
+        const t = tracks[i];
+        const { buf } = await renderAudio({ only: t.id, label: 'Stem ' + (i + 1) + ' of ' + tracks.length + ': ' + t.name });
+        const name = slug() + '-' + (i + 1) + '-' + (t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'track') + '.wav';
+        downloadBlob(SND.encodeWav(buf), name);
+      }
+      say('Saved ' + tracks.length + ' stems of ' + whatPlays() + ', one WAV per track, all the same length. Drop them into your music program at the start of the song.');
+    } catch (err) {
+      say('Rendering stems failed: ' + (err && err.message ? err.message : err), 'warn');
+    } finally {
+      $('stemsBtn').disabled = false; $('wavBtn').disabled = false;
     }
   }
 
@@ -1013,7 +1045,9 @@
     project: () => P,
     begin, end, changed, select,
     trackChanged: (t) => { if (T.on && T.M) T.M.update(t); if (liveM) liveM.update(t); },
-    masterChanged: (v) => { if (T.on && T.M) T.M.setMaster(v); if (liveM) liveM.setMaster(v); },
+    masterChanged: () => {
+      for (const M of [T.on && T.M, liveM]) if (M) { M.setMaster(P.master); M.setLoud(P.loud); }
+    },
   });
 
   window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, mixer, live, transport: T };
@@ -1075,6 +1109,7 @@
   on('saveBtn', 'click', saveProject);
   on('midiBtn', 'click', exportMidi);
   on('wavBtn', 'click', exportWav);
+  on('stemsBtn', 'click', exportStems);
 
   // capture
   on('recBtn', 'click', () => (R ? stopRec() : startRec()));

@@ -362,6 +362,14 @@ test('reverb and pump: defaults, clamping, reverb is automatable', () => {
   eq([old.tracks[0].reverb, old.tracks[0].pump], [0, 0]);
 });
 
+test('master loudness: default none, clamped, survives a round trip', () => {
+  const p = PJ.blank();
+  assert.strictEqual(p.loud, 0);
+  assert.strictEqual(PJ.normalize({ ...JSON.parse(PJ.serialize(p)), loud: 0.6 }).loud, 0.6);
+  assert.strictEqual(PJ.normalize({ ...JSON.parse(PJ.serialize(p)), loud: 5 }).loud, 1);
+  assert.strictEqual(PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'synth' }] }).loud, 0);
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');
