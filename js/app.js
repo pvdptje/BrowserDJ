@@ -176,7 +176,7 @@
     if (T.on) return;
     try {
       const ac = audio(), t = curTrack();
-      SND.melodyNote(ac, liveMixer().channel(t), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, t.instrument || 'pluck', null);
+      SND.melodyNote(ac, liveMixer().channel(t), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, t.instrument || 'pluck', null, t.shape);
     } catch (err) { /* sound is optional */ }
   }
   function previewDrum(id, vel) {
@@ -242,7 +242,7 @@
       return;
     }
     noteOff(pitch);
-    const voice = SND.voiceStart(ac, out, { pitch, vel }, now, t.instrument || 'pluck', null);
+    const voice = SND.voiceStart(ac, out, { pitch, vel }, now, t.instrument || 'pluck', null, undefined, t.shape);
     held.set(pitch, { voice, start: recPos(), vel });
     if (recArmed && !T.on) say('Press Play (or Space) to start recording.');
     roll.draw();
@@ -289,7 +289,7 @@
     const bps = 60 / bpm;
     PJ.eventsIn(P, items, lo, hi, (ev) => {
       const out = M.channel(ev.track), when = timeOf(ev.at + off);
-      if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live);
+      if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, ev.track.shape);
       else {
         const smp = samples.get(ev.track.id + ':' + ev.drum);
         SND.drumHit(ac, out, ev.drum, when, ev.vel, smp && smp.buffer, M.live, ev.gain);
@@ -869,14 +869,32 @@
     const synth = t.type === 'synth';
     $('synthCtl').hidden = !synth;
     $('drumCtl').hidden = synth;
+    $('shapeBar').hidden = !synth;
     if (synth) {
       $('instrument').value = t.instrument;
       $('echo').checked = (t.echoSend || 0) > 0;
+      syncShape();
     } else {
       $('drumBars').value = pat.bars;
       $('swing').value = Math.round((t.swing || 0) * 100);
     }
     document.getElementById('editor').style.setProperty('--tc', t.color);
+  }
+
+  /* the Shape row: sliders and readable values */
+  const fmtSecs = (s) => (s < 1 ? Math.round(s * 1000) + ' ms' : s.toFixed(2) + ' s');
+  const shapeText = {
+    attack: (v) => (v > 0 ? fmtSecs(SND.attackTime(v)) : 'own'),
+    release: (v) => (v > 0 ? fmtSecs(SND.releaseTime(v)) : 'own'),
+    tone: (v) => (Math.abs(v - 0.5) < 0.005 ? 'as is' : (v > 0.5 ? '+' : '−') + (Math.abs(v - 0.5) * 4).toFixed(1) + ' oct'),
+  };
+  function syncShape() {
+    const sh = curTrack().shape || SND.SHAPE;
+    for (const k of ['attack', 'release', 'tone']) {
+      const id = 'sh' + k[0].toUpperCase() + k.slice(1);
+      $(id).value = Math.round(sh[k] * 100);
+      $(id + 'Out').textContent = shapeText[k](sh[k]);
+    }
   }
 
   function renderEditor() {
@@ -1128,6 +1146,29 @@
     say('Pattern cleared. Undo brings the notes back.');
   });
   on('fitBtn', 'click', () => roll.fit());
+
+  // sound shape
+  let shapeBefore = null;
+  for (const k of ['attack', 'release', 'tone']) {
+    const id = 'sh' + k[0].toUpperCase() + k.slice(1);
+    on(id, 'input', () => {
+      const t = curTrack();
+      if (t.type !== 'synth') return;
+      if (shapeBefore == null) shapeBefore = begin();
+      t.shape = { ...(t.shape || SND.SHAPE), [k]: +$(id).value / 100 };
+      $(id + 'Out').textContent = shapeText[k](t.shape[k]);
+    });
+    on(id, 'change', () => {
+      if (shapeBefore != null) { end(shapeBefore); shapeBefore = null; autosave(); }
+      if (!T.on && !held.size) preview(60);
+    });
+    on(id, 'dblclick', () => {
+      $(id).value = k === 'tone' ? 50 : 0;
+      $(id).dispatchEvent(new Event('input'));
+      $(id).dispatchEvent(new Event('change'));
+    });
+  }
+  on('shReset', 'click', () => { commit(() => { curTrack().shape = { ...SND.SHAPE }; }); preview(60); });
 
   // live keys
   const syncKeys = () => {

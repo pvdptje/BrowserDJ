@@ -14,6 +14,9 @@ BDJ.Sound = (() => {
     { id: 'bass', name: 'Bass', program: 38 },
     { id: 'bell', name: 'Bell', program: 14 },
     { id: 'pad', name: 'Pad', program: 89 },
+    { id: 'supersaw', name: 'Supersaw', program: 82 },
+    { id: 'acid', name: 'Acid', program: 39 },
+    { id: 'organ', name: 'Organ', program: 17 },
   ];
 
   const DRUMS = [
@@ -220,13 +223,19 @@ BDJ.Sound = (() => {
 
   /* ---------- melody voices ---------- */
   /* A note of known length: {pitch, vel}, when/dur in seconds. */
-  function melodyNote(ac, out, note, when, dur, preset, live) {
-    voiceStart(ac, out, note, when, preset, live, Math.max(0.03, dur)).release(when + Math.max(0.03, dur), true);
+  function melodyNote(ac, out, note, when, dur, preset, live, shape) {
+    voiceStart(ac, out, note, when, preset, live, Math.max(0.03, dur), shape).release(when + Math.max(0.03, dur), true);
   }
+
+  /* A track's sound shape, on top of the instrument's own character:
+     attack 0..1 (0 = the instrument's own, up to 2 s), release 0..1 (up to 3 s), tone 0..1 (0.5 = as is, ±2 octaves of filter). */
+  const SHAPE = { attack: 0, release: 0, tone: 0.5 };
+  const attackTime = (v) => (v > 0 ? 0.002 * Math.pow(1000, v) : 0);
+  const releaseTime = (v) => (v > 0 ? 0.01 * Math.pow(300, v) : 0);
 
   /* Starts a voice and returns {release(at, planned)}. A live key calls release when it is let go;
      planned releases (known length) are scheduled straight away. maxDur keeps short notes' attack short. */
-  function voiceStart(ac, out, note, when, preset, live, maxDur) {
+  function voiceStart(ac, out, note, when, preset, live, maxDur, shape) {
     const f = midiToHz(note.pitch), a = when;
     const v = Math.pow(note.vel / 127, 1.3) * 0.3;
     const filt = ac.createBiquadFilter();
@@ -273,6 +282,27 @@ BDJ.Sound = (() => {
       mod.connect(mg); mg.connect(car.frequency);
       mine.push(mod);
       filt.frequency.value = 12000; att = 0.003; rel = 0.5; decayTo = 0.25; decayT = 0.5; peak = v * 1.1;
+    } else if (preset === 'supersaw') {
+      // seven detuned saws: the wide trance and hardstyle lead
+      for (const [d, l] of [[-28, 0.16], [-17, 0.2], [-8, 0.24], [0, 0.26], [8, 0.24], [17, 0.2], [28, 0.16]]) osc('sawtooth', d, l);
+      osc('sine', 0, 0.25, -1);
+      filt.Q.value = 0.8; filt.frequency.value = Math.min(12000, f * 10); att = 0.01; rel = 0.25; peak = v * 0.9;
+    } else if (preset === 'acid') {
+      // one saw into a very resonant filter that snaps shut; harder notes open it further
+      osc('sawtooth', 0, 0.7);
+      filt.Q.value = 14;
+      const open = Math.min(9000, f * (6 + 14 * (note.vel / 127)));
+      filt.frequency.setValueAtTime(open, a);
+      filt.frequency.exponentialRampToValueAtTime(Math.max(180, f * 1.3), a + 0.16 + 0.1 * (note.vel / 127));
+      att = 0.003; rel = 0.05; peak = v * 0.8;
+    } else if (preset === 'organ') {
+      // drawbar-style stack of sine harmonics
+      for (const [h, l] of [[1, 0.5], [2, 0.32], [3, 0.22], [4, 0.14], [6, 0.08], [8, 0.06]]) {
+        const o = osc('sine', 0, l);
+        o.frequency.value = f * h;
+      }
+      osc('sine', 0, 0.3, -1);
+      filt.frequency.value = 9000; att = 0.006; rel = 0.05; peak = v * 1.1;
     } else {
       osc('sawtooth'); osc('sine', 0, 0.5, -1);
       filt.Q.value = 5;
@@ -280,7 +310,12 @@ BDJ.Sound = (() => {
       filt.frequency.exponentialRampToValueAtTime(Math.max(350, f * 1.6), a + 0.24);
       att = 0.004; rel = 0.12; decayTo = 0.3;
     }
-    if (maxDur) att = Math.min(att, maxDur * 0.4);
+    // the track's own shaping on top
+    const sh = shape || SHAPE;
+    if (sh.tone != null && Math.abs(sh.tone - 0.5) > 0.004) filt.detune.value = (sh.tone - 0.5) * 2 * 2400; // cents: moves every filter setting, envelopes too
+    if (sh.attack > 0) att = Math.max(att, attackTime(sh.attack));
+    if (sh.release > 0) rel = Math.max(rel, releaseTime(sh.release));
+    if (maxDur) att = Math.min(att, maxDur * (sh.attack > 0 ? 0.9 : 0.4));
     amp.gain.setValueAtTime(0, a);
     amp.gain.linearRampToValueAtTime(peak, a + att);
     if (decayTo != null) amp.gain.setTargetAtTime(peak * decayTo, a + att, decayT);
@@ -443,5 +478,5 @@ BDJ.Sound = (() => {
     return new Blob([data], { type: 'audio/wav' });
   }
 
-  return { INSTRUMENTS, DRUMS, PARAMS, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, encodeWav, midiToHz };
+  return { INSTRUMENTS, DRUMS, PARAMS, SHAPE, attackTime, releaseTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, encodeWav, midiToHz };
 })();

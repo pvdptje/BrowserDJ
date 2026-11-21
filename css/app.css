@@ -258,6 +258,13 @@ button.sname:hover { background: rgba(255,255,255,0.06); }
 .dname.hit { animation: hit 0.25s ease-out; }
 @keyframes hit { from { background: var(--note); color: var(--note-ink); } }
 
+/* sound shape */
+.shapebar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.shapebar .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+.shp { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.shp input { width: 110px; min-width: 0; accent-color: var(--tc, var(--note)); }
+.shp output { font: 12px var(--font-mono); color: var(--text); min-width: 7.5ch; }
+
 /* help */
 .help { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 10px 16px; }
 .help summary { cursor: pointer; color: var(--muted); font-weight: 500; }

@@ -322,6 +322,23 @@ test('automation: values between points, cleanup, MIDI controllers', () => {
   assert.ok(pm.tracks.every((tr) => !tr.some((e) => e.type === 0xb0 && e.a === 74)));
 });
 
+test('synth shape: defaults, round trip, clamping; new instruments are known', () => {
+  const p = PJ.blank();
+  const syn = p.tracks.find((t) => t.type === 'synth'), drums = p.tracks.find((t) => t.type === 'drums');
+  eq(syn.shape, { attack: 0, release: 0, tone: 0.5 });
+  assert.strictEqual(drums.shape, undefined);
+  syn.shape = { attack: 0.4, release: 7, tone: -1 };
+  syn.instrument = 'supersaw';
+  const back = PJ.normalize(JSON.parse(PJ.serialize(p)));
+  const s2 = back.tracks.find((t) => t.type === 'synth');
+  eq(s2.shape, { attack: 0.4, release: 1, tone: 0 });
+  assert.strictEqual(s2.instrument, 'supersaw');
+  for (const id of ['supersaw', 'acid', 'organ']) assert.ok(ctx.BDJ.Sound.INSTRUMENTS.some((i) => i.id === id));
+  // older saves without a shape get the neutral one
+  const old = PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'synth', instrument: 'acid' }] });
+  eq(old.tracks[0].shape, { attack: 0, release: 0, tone: 0.5 });
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

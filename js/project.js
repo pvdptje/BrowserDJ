@@ -69,7 +69,8 @@ BDJ.Project = (() => {
       auto: {}, autoOpen: false, autoParam: 'volume',
       echoSend: type === 'drums' ? 0 : opts.echo === false ? 0 : 1,
     };
-    if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; } else { t.instrument = opts.instrument || 'pluck'; }
+    if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; }
+    else { t.instrument = opts.instrument || 'pluck'; t.shape = { ...BDJ.Sound.SHAPE, ...(opts.shape || {}) }; }
     p.tracks.push(t);
     addPattern(p, t.id);
     return t;
@@ -397,6 +398,8 @@ BDJ.Project = (() => {
         nt.kit = kit().map((d) => { const r = k.find((x) => x && x.id === d.id) || {}; return { id: d.id, vol: num(r.vol, 0.8, 0, 1), mute: !!r.mute, solo: !!r.solo }; });
       } else {
         nt.instrument = BDJ.Sound.INSTRUMENTS.some((i) => i.id === t.instrument) ? t.instrument : 'pluck';
+        const sh = t.shape || {};
+        nt.shape = { attack: num(sh.attack, 0, 0, 1), release: num(sh.release, 0, 0, 1), tone: num(sh.tone, 0.5, 0, 1) };
       }
       tMap.set(t.id, nt);
       p.tracks.push(nt);
