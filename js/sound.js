@@ -157,6 +157,7 @@ BDJ.Sound = (() => {
      track.lfo = {target: 'off'|'filter'|'volume'|'pan', rate, depth 0..1}; rate is a note length, cycles lock to the beat */
   const LFO_RATES = { '1/1': 4, '1/2': 2, '1/4': 1, '1/8': 0.5, '1/16': 0.25, '1/4T': 2 / 3, '1/8T': 1 / 3 };
   const LFO_TARGETS = ['off', 'filter', 'volume', 'pan'];
+  const WOB_TOP = 5000; // Hz: where the Wobble filter opens to
 
   /* ---------- mixer ---------- */
   /* One channel per track (volume + echo send), a shared echo, and a gentle compressor on the master. */
@@ -203,7 +204,7 @@ BDJ.Sound = (() => {
 
     const channels = new Map();
     /* track: {id, volume, pan, echoSend, drive, filter} -> the node to play into.
-       input -> drive (pre gain, waveshaper, makeup) -> DJ filter (low-pass, high-pass) -> pump (duck) -> fader -> panner
+       input -> drive (pre gain, waveshaper, makeup) -> DJ filter (low-pass, high-pass) -> wobble filter -> pump (duck) -> tremolo -> fader -> panner
        -> master, with post-fader echo and reverb sends and a meter tap.
        `auto` (a Set of parameter ids) marks parameters an automation lane drives; static updates leave those alone. */
     function channel(track) {
@@ -212,11 +213,13 @@ BDJ.Sound = (() => {
         const pre = ac.createGain(), shaper = ac.createWaveShaper(), post = ac.createGain();
         const lp = ac.createBiquadFilter(), hp = ac.createBiquadFilter();
         const gain = ac.createGain(), send = ac.createGain(), rsend = ac.createGain(), duck = ac.createGain(), trem = ac.createGain(), tap = ac.createAnalyser();
+        const wob = ac.createBiquadFilter(); // the Wobble filter: wide open (and flat) until Movement uses it
+        wob.type = 'lowpass'; wob.frequency.value = ac.sampleRate / 2; wob.Q.value = 0;
         const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
         shaper.oversample = '2x';
         lp.type = 'lowpass'; hp.type = 'highpass';
         lp.Q.value = 1.4; hp.Q.value = 1.4; // a little resonance makes sweeps sing
-        pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(duck); duck.connect(trem); trem.connect(gain);
+        pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(wob); wob.connect(duck); duck.connect(trem); trem.connect(gain);
         tap.fftSize = 512;
         const out = heard(track) ? master : sink;
         if (pan) { gain.connect(pan); pan.connect(out); pan.connect(tap); }
@@ -224,7 +227,7 @@ BDJ.Sound = (() => {
         gain.connect(send);
         gain.connect(rsend);
         if (heard(track)) { send.connect(echoIn); rsend.connect(revIn); }
-        ch = { pre, shaper, post, lp, hp, duck, trem, gain, send, rsend, pan, tap, lfo: null, lfoKey: '', buf: new Float32Array(512), auto: new Set(), pump: track.pump || 0 };
+        ch = { pre, shaper, post, lp, hp, wob, duck, trem, gain, send, rsend, pan, tap, lfo: null, lfoKey: '', buf: new Float32Array(512), auto: new Set(), pump: track.pump || 0 };
         channels.set(track.id, ch);
         for (const prm of PARAMS) setParam(ch, prm.id, trackParam(track, prm.id), null);
         setLfo(ch, track.lfo);
@@ -243,14 +246,19 @@ BDJ.Sound = (() => {
       if (!force && key === ch.lfoKey) return;
       ch.lfoKey = key;
       if (ch.lfo) { try { ch.lfo.osc.stop(); ch.lfo.osc.disconnect(); ch.lfo.amt.disconnect(); } catch (err) { /* gone */ } ch.lfo = null; }
-      ch.lp.detune.value = 0; ch.trem.gain.value = 1;
+      ch.wob.frequency.value = ac.sampleRate / 2; ch.wob.detune.value = 0; ch.wob.Q.value = 0; ch.trem.gain.value = 1;
       if (target === 'off' || depth <= 0) return;
       const osc = ac.createOscillator(), amt = ac.createGain();
       osc.type = target === 'filter' ? 'triangle' : 'sine';
       const cycle = (beats * 60) / bpm;
       osc.frequency.value = 1 / cycle;
       osc.connect(amt);
-      if (target === 'filter') { amt.gain.value = depth * 4200; ch.lp.detune.value = -depth * 4200; amt.connect(ch.lp.detune); }
+      if (target === 'filter') {
+        // a resonant low-pass sweeping down from WOB_TOP by up to 6.5 octaves, whatever the DJ filter is doing
+        const half = (depth * 6.5 * 1200) / 2;
+        ch.wob.frequency.value = WOB_TOP; ch.wob.Q.value = 4; ch.wob.detune.value = -half;
+        amt.gain.value = half; amt.connect(ch.wob.detune);
+      }
       else if (target === 'volume') { amt.gain.value = depth / 2; ch.trem.gain.value = 1 - depth / 2; amt.connect(ch.trem.gain); }
       else if (target === 'pan' && ch.pan) { amt.gain.value = depth; amt.connect(ch.pan.pan); }
       // start exactly on a cycle boundary of the song grid, so every cycle sits the same way against the beat
@@ -449,6 +457,8 @@ BDJ.Sound = (() => {
     }
     // the track's own shaping on top
     const sh = shape || SHAPE;
+    // with Wobble on, the track's wobble filter does the filtering: the voice stays open so there is something to sweep
+    if (sh.wobble) { filt.frequency.cancelScheduledValues(0); filt.frequency.setValueAtTime(12000, a); }
     if (sh.tone != null && Math.abs(sh.tone - 0.5) > 0.004) filt.detune.value = (sh.tone - 0.5) * 2 * 2400; // cents: moves every filter setting, envelopes too
     if (sh.attack > 0) att = Math.max(att, attackTime(sh.attack));
     if (sh.release > 0) rel = Math.max(rel, releaseTime(sh.release));

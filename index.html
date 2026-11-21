@@ -7,6 +7,11 @@
 <meta name="description" content="A music studio in your browser: hum a melody, edit it in a piano roll, build beats, arrange a song, mix it, and export MIDI or WAV. Free, nothing to install.">
 <meta name="theme-color" content="#15131f">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="BrowserDJ">
 <link rel="canonical" href="https://browserdj.dev/">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://browserdj.dev/">
@@ -41,6 +46,7 @@
       </div>
       <button id="wavBtn" class="btn small" type="button" title="Render what Play plays (song or pattern) to a WAV file">Export WAV</button>
       <button id="stemsBtn" class="btn small" type="button" title="One WAV per track, all the same length, to mix in another program">Stems</button>
+      <button id="installBtn" class="btn small" type="button" title="Put BrowserDJ on your home screen or desktop as an app that also works offline" hidden>Install app</button>
       <button id="midiBtn" class="btn primary" type="button" title="What Play plays (song or pattern) as a MIDI file, one track per instrument">Download MIDI</button>
     </div>
   </header>
@@ -341,6 +347,7 @@
           <li><b>My songs</b> lists everything you have worked on in this browser: open, rename or delete</li>
           <li><b>Open</b> takes a BrowserDJ project or a <b>MIDI file</b> (from FL Studio or anywhere); you can also drop either on the page</li>
           <li><b>Share</b> makes a link with the whole song inside it; <b>Save</b> keeps a file, with your own sounds included</li>
+          <li><b>Works offline</b> after your first visit. <b>Install app</b> (Chrome, Edge, Android) puts it on your desktop or home screen; on iPhone use Share, then <b>Add to Home Screen</b></li>
         </ul></div>
     </div>
   </details>

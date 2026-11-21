@@ -22,6 +22,7 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 | `js/live.js` | Playing live: computer keyboard (by key position) and Web MIDI input. |
 | `js/samples.js` | Your own sounds: stored in IndexedDB by content hash; packed into saved project files as base64. |
 | `js/app.js` | Transport (look-ahead scheduler), recording, export, controls. |
+| `sw.js`, `manifest.webmanifest`, `icons/` | Offline and install: served from a web address, the service worker keeps every file (network first, so updates land on the next visit). Its file list must match what `index.html` loads; the unit tests check that. |
 
 `window.BrowserDJ.project` is the live project, the natural hook for an AI helper later.
 

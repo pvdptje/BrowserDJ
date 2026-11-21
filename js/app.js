@@ -240,6 +240,10 @@
 
   /* A mixer that is always there for sounds you trigger by hand (previews, live keys), so they go through
      the track's own channel: drive, filter, pan and volume sound exactly like playback. */
+  /* the shape a track's notes play with; Wobble keeps the voice's own filter open */
+  function voiceShape(t) {
+    return t.lfo && t.lfo.target === 'filter' && t.lfo.depth > 0 ? { ...(t.shape || SND.SHAPE), wobble: true } : t.shape;
+  }
   let liveM = null;
   function liveMixer() {
     const ac = audio();
@@ -250,7 +254,7 @@
     if (T.on) return;
     try {
       const ac = audio(), t = curTrack();
-      SND.melodyNote(ac, liveMixer().channel(t), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, t.instrument || 'pluck', null, t.shape, samplerFor(t));
+      SND.melodyNote(ac, liveMixer().channel(t), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, t.instrument || 'pluck', null, voiceShape(t), samplerFor(t));
     } catch (err) { /* sound is optional */ }
   }
   function previewDrum(id, vel) {
@@ -315,7 +319,7 @@
       return;
     }
     noteOff(pitch);
-    const voice = SND.voiceStart(ac, out, { pitch, vel }, now, t.instrument || 'pluck', null, undefined, t.shape, samplerFor(t));
+    const voice = SND.voiceStart(ac, out, { pitch, vel }, now, t.instrument || 'pluck', null, undefined, voiceShape(t), samplerFor(t));
     held.set(pitch, { voice, start: recPos(), vel });
     if (recArmed && !T.on) say('Press Play (or Space) to start recording.');
     roll.draw();
@@ -362,7 +366,7 @@
     const bps = 60 / bpm;
     PJ.eventsIn(P, items, lo, hi, (ev) => {
       const out = M.channel(ev.track), when = timeOf(ev.at + off);
-      if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, ev.track.shape, samplerFor(ev.track));
+      if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, voiceShape(ev.track), samplerFor(ev.track));
       else {
         SND.drumHit(ac, out, ev.drum, when, ev.vel, sampleBuf(ev.track, ev.drum), M.live, ev.gain);
         // every kick pumps the tracks that have Pump turned up
@@ -1452,6 +1456,27 @@
     masterChanged: () => {
       for (const M of [T.on && T.M, liveM]) if (M) { M.setMaster(P.master); M.setLoud(P.loud); }
     },
+  });
+
+  /* ---------- offline + install ----------
+     On a real web address (not a file opened from disk) a service worker keeps the studio working offline.
+     Where the browser offers it, Install app puts BrowserDJ on the desktop or home screen. */
+  // the manifest is linked here, not in the HTML: a page opened from disk cannot load it and would log an error
+  if (/^https?:$/.test(location.protocol)) {
+    const m = document.createElement('link'); m.rel = 'manifest'; m.href = 'manifest.webmanifest'; document.head.appendChild(m);
+  }
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(() => { /* private mode or blocked: the site still works */ }); });
+  }
+  let installPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installPrompt = e; $('installBtn').hidden = false; });
+  window.addEventListener('appinstalled', () => { installPrompt = null; $('installBtn').hidden = true; say('BrowserDJ is installed. It works offline too.'); });
+  $('installBtn').addEventListener('click', async () => {
+    if (!installPrompt) return;
+    const p = installPrompt; installPrompt = null;
+    $('installBtn').hidden = true; // a prompt can be shown once; the browser offers a new one later if wanted
+    p.prompt();
+    await p.userChoice.catch(() => null);
   });
 
   window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, mixer, live, transport: T };

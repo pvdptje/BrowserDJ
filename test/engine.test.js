@@ -385,6 +385,19 @@ test('master loudness: default none, clamped, survives a round trip', () => {
   assert.strictEqual(PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'synth' }] }).loud, 0);
 });
 
+test('offline: the service worker keeps every file the page loads, and they all exist', () => {
+  const root = path.join(__dirname, '..');
+  const sw = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
+  const shell = JSON.parse(sw.match(/const SHELL = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"').replace(/,\s*\]/, ']'));
+  const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
+  const used = [...html.matchAll(/(?:src|href)="([^"#:]+)"/g)].map((m) => m[1]);
+  used.push('examples/examples.js');
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8'));
+  for (const i of manifest.icons) used.push(i.src);
+  for (const u of used) assert.ok(shell.includes(u), u + ' is not in the service worker list');
+  for (const u of shell) if (u !== './') assert.ok(fs.existsSync(path.join(root, u)), u + ' does not exist');
+});
+
 test('example library: examples.js matches the song files, and every song loads cleanly', () => {
   const { build } = require('../tools/pack-examples.js');
   const packed = fs.readFileSync(path.join(__dirname, '..', 'examples', 'examples.js'), 'utf8');

@@ -60,6 +60,7 @@
    "name": "Wobble Bass",
    "color": "#a58bff",
    "instrument": "bass",
+   "lfo": { "target": "filter", "rate": "1/8", "depth": 0.55 },
    "volume": 0.78,
    "pan": 0,
    "drive": 0.4,
