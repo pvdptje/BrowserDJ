@@ -204,6 +204,7 @@
       <label class="shp" title="Fade-in time, on top of the instrument's own (double-click to reset)"><span>Attack</span><input id="shAttack" type="range" min="0" max="100" value="0"><output id="shAttackOut">own</output></label>
       <label class="shp" title="How long notes ring out after they end (double-click to reset)"><span>Release</span><input id="shRelease" type="range" min="0" max="100" value="0"><output id="shReleaseOut">own</output></label>
       <label class="shp" title="Darker or brighter than the instrument's own sound (double-click to reset)"><span>Tone</span><input id="shTone" type="range" min="0" max="100" value="50"><output id="shToneOut">as is</output></label>
+      <label class="shp" title="How long a slide note takes to glide to its pitch (double-click to reset)"><span>Glide</span><input id="shGlide" type="range" min="0" max="100" value="30"><output id="shGlideOut">65 ms</output></label>
       <span class="lfobox">
         <label for="lfoTarget" class="lab">Movement</label>
         <select id="lfoTarget" title="A pulse that moves with the tempo">
@@ -268,6 +269,7 @@
       <button id="quantBtn" class="btn small" type="button" title="Snap note starts and ends to the grid (Q)">Quantize</button>
       <button id="keyBtn" class="btn small" type="button" title="Move notes into the key">Fit to key</button>
       <button id="legatoBtn" class="btn small" type="button" title="Stretch each note up to the next one">Legato</button>
+      <button id="slideBtn" class="btn small" type="button" title="The selected notes glide in from the note before them, like a 303 slide">Slide</button>
       <span class="arpbox">
         <button id="arpBtn" class="btn small" type="button" title="Turn chords (notes that start together) into an arpeggio on the snap grid">Arpeggiate</button>
         <label for="arpMode" class="sr">Arpeggio direction</label>
@@ -308,7 +310,8 @@
           <li><b>Right-click</b> a note to delete it. Right-drag deletes several</li>
           <li><b>Ctrl+drag</b> draws a selection box. <b>Shift+click</b> adds or removes a note from the selection</li>
           <li><b>Double-click</b> a note to select every note at that pitch</li>
-          <li>Drag in the <b>VEL</b> lane to set how loud notes are</li>
+          <li>Drag in the <b>VEL</b> lane to set how hard notes are played: harder is louder and brighter. <b>Shift+drag</b> draws a straight line, for a crescendo or a fade</li>
+          <li>Select notes and press <b>Slide</b> to make them glide in from the note before, like an acid bass line. <b>Glide</b> in the Shape row sets how long the slide takes</li>
           <li>Hold <b>Alt</b> while dragging to ignore the snap grid</li>
           <li><b>Draw</b> picks what a click places: a note, or a <b>triad</b>, <b>seventh</b>, <b>power</b> chord or <b>octave</b>, built in the song&rsquo;s key</li>
           <li><b>Movement</b> makes a sound move with the beat: <b>Wobble</b> sweeps the filter (great on bass), <b>Tremolo</b> pulses the volume, <b>Auto-pan</b> swings it left and right. Speed is a note length, so it always stays on the tempo</li>

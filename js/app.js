@@ -1397,10 +1397,11 @@
     attack: (v) => (v > 0 ? fmtSecs(SND.attackTime(v)) : 'own'),
     release: (v) => (v > 0 ? fmtSecs(SND.releaseTime(v)) : 'own'),
     tone: (v) => (Math.abs(v - 0.5) < 0.005 ? 'as is' : (v > 0.5 ? '+' : '−') + (Math.abs(v - 0.5) * 4).toFixed(1) + ' oct'),
+    glide: (v) => fmtSecs(SND.glideTime(v)),
   };
   function syncShape() {
-    const sh = curTrack().shape || SND.SHAPE;
-    for (const k of ['attack', 'release', 'tone']) {
+    const sh = { ...SND.SHAPE, ...(curTrack().shape || {}) };
+    for (const k of ['attack', 'release', 'tone', 'glide']) {
       const id = 'sh' + k[0].toUpperCase() + k.slice(1);
       $(id).value = Math.round(sh[k] * 100);
       $(id + 'Out').textContent = shapeText[k](sh[k]);
@@ -1966,6 +1967,11 @@
   on('quantBtn', 'click', () => { if (!roll.quantize()) say('Pick a Snap value first, then Quantize lines the notes up to it.', 'warn'); });
   on('keyBtn', 'click', () => { if (P.scale === 'chromatic') say('Pick a key first. Chromatic has no wrong notes to fix.', 'warn'); else roll.fitToKey(); });
   on('legatoBtn', 'click', () => roll.legato());
+  on('slideBtn', 'click', () => {
+    const r = roll.toggleSlide();
+    if (!r) { say('Select the notes that should slide first (click, Shift+click, or Ctrl+drag a box), then press Slide.', 'warn'); return; }
+    say(r > 0 ? 'Those notes now glide in from the note before them. Glide in the Shape row sets how long the slide takes.' : 'Slide off for those notes.');
+  });
   on('arpBtn', 'click', () => {
     if (roll.arpeggiate($('arpMode').value)) say('Chords turned into arpeggios on the ' + (P.snap ? '1/' + P.snap : '1/16') + ' grid. Undo puts the chords back.');
     else say('Arpeggiate works on chords: notes that start at the same time. Draw some with Draw: Triad.', 'warn');
@@ -1984,7 +1990,7 @@
 
   // sound shape
   let shapeBefore = null;
-  for (const k of ['attack', 'release', 'tone']) {
+  for (const k of ['attack', 'release', 'tone', 'glide']) {
     const id = 'sh' + k[0].toUpperCase() + k.slice(1);
     on(id, 'input', () => {
       const t = curTrack();
@@ -1998,7 +2004,7 @@
       if (!T.on && !held.size) preview(60);
     });
     on(id, 'dblclick', () => {
-      $(id).value = k === 'tone' ? 50 : 0;
+      $(id).value = Math.round(SND.SHAPE[k] * 100);
       $(id).dispatchEvent(new Event('input'));
       $(id).dispatchEvent(new Event('change'));
     });

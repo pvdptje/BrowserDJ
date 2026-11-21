@@ -223,6 +223,21 @@ BDJ.Project = (() => {
   }
   const audible = (p, t) => !t.mute && (!p.tracks.some((x) => x.solo) || t.solo);
 
+  /* Slide notes glide in from the note before them: the latest one that starts earlier (the highest, if several
+     start together). The first note of a pattern slides from the last one, as the pattern loops. null: no slides. */
+  function slideFrom(pat) {
+    if (!pat.notes.some((n) => n.slide)) return null;
+    const out = new Map(), ns = pat.notes.slice().sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+    for (const n of ns) {
+      if (!n.slide) continue;
+      let prev = null;
+      for (const m of ns) if (m.start < n.start - 1e-7) prev = m;
+      if (!prev) { const last = ns[ns.length - 1]; if (last !== n && last.start > n.start + 1e-7) prev = last; }
+      if (prev) out.set(n, prev.pitch);
+    }
+    return out;
+  }
+
   /* Calls fn(event) for every note/hit of the items that starts in [lo, hi) song beats.
      event: {track, pattern, item, kind:'note'|'drum', at (beats), len (beats), pitch | drum, vel} */
   function eventsIn(p, items, lo, hi, fn, opt = {}) {
@@ -262,12 +277,15 @@ BDJ.Project = (() => {
         }
       } else {
         const k0 = Math.floor((a - it.start) / L), k1 = Math.floor((b - it.start - EPS) / L);
+        const from = slideFrom(pat);
         for (let k = k0; k <= k1; k++) {
           const base = it.start + k * L;
           for (const n of pat.notes) {
             const at = base + n.start;
             if (at < a - EPS || at >= b - EPS || at >= clipEnd - EPS) continue;
-            fn({ track: t, pattern: pat, item: it, kind: 'note', at, len: Math.min(n.len, clipEnd - at), pitch: n.pitch, vel: n.vel });
+            const ev = { track: t, pattern: pat, item: it, kind: 'note', at, len: Math.min(n.len, clipEnd - at), pitch: n.pitch, vel: n.vel };
+            if (from && from.has(n)) ev.glideFrom = from.get(n);
+            fn(ev);
           }
         }
       }
@@ -338,6 +356,7 @@ BDJ.Project = (() => {
       len: num(n && n.len, 1, 1 / 64, 10000),
       pitch: num(n && n.pitch, 60, 0, 127) | 0,
       vel: num(n && n.vel, 100, 1, 127) | 0,
+      ...(n && n.slide ? { slide: true } : {}), // glide in from the note before
     }));
   }
 
@@ -434,7 +453,7 @@ BDJ.Project = (() => {
       } else if (t.type === 'synth') {
         nt.instrument = BDJ.Sound.INSTRUMENTS.some((i) => i.id === t.instrument) ? t.instrument : 'pluck';
         const sh = t.shape || {};
-        nt.shape = { attack: num(sh.attack, 0, 0, 1), release: num(sh.release, 0, 0, 1), tone: num(sh.tone, 0.5, 0, 1) };
+        nt.shape = { attack: num(sh.attack, 0, 0, 1), release: num(sh.release, 0, 0, 1), tone: num(sh.tone, 0.5, 0, 1), glide: num(sh.glide, 0.3, 0, 1) };
         // movement: a tempo-synced LFO on the filter, volume or pan
         const lf = t.lfo || {};
         nt.lfo = { target: BDJ.Sound.LFO_TARGETS.includes(lf.target) ? lf.target : 'off', rate: BDJ.Sound.LFO_RATES[lf.rate] ? lf.rate : '1/8', depth: num(lf.depth, 0.6, 0, 1) };
@@ -570,6 +589,6 @@ BDJ.Project = (() => {
     blank, example, normalize, serialize,
     addTrack, addPattern, clonePattern, deletePattern, deleteTrack, addClip, uniqueName,
     applyPreset, setDrumBars, notesEnd, patternBeats, syncAudio, isAudio, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, autoValue, autoParams, sortAuto,
-    deriveFromTake, detectKey, midiTracks, History,
+    deriveFromTake, detectKey, midiTracks, History, slideFrom,
   };
 })();

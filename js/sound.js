@@ -383,8 +383,10 @@ BDJ.Sound = (() => {
   }
 
   /* A track's sound shape, on top of the instrument's own character:
-     attack 0..1 (0 = the instrument's own, up to 2 s), release 0..1 (up to 3 s), tone 0..1 (0.5 = as is, ±2 octaves of filter). */
-  const SHAPE = { attack: 0, release: 0, tone: 0.5 };
+     attack 0..1 (0 = the instrument's own, up to 2 s), release 0..1 (up to 3 s), tone 0..1 (0.5 = as is, ±2 octaves of filter),
+     glide 0..1: how long a slide note takes to reach its pitch (20 ms to about half a second). */
+  const SHAPE = { attack: 0, release: 0, tone: 0.5, glide: 0.3 };
+  const glideTime = (v) => 0.02 + 0.5 * Math.pow(v == null ? 0.3 : v, 2);
   const attackTime = (v) => (v > 0 ? 0.002 * Math.pow(1000, v) : 0);
   const releaseTime = (v) => (v > 0 ? 0.01 * Math.pow(300, v) : 0);
 
@@ -483,6 +485,13 @@ BDJ.Sound = (() => {
     // with Wobble on, the track's wobble filter does the filtering: the voice stays open so there is something to sweep
     if (sh.wobble) { filt.frequency.cancelScheduledValues(0); filt.frequency.setValueAtTime(12000, a); }
     if (sh.tone != null && Math.abs(sh.tone - 0.5) > 0.004) filt.detune.value = (sh.tone - 0.5) * 2 * 2400; // cents: moves every filter setting, envelopes too
+    // velocity colours the tone as well as the level: harder notes a little brighter, soft ones darker
+    filt.detune.value += (note.vel / 127 - 0.8) * 1500;
+    // a slide note starts at the pitch of the note before it and glides to its own (cents, so it sounds even)
+    if (note.glideFrom != null && note.glideFrom !== note.pitch) {
+      const cents = (note.glideFrom - note.pitch) * 100, gt = Math.min(glideTime(sh.glide), maxDur ? maxDur * 0.9 : 1);
+      for (const o of mine) { const d0 = o.detune.value; o.detune.setValueAtTime(d0 + cents, a); o.detune.linearRampToValueAtTime(d0, a + gt); }
+    }
     if (sh.attack > 0) att = Math.max(att, attackTime(sh.attack));
     if (sh.release > 0) rel = Math.max(rel, releaseTime(sh.release));
     if (maxDur) att = Math.min(att, maxDur * (sh.attack > 0 ? 0.9 : 0.4));
@@ -764,5 +773,5 @@ BDJ.Sound = (() => {
     return new Blob([data], { type: 'audio/wav' });
   }
 
-  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, KITS, PARAMS, SHAPE, attackTime, releaseTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, audioClip, encodeWav, midiToHz };
+  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, KITS, PARAMS, SHAPE, attackTime, releaseTime, glideTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, audioClip, encodeWav, midiToHz };
 })();

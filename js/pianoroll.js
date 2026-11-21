@@ -229,6 +229,15 @@ BDJ.PianoRoll = (() => {
       this.edit(() => { for (const n of t) n.vel = clamp(Math.round(n.vel + (Math.random() * 2 - 1) * 14), 20, 127); });
     }
 
+    /* Slide: the selected notes glide in from the note before them. All on -> off, otherwise on. 0: nothing selected. */
+    toggleSlide() {
+      const t = this.selected();
+      if (!t.length) return 0;
+      const on = !t.every((n) => n.slide);
+      this.edit(() => { for (const n of t) { if (on) n.slide = true; else delete n.slide; } });
+      return on ? 1 : -1;
+    }
+
     legato() {
       const t = this.targets().slice().sort((a, b) => a.start - b.start);
       this.edit(() => {
@@ -242,7 +251,7 @@ BDJ.PianoRoll = (() => {
       const t = this.selected();
       if (!t.length) return false;
       const s0 = Math.min(...t.map((n) => n.start));
-      this.clip = t.map((n) => ({ d: n.start - s0, len: n.len, pitch: n.pitch, vel: n.vel }));
+      this.clip = t.map((n) => ({ d: n.start - s0, len: n.len, pitch: n.pitch, vel: n.vel, slide: !!n.slide }));
       this.clipSpan = Math.max(...t.map((n) => n.start + n.len)) - s0;
       return true;
     }
@@ -252,7 +261,7 @@ BDJ.PianoRoll = (() => {
       const at = this.snapFloor(this.host.cursor());
       this.edit(() => {
         this.sel.clear();
-        for (const c of this.clip) this.sel.add(this.addNote(at + c.d, c.pitch, c.len, c.vel).id);
+        for (const c of this.clip) { const n = this.addNote(at + c.d, c.pitch, c.len, c.vel); if (c.slide) n.slide = true; this.sel.add(n.id); }
       });
       this.host.setCursor(at + Math.ceil(this.clipSpan - 1e-6));
     }
@@ -263,7 +272,7 @@ BDJ.PianoRoll = (() => {
       const span = Math.max(1, Math.ceil(e0 - s0 - 1e-6));
       this.edit(() => {
         this.sel.clear();
-        for (const n of t) this.sel.add(this.addNote(n.start + span, n.pitch, n.len, n.vel).id);
+        for (const n of t) { const m = this.addNote(n.start + span, n.pitch, n.len, n.vel); if (n.slide) m.slide = true; this.sel.add(m.id); }
       });
     }
 
@@ -299,6 +308,7 @@ BDJ.PianoRoll = (() => {
         return;
       } else if (py >= this.gridBottom()) {
         this.drag = { mode: 'vel', before: this.host.begin(), changed: false };
+        if (e.shiftKey) { this.drag.line = { x: px, v: this.velAt(py) }; this.drag.orig = new Map(this.notes.map((n) => [n.id, n.vel])); }
         this.paintVel(px, py);
       } else if (e.button === 2) {
         this.drag = { mode: 'erase', before: this.host.begin(), changed: false };
@@ -434,9 +444,27 @@ BDJ.PianoRoll = (() => {
       this.host.changed('live');
     }
 
-    paintVel(px, py) {
+    velAt(py) {
       const top = this.gridBottom() + 6, bot = this.size().H - 4;
-      const v = clamp(Math.round(((bot - py) / (bot - top)) * 127), 1, 127);
+      return clamp(Math.round(((bot - py) / (bot - top)) * 127), 1, 127);
+    }
+    paintVel(px, py) {
+      const v = this.velAt(py), d = this.drag;
+      d.show = { x: px, v };
+      if (d.line) {
+        // a straight line from where the drag began: every note under it (selected ones, if any are) follows it
+        const L = d.line, x0 = Math.min(L.x, px), x1 = Math.max(L.x, px);
+        for (const n of this.notes) n.vel = d.orig.get(n.id) ?? n.vel;
+        for (const n of this.notes) {
+          const x = this.x(n.start);
+          if (x < x0 - 1 || x > x1 + 1 || (this.sel.size && !this.sel.has(n.id))) continue;
+          const t = x1 > x0 ? (x - L.x) / (px - L.x) : 1;
+          n.vel = clamp(Math.round(L.v + (v - L.v) * clamp(t, 0, 1)), 1, 127);
+        }
+        d.changed = true;
+        this.host.changed('live');
+        return;
+      }
       let hits = this.notesAtX(px);
       if (!hits.length) return;
       const selHits = hits.filter((n) => this.sel.has(n.id));
@@ -561,6 +589,19 @@ BDJ.PianoRoll = (() => {
         g.globalAlpha = 1;
       }
 
+      // slides: a line gliding in from the note before
+      const from = BDJ.Project.slideFrom(this.host.pattern());
+      if (from) {
+        g.strokeStyle = lighten(NOTE); g.lineWidth = 2; g.lineCap = 'round';
+        for (const [n, q] of from) {
+          const x = this.x(n.start), y1 = this.y(n.pitch) + v.rowH / 2, y0 = this.y(q) + v.rowH / 2, w = Math.min(18, Math.max(8, v.ppb / 4));
+          if (x < KEYS - 20 || x > W + 20) continue;
+          g.globalAlpha = 0.9;
+          g.beginPath(); g.moveTo(x - w, y0); g.bezierCurveTo(x - w / 2, y0, x - w / 2, y1, x + 2, y1); g.stroke();
+          g.globalAlpha = 1;
+        }
+      }
+
       // notes
       g.font = '500 11px ' + this.mono();
       g.textBaseline = 'middle';
@@ -578,7 +619,8 @@ BDJ.PianoRoll = (() => {
         if (on) { g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1; this.rr(x + 0.5, y + 0.5, w - 1, h - 1, 3); g.stroke(); }
         // resize grip
         if (w > 14) { g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(x + w - 4, y + 3, 1.5, h - 6); }
-        if (w > 30 && v.rowH >= 12) { g.fillStyle = C['note-ink']; g.fillText(E.noteName(n.pitch), x + 5, y + h / 2 + 0.5); }
+        if (n.slide) { g.fillStyle = 'rgba(255,255,255,0.85)'; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.min(7, w / 2), y); g.lineTo(x, y + Math.min(7, h)); g.closePath(); g.fill(); }
+        if (w > 30 && v.rowH >= 12) { g.fillStyle = C['note-ink']; g.fillText(E.noteName(n.pitch), x + 5 + (n.slide ? 4 : 0), y + h / 2 + 0.5); }
       }
 
       // box select
@@ -605,6 +647,16 @@ BDJ.PianoRoll = (() => {
         g.fillRect(Math.round(x), vb - h, 2, h);
         g.beginPath(); g.arc(Math.round(x) + 1, vb - h, 3, 0, Math.PI * 2); g.fill();
         g.globalAlpha = 1;
+      }
+      const dv = this.drag && this.drag.mode === 'vel' ? this.drag : null;
+      if (dv && dv.line && dv.show) {
+        g.strokeStyle = C.text; g.lineWidth = 1; g.setLineDash([4, 3]);
+        g.beginPath(); g.moveTo(dv.line.x, vb - (vb - vt) * (dv.line.v / 127)); g.lineTo(dv.show.x, vb - (vb - vt) * (dv.show.v / 127)); g.stroke();
+        g.setLineDash([]);
+      }
+      if (dv && dv.show) {
+        g.fillStyle = C.text; g.font = '500 11px ' + this.mono(); g.textBaseline = 'middle';
+        g.fillText(String(dv.show.v), Math.min(W - 30, dv.show.x + 8), GB + 14);
       }
       g.restore();
 

@@ -327,18 +327,18 @@ test('automation: values between points, cleanup, MIDI controllers', () => {
 test('synth shape: defaults, round trip, clamping; new instruments are known', () => {
   const p = PJ.blank();
   const syn = p.tracks.find((t) => t.type === 'synth'), drums = p.tracks.find((t) => t.type === 'drums');
-  eq(syn.shape, { attack: 0, release: 0, tone: 0.5 });
+  eq(syn.shape, { attack: 0, release: 0, tone: 0.5, glide: 0.3 });
   assert.strictEqual(drums.shape, undefined);
   syn.shape = { attack: 0.4, release: 7, tone: -1 };
   syn.instrument = 'supersaw';
   const back = PJ.normalize(JSON.parse(PJ.serialize(p)));
   const s2 = back.tracks.find((t) => t.type === 'synth');
-  eq(s2.shape, { attack: 0.4, release: 1, tone: 0 });
+  eq(s2.shape, { attack: 0.4, release: 1, tone: 0, glide: 0.3 });
   assert.strictEqual(s2.instrument, 'supersaw');
   for (const id of ['supersaw', 'acid', 'organ']) assert.ok(ctx.BDJ.Sound.INSTRUMENTS.some((i) => i.id === id));
   // older saves without a shape get the neutral one
   const old = PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'synth', instrument: 'acid' }] });
-  eq(old.tracks[0].shape, { attack: 0, release: 0, tone: 0.5 });
+  eq(old.tracks[0].shape, { attack: 0, release: 0, tone: 0.5, glide: 0.3 });
 });
 
 test('audio tracks: takes follow the tempo, play once, catch up mid-clip, survive a round trip', () => {
@@ -417,6 +417,29 @@ test('drum kits and rolls: defaults, roll hits inside the step, resize, presets,
   // a preset replaces the rolls too
   PJ.applyPreset(p, pat, 'house');
   assert.strictEqual(pat.rolls, undefined);
+});
+
+test('slides: a slide note glides from the note before it, wraps at the pattern start, survives a round trip', () => {
+  const p = PJ.blank();
+  const t = p.tracks.find((x) => x.type === 'synth'), pat = PJ.patternsOf(p, t.id)[0];
+  pat.bars = 1;
+  pat.notes = [
+    { id: 1, start: 0, len: 1, pitch: 48, vel: 100, slide: true },
+    { id: 2, start: 1, len: 1, pitch: 55, vel: 100 },
+    { id: 3, start: 2, len: 0.5, pitch: 60, vel: 100, slide: true },
+    { id: 4, start: 2, len: 0.5, pitch: 64, vel: 100 },
+    { id: 5, start: 3, len: 1, pitch: 50, vel: 100, slide: true },
+  ];
+  p.clips = []; PJ.addClip(p, pat, 0);
+  const got = [];
+  PJ.eventsIn(p, PJ.playItems(p, 'song').items, 0, 4, (ev) => got.push([ev.pitch, ev.glideFrom]));
+  // 48 wraps around from the last note (50); 60 slides from 55; 50 from the highest of the chord before it (64)
+  eq(got, [[48, 50], [55, undefined], [60, 55], [64, undefined], [50, 64]]);
+  const back = PJ.normalize(JSON.parse(PJ.serialize(p)));
+  const bn = PJ.patternsOf(back, back.tracks.find((x) => x.type === 'synth').id)[0].notes;
+  eq(bn.map((n) => !!n.slide), [true, false, true, false, true]);
+  assert.ok(!('slide' in bn[1])); // notes without a slide stay as small as before
+  assert.ok(ctx.BDJ.Sound.glideTime(0) < 0.03 && ctx.BDJ.Sound.glideTime(1) > 0.4);
 });
 
 test('movement (LFO): off by default, round trip, bad values cleaned up', () => {
