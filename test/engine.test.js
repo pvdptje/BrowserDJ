@@ -460,6 +460,46 @@ test('beatbox: just two sounds, or silence', () => {
   assert.strictEqual(BB.toSteps([], 120, null), null);
 });
 
+test('song id for My songs: kept when valid, dropped when not', () => {
+  const p = PJ.blank();
+  assert.strictEqual(PJ.normalize({ ...JSON.parse(PJ.serialize(p)), songId: 'slx9k2abc12' }).songId, 'slx9k2abc12');
+  for (const bad of ['', 'x123456', 's1', 42, '<script>']) assert.strictEqual(PJ.normalize({ ...JSON.parse(PJ.serialize(p)), songId: bad }).songId, null);
+});
+
+test('MIDI import: every example survives export -> import, note for note', () => {
+  const MI = require('../js/midiimport.js');
+  const dir = path.join(__dirname, '..', 'examples');
+  // what plays, per track: [time, pitch-or-drum, length], sorted
+  const playing = (p) => {
+    const { items, length } = PJ.playItems(p, 'song');
+    const out = {};
+    PJ.eventsIn(p, items, 0, length, (ev) => {
+      (out[ev.track.name] = out[ev.track.name] || []).push(ev.kind === 'note'
+        ? [Math.round(ev.at * 1000), ev.pitch, Math.round(ev.len * 1000)]
+        : [Math.round(ev.at * 1000), ev.drum]);
+    });
+    for (const k of Object.keys(out)) out[k].sort((a, b) => a[0] - b[0] || String(a[1]).localeCompare(String(b[1])) || (a[2] || 0) - (b[2] || 0));
+    return out;
+  };
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'catalog.json')) {
+    const orig = PJ.normalize(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+    for (const t of orig.tracks) { t.mute = false; t.solo = false; if (t.kit) for (const k of t.kit) { k.mute = false; k.solo = false; } }
+    const bytes = E.writeMidiTracks(PJ.midiTracks(orig, 'song'), orig.bpm, orig.markers);
+    const back = PJ.normalize(MI.toProject(bytes, f));
+    assert.strictEqual(back.bpm, orig.bpm, f + ': tempo');
+    const a = playing(orig), b = playing(back);
+    for (const name of Object.keys(a)) {
+      assert.ok(b[name], f + ': track "' + name + '" is missing');
+      eq(b[name], a[name]);
+    }
+    for (const t of orig.tracks.filter((x) => x.type === 'synth' && a[x.name])) assert.strictEqual(back.tracks.find((x) => x.name === t.name).instrument, t.instrument, f + ': instrument of ' + t.name);
+    eq(back.markers.map((m) => [m.beat, m.name]), orig.markers.map((m) => [m.beat, m.name]));
+    // repeats come back as patterns used more than once, not one pattern per block
+    assert.ok(back.patterns.length < back.clips.length + back.tracks.length, f + ': ' + back.patterns.length + ' patterns for ' + back.clips.length + ' clips');
+  }
+  assert.throws(() => MI.toProject(new Uint8Array([1, 2, 3, 4]), 'x.mid'), /not a MIDI file/);
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

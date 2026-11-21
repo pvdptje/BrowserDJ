@@ -293,6 +293,16 @@ button.sname:hover { background: rgba(255,255,255,0.06); }
 .exitem .s { color: var(--trace); font-weight: 500; }
 .exnote { margin: 4px 12px 2px; font-size: 12px; color: var(--muted); }
 
+/* my songs */
+.songspanel { max-height: min(70vh, 560px); overflow-y: auto; }
+.songrow { display: flex; align-items: center; gap: 4px; border-radius: 10px; }
+.songrow .exitem { flex: 1; min-width: 0; }
+.songrow .exitem .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.songrow.cur { background: color-mix(in srgb, var(--trace) 8%, transparent); }
+.songrow .tog { flex: none; }
+.songrow .tog.x.sure { width: auto; padding: 0 8px; background: var(--rec); border-color: var(--rec); color: #fff; font: 600 12px var(--font-body); }
+.nowtag { font: 600 11px var(--font-body); color: var(--trace); border: 1px solid var(--trace); border-radius: 999px; padding: 0 6px; margin-left: 4px; vertical-align: 2px; }
+
 /* share */
 .sharepanel { padding: 14px; gap: 10px; }
 .sharehead { margin: 0; font-size: 14px; }
@@ -336,7 +346,7 @@ body.dropping .capture { outline: 2px dashed var(--trace); outline-offset: 3px; 
   .transport { position: static; }
   .drow { grid-template-columns: 150px 1fr; min-width: calc(160px + var(--steps, 16) * 24px); }
   .expanel { left: 0; right: auto; } /* the header wraps, so the button sits on the left here */
-  .sharepanel { position: fixed; top: 12px; left: 16px; right: 16px; width: auto; } /* mid-row button: pin to the screen instead */
+  .sharepanel, .songspanel { position: fixed; top: 12px; left: 16px; right: 16px; width: auto; } /* mid-row buttons: pin to the screen instead */
   .welcome { padding: 14px 44px 14px 16px; }
   .plgrid { grid-template-columns: 132px 1fr; }
   .plvol, .tog.x { display: none; }

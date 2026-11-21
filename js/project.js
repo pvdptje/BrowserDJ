@@ -360,6 +360,8 @@ BDJ.Project = (() => {
     const o = obj.version === 2 || Array.isArray(obj.tracks) ? obj : migrateV1(obj);
     const p = shell();
     p.name = str(o.name, 'Untitled', 80);
+    // which "My songs" entry this is (the app gives songs from elsewhere a fresh one)
+    p.songId = typeof o.songId === 'string' && /^s[a-z0-9]{6,30}$/.test(o.songId) ? o.songId : null;
     p.bpm = num(o.bpm, 120, 40, 240);
     p.root = num(o.root, 0, 0, 11) | 0;
     p.scale = E.SCALES[o.scale] ? o.scale : 'major';

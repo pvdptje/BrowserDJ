@@ -22,6 +22,7 @@
     if (saved) { P = PJ.normalize(JSON.parse(saved)); restored = true; }
   } catch (err) { /* storage unavailable or corrupt */ }
   if (!P) P = PJ.example();
+  if (!P.songId) P.songId = BDJ.Library.newId();
 
   const curTrack = () => PJ.selTrack(P);
   const curPat = () => PJ.selPattern(P);
@@ -41,15 +42,38 @@
   const snap = () => PJ.serialize(P);
   const begin = () => snap();
   function end(before) {
-    if (before !== snap()) { H.push(before); updateUndo(); }
+    if (before !== snap()) { H.push(before); updateUndo(); if (!libQuiet) scheduleLib(); }
   }
   function commit(fn) { const b = begin(); fn(); end(b); changed('all'); }
+
+  /* ---------- My songs ----------
+     A song joins the list the first time it is changed (opening an example or a file is not a change), and is
+     then kept up to date a moment after every edit. Each project carries its own songId, so undo stays with it. */
+  let libQuiet = false, libTimer = 0;
+  function scheduleLib() { clearTimeout(libTimer); libTimer = setTimeout(saveLib, 1200); }
+  function saveLib() {
+    clearTimeout(libTimer); libTimer = 0;
+    if (!P.songId) P.songId = BDJ.Library.newId();
+    const { length } = PJ.playItems(P, P.clips.length ? 'song' : 'pattern');
+    return BDJ.Library.put(P.songId, JSON.parse(snap()), (length * 60) / P.bpm);
+  }
+  /* save anything pending right now (before switching songs, or when the tab is hidden) */
+  function flushLib() { return libTimer ? saveLib() : Promise.resolve(); }
+  /* replace the project as one undo step that does not count as editing it */
+  function loadCommit(fn) {
+    flushLib();
+    libQuiet = true;
+    try { commit(fn); } finally { libQuiet = false; }
+  }
+  document.addEventListener('visibilitychange', () => { if (document.hidden) flushLib(); });
+  window.addEventListener('pagehide', () => { flushLib(); });
   function updateUndo() {
     $('undoBtn').disabled = !H.undo.length;
     $('redoBtn').disabled = !H.redo.length;
   }
   function restore(s) {
     P = JSON.parse(s);
+    scheduleLib(); // undo and redo are edits to whichever song they land on
     roll.pruneSel();
     updateUndo();
     changed('all');
@@ -922,7 +946,7 @@
       const obj = JSON.parse(await file.text());
       stopAll();
       if (obj && obj.sampleData) await BDJ.Samples.unpack(obj.sampleData);
-      commit(() => { P = PJ.normalize(obj); take = null; });
+      loadCommit(() => { P = PJ.normalize(obj); take = null; P.songId = BDJ.Library.newId(); });
       ensureSamples();
       patCursor = songCursor = 0;
       roll.sel.clear();
@@ -957,10 +981,10 @@
   function openExample(ex, opts = {}) {
     stopAll();
     if (opts.replace) {
-      P = PJ.normalize(ex.project); take = null;
+      P = PJ.normalize(ex.project); take = null; P.songId = BDJ.Library.newId();
       changed('all');
     } else {
-      commit(() => { P = PJ.normalize(ex.project); take = null; });
+      loadCommit(() => { P = PJ.normalize(ex.project); take = null; P.songId = BDJ.Library.newId(); });
     }
     ensureSamples();
     patCursor = songCursor = 0;
@@ -978,6 +1002,7 @@
   async function toggleExamples() {
     const panel = $('exPanel');
     if (!panel.hidden) { closeExamples(); return; }
+    closeShare(); closeSongs();
     panel.hidden = false;
     $('examplesBtn').setAttribute('aria-expanded', 'true');
     panel.innerHTML = '<p class="exnote">Loading the example songs…</p>';
@@ -1008,8 +1033,8 @@
     try {
       const obj = await BDJ.Share.decode(token);
       stopAll();
-      if (replace) { P = PJ.normalize(obj); take = null; changed('all'); }
-      else commit(() => { P = PJ.normalize(obj); take = null; });
+      if (replace) { P = PJ.normalize(obj); take = null; P.songId = BDJ.Library.newId(); changed('all'); }
+      else loadCommit(() => { P = PJ.normalize(obj); take = null; P.songId = BDJ.Library.newId(); });
       patCursor = songCursor = 0;
       roll.sel.clear(); roll.fit(); playlist.fit();
       say('Opened the shared song "' + P.name + '". Press Space to play it; everything in it is yours to change.' + (replace ? '' : ' Undo brings back what you had.'));
@@ -1021,11 +1046,60 @@
     }
   }
 
+  const fmtAgo = (t) => {
+    const s = Math.round((Date.now() - t) / 1000);
+    if (s < 45) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 86400) return Math.round(s / 3600) + ' h ago';
+    const d = Math.round(s / 86400);
+    return d === 1 ? 'yesterday' : d < 30 ? d + ' days ago' : new Date(t).toLocaleDateString();
+  };
+  function closeSongs() { $('songsPanel').hidden = true; $('songsBtn').setAttribute('aria-expanded', 'false'); }
+  async function renderSongs() {
+    const panel = $('songsPanel');
+    await flushLib();
+    const list = await BDJ.Library.list();
+    if (!list.length) {
+      panel.innerHTML = '<p class="exnote">Nothing here yet. Songs appear here once you change something, and stay in this browser.</p>';
+      return;
+    }
+    panel.innerHTML = list.map((x) => {
+      const cur = x.id === P.songId;
+      return '<div class="songrow' + (cur ? ' cur' : '') + '" data-song="' + x.id + '">' +
+        '<button type="button" class="exitem" data-act="open" role="menuitem"><span class="t">' + escHtml(x.name) + (cur ? '<span class="nowtag">open now</span>' : '') + '</span>' +
+        '<span class="m">' + x.bpm + ' BPM · ' + fmtLen(x.secs) + '</span><span class="b">' + fmtAgo(x.updated) + '</span></button>' +
+        '<button type="button" class="tog" data-act="rename" title="Rename" aria-label="Rename ' + escHtml(x.name) + '">&#9998;</button>' +
+        '<button type="button" class="tog x" data-act="delete" title="Delete from this list" aria-label="Delete ' + escHtml(x.name) + '">&times;</button></div>';
+    }).join('') + '<p class="exnote">Kept in this browser. Use Save to keep a copy as a file.</p>';
+  }
+  async function toggleSongs() {
+    const panel = $('songsPanel');
+    if (!panel.hidden) { closeSongs(); return; }
+    closeExamples(); closeShare();
+    panel.hidden = false;
+    $('songsBtn').setAttribute('aria-expanded', 'true');
+    panel.innerHTML = '<p class="exnote">Loading…</p>';
+    await renderSongs();
+    const first = panel.querySelector('.exitem');
+    if (first) first.focus();
+  }
+  async function openSong(id) {
+    await flushLib();
+    const obj = await BDJ.Library.get(id);
+    if (!obj) { say('That song is no longer in this browser.', 'warn'); return; }
+    stopAll();
+    loadCommit(() => { P = PJ.normalize(obj); P.songId = id; take = null; });
+    ensureSamples();
+    patCursor = songCursor = 0;
+    roll.sel.clear(); roll.fit(); playlist.fit();
+    say('Opened "' + P.name + '". Undo brings back what you had open.');
+  }
+
   function closeShare() { $('sharePanel').hidden = true; $('shareBtn').setAttribute('aria-expanded', 'false'); }
   async function toggleShare() {
     const panel = $('sharePanel');
     if (!panel.hidden) { closeShare(); return; }
-    closeExamples();
+    closeExamples(); closeSongs();
     panel.hidden = false;
     $('shareBtn').setAttribute('aria-expanded', 'true');
     panel.innerHTML = '<p class="exnote">Making a link…</p>';
@@ -1294,15 +1368,41 @@
     if (ex) openExample(ex);
   });
   document.addEventListener('click', (e) => {
-    if (!$('exPanel').hidden && !e.target.closest('.exwrap:not(.sharewrap)')) closeExamples();
+    if (!$('exPanel').hidden && !e.target.closest('.exwrap:not(.sharewrap):not(.songswrap)')) closeExamples();
     if (!$('sharePanel').hidden && !e.target.closest('.sharewrap')) closeShare();
+    if (!$('songsPanel').hidden && !e.target.closest('.songswrap')) closeSongs();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
     if (!$('exPanel').hidden) { closeExamples(); $('examplesBtn').focus(); }
     if (!$('sharePanel').hidden) { closeShare(); $('shareBtn').focus(); }
+    if (!$('songsPanel').hidden) { closeSongs(); $('songsBtn').focus(); }
   });
   on('shareBtn', 'click', (e) => { e.stopPropagation(); toggleShare(); });
+  on('songsBtn', 'click', (e) => { e.stopPropagation(); toggleSongs(); });
+  on('songsPanel', 'click', async (e) => {
+    const b = e.target.closest('[data-act]'), row = e.target.closest('[data-song]');
+    if (!b || !row) return;
+    const id = row.dataset.song;
+    if (b.dataset.act === 'open') { closeSongs(); if (id !== P.songId) openSong(id); return; }
+    if (b.dataset.act === 'rename') {
+      const old = row.querySelector('.t').firstChild.textContent;
+      const name = prompt('Rename this song', old);
+      if (!name || !name.trim()) return;
+      if (id === P.songId) commit(() => { P.name = name.trim().slice(0, 80); }); // saved by the edit
+      else await BDJ.Library.rename(id, name.trim().slice(0, 80));
+      await flushLib();
+      renderSongs();
+      return;
+    }
+    if (b.dataset.act === 'delete') {
+      // a second click confirms
+      if (!b.classList.contains('sure')) { b.classList.add('sure'); b.textContent = 'Delete?'; return; }
+      await BDJ.Library.remove(id);
+      say(id === P.songId ? 'Removed from My songs. It is still open; changing it adds it back.' : 'Removed from My songs.');
+      renderSongs();
+    }
+  });
   // a share link pasted into this tab only changes the part after '#': no reload, so listen for it
   window.addEventListener('hashchange', () => { const t = sharedToken(); if (t) openShared(t, false); });
   const closeWelcome = () => {
@@ -1316,7 +1416,7 @@
 
   on('newBtn', 'click', () => {
     stopAll();
-    commit(() => { P = PJ.blank(); take = null; });
+    loadCommit(() => { P = PJ.blank(); take = null; P.songId = BDJ.Library.newId(); });
     patCursor = songCursor = 0; roll.sel.clear(); roll.fit(); playlist.fit();
     say('A fresh project with a melody track and a drum track. Hum something, draw notes, or load a drum pattern. Undo brings the old one back.');
   });
