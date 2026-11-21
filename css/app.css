@@ -324,6 +324,9 @@ button.sname:hover { background: rgba(255,255,255,0.06); }
 .welcome b { color: var(--text); font-weight: 600; }
 .wtext { flex: 1 1 380px; }
 .wact { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* touch screens get touch words: .k is for keyboard and mouse, .t for touch */
+.welcome .t { display: none; }
+@media (pointer: coarse) { .welcome .k { display: none; } .welcome .t { display: inline; } }
 .wclose { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; padding: 0; font-size: 18px; }
 
 /* help */
@@ -346,6 +349,9 @@ body.dropping .capture { outline: 2px dashed var(--trace); outline-offset: 3px; 
   .transport { position: static; }
   .drow { grid-template-columns: 150px 1fr; min-width: calc(160px + var(--steps, 16) * 24px); }
   .expanel { left: 0; right: auto; } /* the header wraps, so the button sits on the left here */
+  header p { font-size: 14px; }
+  .hactions { gap: 6px; }
+  .hactions .btn { padding: 5px 9px; font-size: 13px; }
   .sharepanel, .songspanel { position: fixed; top: 12px; left: 16px; right: 16px; width: auto; } /* mid-row buttons: pin to the screen instead */
   .welcome { padding: 14px 44px 14px 16px; }
   .plgrid { grid-template-columns: 132px 1fr; }

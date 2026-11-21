@@ -229,7 +229,11 @@
   /* ---------- audio context ---------- */
   let actx = null;
   function audio() {
-    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    if (!actx) {
+      // iPhones mute web audio when the ringer switch is on silent, unless the page says it plays music
+      try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (err) { /* older browsers */ }
+      actx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+    }
     if (actx.state === 'suspended') actx.resume().catch(() => {});
     return actx;
   }
@@ -982,6 +986,7 @@
      The library lives in examples/examples.js, loaded the first time it is needed. A script tag works even
      when the page is opened straight from disk, where fetch() is not allowed. */
   const FIRST_EXAMPLE = 'firstlight';
+  const TOUCH = window.matchMedia && window.matchMedia('(pointer: coarse)').matches; // a phone or tablet
   let examplesReady = null;
   function loadExamples() {
     if (BDJ.EXAMPLES) return Promise.resolve(BDJ.EXAMPLES);
@@ -1010,7 +1015,7 @@
     patCursor = songCursor = 0;
     roll.sel.clear(); roll.fit(); playlist.fit();
     say(opts.replace
-      ? 'This is "' + ex.title + '", one of the example songs. Press Space to play it, then click any clip to see how it is made.'
+      ? 'This is "' + ex.title + '", one of the example songs. ' + (TOUCH ? 'Tap Play to hear it, then tap any clip' : 'Press Space to play it, then click any clip') + ' to see how it is made.'
       : 'Loaded "' + ex.title + '". Press Space to play it; click any clip to see how it is made. Undo brings back what you had.');
   }
 
@@ -1503,6 +1508,19 @@
   });
   on('plFit', 'click', () => playlist.fit());
   on('makeUnique', 'click', () => playlist.makeUnique());
+  // touchscreens have no right-click and no Delete key: these buttons are the way to delete there
+  on('delClipsBtn', 'click', () => {
+    const n = playlist.sel.size;
+    if (!n) { say('Tap a clip to select it first (or drag a box around several with Ctrl), then Delete.', 'warn'); return; }
+    playlist.deleteSelected();
+    say('Deleted ' + n + (n === 1 ? ' clip' : ' clips') + '. Undo brings ' + (n === 1 ? 'it' : 'them') + ' back.');
+  });
+  on('delNotesBtn', 'click', () => {
+    const n = roll.sel.size;
+    if (!n) { say('Tap a note to select it first, then Delete.', 'warn'); return; }
+    roll.deleteSel();
+    say('Deleted ' + n + (n === 1 ? ' note' : ' notes') + '. Undo brings ' + (n === 1 ? 'it' : 'them') + ' back.');
+  });
   on('addMarker', 'click', () => playlist.addMarkerAt(songCursor));
   on('clearLoop', 'click', () => {
     if (!P.region) { say('Drag along the playlist ruler to make a loop region.'); return; }

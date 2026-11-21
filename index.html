@@ -49,9 +49,9 @@
     <div class="wtext">
       <h2>Welcome! This whole studio runs right here in your browser.</h2>
       <ol>
-        <li><b>Press Space</b> to hear the song that&rsquo;s loaded.</li>
-        <li><b>Click any clip</b> in the playlist to open its notes or beat in the editor below.</li>
-        <li><b>Make your own:</b> press Record and hum a tune, or play your computer keyboard (Z to M).</li>
+        <li><b class="k">Press Space</b><b class="t">Tap Play</b> to hear the song that&rsquo;s loaded.</li>
+        <li><b class="k">Click any clip</b><b class="t">Tap any clip</b> in the playlist to open its notes or beat in the editor below.</li>
+        <li><b>Make your own:</b> <span class="k">press Record and hum a tune, or play your computer keyboard (Z to M).</span><span class="t">tap Record and hum a tune, or pick Drums and beatbox.</span></li>
       </ol>
     </div>
     <div class="wact">
@@ -135,6 +135,7 @@
       <span class="sep"></span>
       <button id="addSynth" class="btn small" type="button">+ Synth track</button>
       <button id="addDrums" class="btn small" type="button">+ Drum track</button>
+      <button id="delClipsBtn" class="btn small" type="button" title="Delete the selected clips (Delete key, or right-click a clip)">Delete</button>
       <button id="makeUnique" class="btn small" type="button" title="Give the selected clip(s) their own copy of the pattern, so you can change it in just that spot (U)">Make unique</button>
       <button id="plFit" class="btn small" type="button" title="Zoom to the whole song">Zoom to fit</button>
     </div>
@@ -233,6 +234,7 @@
         </select>
       </span>
       <button id="humanBtn" class="btn small" type="button" title="Small random velocity changes so repeats sound played, not programmed">Humanize</button>
+      <button id="delNotesBtn" class="btn small" type="button" title="Delete the selected notes (Delete key, or right-click a note)">Delete</button>
       <button id="clearMelBtn" class="btn small" type="button">Clear</button>
       <button id="fitBtn" class="btn small" type="button" title="Zoom to the whole pattern">Zoom to fit</button>
       <span class="hint">Edits apply to the selected notes, or all notes if none are selected.</span>
