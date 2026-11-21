@@ -23,7 +23,10 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 
 ## Examples
 
-`examples/` holds project files to load with **Open**, such as `gabber-in-de-browser.browserdj.json` (185 BPM hardcore).
+The **Examples** button opens the songs in `examples/`. First-time visitors start in one of them, with a short welcome.
+
+- A link like `?example=gabber` opens that song directly (ids are in `examples/catalog.json`; `starter` is the small built-in song).
+- The page loads the songs from `examples/examples.js`, a bundle of the `.browserdj.json` files that also works when `index.html` is opened from disk. After adding or changing a song, list it in `examples/catalog.json` and run `node tools/pack-examples.js`; a unit test fails if the bundle is out of date.
 
 ## Model
 

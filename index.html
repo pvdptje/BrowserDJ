@@ -24,6 +24,10 @@
     <h1>Browser<span>DJ</span></h1>
     <p>Hum a melody, shape it in the piano roll, put a beat under it, and take it to your music program.</p>
     <div class="hactions">
+      <div class="exwrap">
+        <button id="examplesBtn" class="btn small exbtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="exPanel">&#9835; Examples</button>
+        <div id="exPanel" class="expanel" role="menu" aria-label="Example songs" hidden></div>
+      </div>
       <button id="newBtn" class="btn small" type="button">New</button>
       <button id="openBtn" class="btn small" type="button">Open</button>
       <button id="saveBtn" class="btn small" type="button" title="Save the project as a file">Save</button>
@@ -32,6 +36,23 @@
       <button id="midiBtn" class="btn primary" type="button" title="What Play plays (song or pattern) as a MIDI file, one track per instrument">Download MIDI</button>
     </div>
   </header>
+
+  <section id="welcome" class="welcome" aria-label="Welcome" hidden>
+    <div class="wtext">
+      <h2>Welcome! This whole studio runs right here in your browser.</h2>
+      <ol>
+        <li><b>Press Space</b> to hear the song that&rsquo;s loaded.</li>
+        <li><b>Click any clip</b> in the playlist to open its notes or beat in the editor below.</li>
+        <li><b>Make your own:</b> press Record and hum a tune, or play your computer keyboard (Z to M).</li>
+      </ol>
+    </div>
+    <div class="wact">
+      <button id="wPlay" class="btn play" type="button">&#9654; Play</button>
+      <button id="wExamples" class="btn" type="button">More examples</button>
+      <button id="wNew" class="btn" type="button">Start empty</button>
+      <button id="wClose" class="btn small wclose" type="button" aria-label="Close the welcome">&times;</button>
+    </div>
+  </section>
 
   <section class="transport" aria-label="Transport">
     <div class="seg" role="group" aria-label="What Play plays">

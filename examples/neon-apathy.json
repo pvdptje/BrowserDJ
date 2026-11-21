@@ -1,0 +1,396 @@
+{
+ "version": 2,
+ "name": "Neon Apathy",
+ "bpm": 140,
+ "root": 1,
+ "scale": "minor",
+ "snap": 16,
+ "loop": true,
+ "click": false,
+ "mode": "song",
+ "capture": {
+  "detail": 0.5,
+  "fixTuning": true,
+  "playBeat": false
+ },
+ "master": 0.85,
+ "region": null,
+ "markers": [
+  { "id": 900, "beat": 0, "name": "Atmosphere" },
+  { "id": 901, "beat": 32, "name": "Glitch Drop" },
+  { "id": 902, "beat": 96, "name": "Breakdown" },
+  { "id": 903, "beat": 128, "name": "Build" },
+  { "id": 904, "beat": 160, "name": "Heavy Drop" },
+  { "id": 905, "beat": 224, "name": "Outro" }
+ ],
+ "tracks": [
+  {
+   "id": 1,
+   "type": "drums",
+   "name": "Sub Kick",
+   "color": "#ff4d5e",
+   "volume": 0.9,
+   "pan": 0,
+   "drive": 0.25,
+   "echoSend": 0,
+   "swing": 0,
+   "kit": [
+    { "id": "kick", "vol": 1 }
+   ]
+  },
+  {
+   "id": 2,
+   "type": "drums",
+   "name": "Broken Beats",
+   "color": "#58d6c5",
+   "volume": 0.65,
+   "pan": -0.05,
+   "echoSend": 0.25,
+   "swing": 0.1,
+   "kit": [
+    { "id": "snare", "vol": 0.8 },
+    { "id": "clap", "vol": 0.7 },
+    { "id": "chat", "vol": 0.6 },
+    { "id": "ohat", "vol": 0.5 }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "synth",
+   "name": "Wobble Bass",
+   "color": "#a58bff",
+   "instrument": "bass",
+   "volume": 0.78,
+   "pan": 0,
+   "drive": 0.4,
+   "echoSend": 0.1,
+   "auto": {
+    "filter": [
+     { "b": 0, "v": 0.3 },
+     { "b": 90, "v": 0.4 },
+     { "b": 96, "v": 0.1 },
+     { "b": 120, "v": 0.15 },
+     { "b": 128, "v": 0.85 },
+     { "b": 156, "v": 0.85 },
+     { "b": 160, "v": 0.45 },
+     { "b": 224, "v": 0.45 },
+     { "b": 240, "v": 0.1 }
+    ]
+   }
+  },
+  {
+   "id": 4,
+   "type": "synth",
+   "name": "Crystal Arp",
+   "color": "#ffb04f",
+   "instrument": "pluck",
+   "volume": 0.65,
+   "pan": 0.2,
+   "echoSend": 0.85,
+   "auto": {
+    "filter": [
+     { "b": 0, "v": 0.4 },
+     { "b": 32, "v": 0.6 },
+     { "b": 96, "v": 0.6 },
+     { "b": 128, "v": 0.3 },
+     { "b": 160, "v": 0.7 },
+     { "b": 224, "v": 0.7 },
+     { "b": 256, "v": 0.2 }
+    ]
+   }
+  },
+  {
+   "id": 5,
+   "type": "synth",
+   "name": "Detuned Pad",
+   "color": "#5fb4ff",
+   "instrument": "pad",
+   "volume": 0.55,
+   "pan": -0.15,
+   "echoSend": 0.6,
+   "auto": {
+    "volume": [
+     { "b": 0, "v": 0.65 },
+     { "b": 90, "v": 0.65 },
+     { "b": 96, "v": 0.3 },
+     { "b": 160, "v": 0.4 },
+     { "b": 224, "v": 0.5 },
+     { "b": 256, "v": 0 }
+    ]
+   }
+  },
+  {
+   "id": 6,
+   "type": "synth",
+   "name": "Glitch Artifacts",
+   "color": "#ff8a5c",
+   "instrument": "lead",
+   "volume": 0.35,
+   "pan": 0.3,
+   "drive": 0.2,
+   "echoSend": 0.9,
+   "auto": {
+    "filter": [
+     { "b": 0, "v": 0.8 },
+     { "b": 256, "v": 0.8 }
+    ]
+   }
+  }
+ ],
+ "patterns": [
+  {
+   "id": 10,
+   "trackId": 1,
+   "name": "Kick (Broken)",
+   "bars": 1,
+   "steps": {
+    "kick": [120, 0, 0, 90, 0, 0, 120, 0, 0, 0, 120, 0, 100, 0, 0, 0]
+   }
+  },
+  {
+   "id": 11,
+   "trackId": 1,
+   "name": "Kick (4/4)",
+   "bars": 1,
+   "steps": {
+    "kick": [120, 0, 0, 0, 120, 0, 0, 0, 120, 0, 0, 0, 120, 0, 0, 0]
+   }
+  },
+  {
+   "id": 12,
+   "trackId": 2,
+   "name": "Hats (16th)",
+   "bars": 1,
+   "steps": {
+    "chat": [40, 0, 70, 0, 50, 0, 80, 0, 45, 0, 75, 0, 55, 0, 90, 0],
+    "ohat": [0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   }
+  },
+  {
+   "id": 13,
+   "trackId": 2,
+   "name": "Snare/Clap",
+   "bars": 1,
+   "steps": {
+    "snare": [0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 105, 0, 0, 0],
+    "clap": [0, 0, 0, 0, 0, 0, 90, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+   }
+  },
+  {
+   "id": 14,
+   "trackId": 2,
+   "name": "Build Roll",
+   "bars": 2,
+   "steps": {
+    "snare": [60,0,60,0,60,0,60,0,70,0,70,0,70,0,70,0,80,82,84,86,88,90,92,94,100,105,110,115,120,125,128,0]
+   }
+  },
+  {
+   "id": 20,
+   "trackId": 3,
+   "name": "Sub Roll",
+   "bars": 8,
+   "notes": [
+    { "start": 0, "len": 0.5, "pitch": 37, "vel": 120 },
+    { "start": 0.75, "len": 0.25, "pitch": 37, "vel": 100 },
+    { "start": 1.5, "len": 0.5, "pitch": 40, "vel": 115 },
+    { "start": 2.5, "len": 0.5, "pitch": 42, "vel": 110 },
+    { "start": 3, "len": 1, "pitch": 44, "vel": 120 },
+    { "start": 4, "len": 0.5, "pitch": 37, "vel": 120 },
+    { "start": 4.75, "len": 0.25, "pitch": 37, "vel": 100 },
+    { "start": 5.5, "len": 0.5, "pitch": 40, "vel": 115 },
+    { "start": 6.5, "len": 0.5, "pitch": 47, "vel": 110 },
+    { "start": 7, "len": 1, "pitch": 44, "vel": 120 }
+   ]
+  },
+  {
+   "id": 21,
+   "trackId": 3,
+   "name": "Sub Drop",
+   "bars": 8,
+   "notes": [
+    { "start": 0, "len": 1, "pitch": 37, "vel": 125 },
+    { "start": 1, "len": 0.5, "pitch": 37, "vel": 110 },
+    { "start": 1.5, "len": 0.5, "pitch": 40, "vel": 115 },
+    { "start": 2, "len": 2, "pitch": 44, "vel": 125 },
+    { "start": 4, "len": 1, "pitch": 37, "vel": 125 },
+    { "start": 5, "len": 0.5, "pitch": 37, "vel": 110 },
+    { "start": 5.5, "len": 0.5, "pitch": 40, "vel": 115 },
+    { "start": 6, "len": 2, "pitch": 47, "vel": 125 }
+   ]
+  },
+  {
+   "id": 30,
+   "trackId": 4,
+   "name": "Arp A",
+   "bars": 4,
+   "notes": [
+    { "start": 0, "len": 0.25, "pitch": 73, "vel": 110 },
+    { "start": 0.25, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 0.5, "len": 0.25, "pitch": 80, "vel": 100 },
+    { "start": 0.75, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 1, "len": 0.25, "pitch": 85, "vel": 115 },
+    { "start": 1.25, "len": 0.25, "pitch": 80, "vel": 90 },
+    { "start": 1.5, "len": 0.25, "pitch": 76, "vel": 100 },
+    { "start": 1.75, "len": 0.25, "pitch": 73, "vel": 90 },
+    { "start": 2, "len": 0.25, "pitch": 73, "vel": 110 },
+    { "start": 2.25, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 2.5, "len": 0.25, "pitch": 80, "vel": 100 },
+    { "start": 2.75, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 3, "len": 0.25, "pitch": 85, "vel": 115 },
+    { "start": 3.25, "len": 0.25, "pitch": 80, "vel": 90 },
+    { "start": 3.5, "len": 0.25, "pitch": 76, "vel": 100 },
+    { "start": 3.75, "len": 0.25, "pitch": 73, "vel": 90 },
+    { "start": 4, "len": 0.25, "pitch": 69, "vel": 110 },
+    { "start": 4.25, "len": 0.25, "pitch": 73, "vel": 90 },
+    { "start": 4.5, "len": 0.25, "pitch": 76, "vel": 100 },
+    { "start": 4.75, "len": 0.25, "pitch": 73, "vel": 90 },
+    { "start": 5, "len": 0.25, "pitch": 85, "vel": 115 },
+    { "start": 5.25, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 5.5, "len": 0.25, "pitch": 73, "vel": 100 },
+    { "start": 5.75, "len": 0.25, "pitch": 69, "vel": 90 },
+    { "start": 6, "len": 0.25, "pitch": 68, "vel": 110 },
+    { "start": 6.25, "len": 0.25, "pitch": 71, "vel": 90 },
+    { "start": 6.5, "len": 0.25, "pitch": 75, "vel": 100 },
+    { "start": 6.75, "len": 0.25, "pitch": 71, "vel": 90 },
+    { "start": 7, "len": 0.25, "pitch": 85, "vel": 115 },
+    { "start": 7.25, "len": 0.25, "pitch": 75, "vel": 90 },
+    { "start": 7.5, "len": 0.25, "pitch": 71, "vel": 100 },
+    { "start": 7.75, "len": 0.25, "pitch": 68, "vel": 90 },
+    { "start": 8, "len": 0.25, "pitch": 71, "vel": 110 },
+    { "start": 8.25, "len": 0.25, "pitch": 75, "vel": 90 },
+    { "start": 8.5, "len": 0.25, "pitch": 78, "vel": 100 },
+    { "start": 8.75, "len": 0.25, "pitch": 75, "vel": 90 },
+    { "start": 9, "len": 0.25, "pitch": 85, "vel": 115 },
+    { "start": 9.25, "len": 0.25, "pitch": 78, "vel": 90 },
+    { "start": 9.5, "len": 0.25, "pitch": 75, "vel": 100 },
+    { "start": 9.75, "len": 0.25, "pitch": 71, "vel": 90 },
+    { "start": 10, "len": 0.25, "pitch": 73, "vel": 110 },
+    { "start": 10.25, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 10.5, "len": 0.25, "pitch": 80, "vel": 100 },
+    { "start": 10.75, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 11, "len": 0.25, "pitch": 85, "vel": 115 },
+    { "start": 11.25, "len": 0.25, "pitch": 80, "vel": 90 },
+    { "start": 11.5, "len": 0.25, "pitch": 76, "vel": 100 },
+    { "start": 11.75, "len": 0.25, "pitch": 73, "vel": 90 },
+    { "start": 12, "len": 0.25, "pitch": 73, "vel": 110 },
+    { "start": 12.25, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 12.5, "len": 0.25, "pitch": 80, "vel": 100 },
+    { "start": 12.75, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 13, "len": 0.25, "pitch": 85, "vel": 115 },
+    { "start": 13.25, "len": 0.25, "pitch": 80, "vel": 90 },
+    { "start": 13.5, "len": 0.25, "pitch": 76, "vel": 100 },
+    { "start": 13.75, "len": 0.25, "pitch": 73, "vel": 90 },
+    { "start": 14, "len": 0.25, "pitch": 69, "vel": 110 },
+    { "start": 14.25, "len": 0.25, "pitch": 73, "vel": 90 },
+    { "start": 14.5, "len": 0.25, "pitch": 76, "vel": 100 },
+    { "start": 14.75, "len": 0.25, "pitch": 73, "vel": 90 },
+    { "start": 15, "len": 0.25, "pitch": 85, "vel": 115 },
+    { "start": 15.25, "len": 0.25, "pitch": 76, "vel": 90 },
+    { "start": 15.5, "len": 0.25, "pitch": 73, "vel": 100 },
+    { "start": 15.75, "len": 0.25, "pitch": 69, "vel": 90 }
+   ]
+  },
+  {
+   "id": 31,
+   "trackId": 4,
+   "name": "Arp B (Sparse)",
+   "bars": 4,
+   "notes": [
+    { "start": 0, "len": 0.5, "pitch": 73, "vel": 100 },
+    { "start": 1.5, "len": 0.5, "pitch": 80, "vel": 110 },
+    { "start": 2.5, "len": 0.5, "pitch": 85, "vel": 105 },
+    { "start": 3.5, "len": 0.5, "pitch": 76, "vel": 100 },
+    { "start": 4, "len": 0.5, "pitch": 69, "vel": 100 },
+    { "start": 5.5, "len": 0.5, "pitch": 76, "vel": 110 },
+    { "start": 6.5, "len": 0.5, "pitch": 85, "vel": 105 },
+    { "start": 7.5, "len": 0.5, "pitch": 73, "vel": 100 },
+    { "start": 8, "len": 0.5, "pitch": 68, "vel": 100 },
+    { "start": 9.5, "len": 0.5, "pitch": 75, "vel": 110 },
+    { "start": 10.5, "len": 0.5, "pitch": 85, "vel": 105 },
+    { "start": 11.5, "len": 0.5, "pitch": 71, "vel": 100 },
+    { "start": 12, "len": 0.5, "pitch": 71, "vel": 100 },
+    { "start": 13.5, "len": 0.5, "pitch": 78, "vel": 110 },
+    { "start": 14.5, "len": 0.5, "pitch": 85, "vel": 105 },
+    { "start": 15.5, "len": 0.5, "pitch": 75, "vel": 100 }
+   ]
+  },
+  {
+   "id": 40,
+   "trackId": 5,
+   "name": "Pads C#m",
+   "bars": 8,
+   "notes": [
+    { "start": 0, "len": 8, "pitch": 49, "vel": 85 },
+    { "start": 0, "len": 8, "pitch": 52, "vel": 85 },
+    { "start": 0, "len": 8, "pitch": 56, "vel": 85 },
+    { "start": 0, "len": 8, "pitch": 59, "vel": 85 },
+    { "start": 8, "len": 8, "pitch": 45, "vel": 85 },
+    { "start": 8, "len": 8, "pitch": 49, "vel": 85 },
+    { "start": 8, "len": 8, "pitch": 52, "vel": 85 },
+    { "start": 8, "len": 8, "pitch": 56, "vel": 85 },
+    { "start": 16, "len": 8, "pitch": 40, "vel": 85 },
+    { "start": 16, "len": 8, "pitch": 44, "vel": 85 },
+    { "start": 16, "len": 8, "pitch": 47, "vel": 85 },
+    { "start": 16, "len": 8, "pitch": 51, "vel": 85 },
+    { "start": 24, "len": 8, "pitch": 47, "vel": 85 },
+    { "start": 24, "len": 8, "pitch": 51, "vel": 85 },
+    { "start": 24, "len": 8, "pitch": 54, "vel": 85 },
+    { "start": 24, "len": 8, "pitch": 58, "vel": 85 }
+   ]
+  },
+  {
+   "id": 50,
+   "trackId": 6,
+   "name": "Digital Rain",
+   "bars": 8,
+   "notes": [
+    { "start": 0.25, "len": 0.1, "pitch": 97, "vel": 80 },
+    { "start": 0.75, "len": 0.1, "pitch": 85, "vel": 70 },
+    { "start": 1.5, "len": 0.1, "pitch": 92, "vel": 90 },
+    { "start": 2.25, "len": 0.1, "pitch": 101, "vel": 75 },
+    { "start": 3.75, "len": 0.1, "pitch": 88, "vel": 80 },
+    { "start": 4.5, "len": 0.1, "pitch": 95, "vel": 85 },
+    { "start": 5.25, "len": 0.1, "pitch": 104, "vel": 70 },
+    { "start": 6.75, "len": 0.1, "pitch": 89, "vel": 90 },
+    { "start": 7.5, "len": 0.1, "pitch": 97, "vel": 80 }
+   ]
+  }
+ ],
+ "clips": [
+  { "id": 100, "trackId": 1, "patternId": 11, "start": 16, "len": 16 },
+  { "id": 101, "trackId": 1, "patternId": 10, "start": 32, "len": 28 },
+  { "id": 102, "trackId": 1, "patternId": 11, "start": 60, "len": 4 },
+  { "id": 103, "trackId": 1, "patternId": 10, "start": 64, "len": 32 },
+  { "id": 104, "trackId": 1, "patternId": 11, "start": 160, "len": 32 },
+  { "id": 105, "trackId": 1, "patternId": 10, "start": 192, "len": 28 },
+  { "id": 106, "trackId": 1, "patternId": 11, "start": 220, "len": 4 },
+  { "id": 107, "trackId": 1, "patternId": 11, "start": 224, "len": 16 },
+  { "id": 120, "trackId": 2, "patternId": 12, "start": 8, "len": 24 },
+  { "id": 121, "trackId": 2, "patternId": 13, "start": 32, "len": 32 },
+  { "id": 122, "trackId": 2, "patternId": 12, "start": 64, "len": 32 },
+  { "id": 123, "trackId": 2, "patternId": 13, "start": 96, "len": 32 },
+  { "id": 124, "trackId": 2, "patternId": 14, "start": 128, "len": 32 },
+  { "id": 125, "trackId": 2, "patternId": 13, "start": 160, "len": 32 },
+  { "id": 126, "trackId": 2, "patternId": 12, "start": 192, "len": 32 },
+  { "id": 127, "trackId": 2, "patternId": 12, "start": 224, "len": 16 },
+  { "id": 140, "trackId": 3, "patternId": 20, "start": 32, "len": 64 },
+  { "id": 141, "trackId": 3, "patternId": 21, "start": 96, "len": 32 },
+  { "id": 142, "trackId": 3, "patternId": 20, "start": 160, "len": 64 },
+  { "id": 143, "trackId": 3, "patternId": 21, "start": 224, "len": 16 },
+  { "id": 160, "trackId": 4, "patternId": 30, "start": 32, "len": 64 },
+  { "id": 161, "trackId": 4, "patternId": 31, "start": 96, "len": 32 },
+  { "id": 162, "trackId": 4, "patternId": 30, "start": 128, "len": 32 },
+  { "id": 163, "trackId": 4, "patternId": 30, "start": 160, "len": 64 },
+  { "id": 164, "trackId": 4, "patternId": 31, "start": 224, "len": 32 },
+  { "id": 180, "trackId": 5, "patternId": 40, "start": 0, "len": 32 },
+  { "id": 181, "trackId": 5, "patternId": 40, "start": 96, "len": 32 },
+  { "id": 182, "trackId": 5, "patternId": 40, "start": 224, "len": 32 },
+  { "id": 200, "trackId": 6, "patternId": 50, "start": 16, "len": 16 },
+  { "id": 201, "trackId": 6, "patternId": 50, "start": 80, "len": 16 },
+  { "id": 202, "trackId": 6, "patternId": 50, "start": 192, "len": 32 },
+  { "id": 203, "trackId": 6, "patternId": 50, "start": 240, "len": 16 }
+ ],
+ "sel": { "trackId": 3, "patternId": 20 },
+ "nextId": 1000
+}

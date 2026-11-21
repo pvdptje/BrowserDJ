@@ -881,6 +881,69 @@
     }
   }
 
+  /* ---------- example songs ----------
+     The library lives in examples/examples.js, loaded the first time it is needed. A script tag works even
+     when the page is opened straight from disk, where fetch() is not allowed. */
+  const FIRST_EXAMPLE = 'hemelhoog';
+  let examplesReady = null;
+  function loadExamples() {
+    if (BDJ.EXAMPLES) return Promise.resolve(BDJ.EXAMPLES);
+    if (!examplesReady) {
+      examplesReady = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'examples/examples.js';
+        s.onload = () => (BDJ.EXAMPLES ? resolve(BDJ.EXAMPLES) : reject(new Error('empty')));
+        s.onerror = () => { examplesReady = null; s.remove(); reject(new Error('could not load the examples')); };
+        document.head.appendChild(s);
+      });
+    }
+    return examplesReady;
+  }
+
+  /* replace: swap it in without an undo step (first visit); otherwise undo brings the old project back */
+  function openExample(ex, opts = {}) {
+    stopAll();
+    if (opts.replace) {
+      P = PJ.normalize(ex.project); take = null;
+      changed('all');
+    } else {
+      commit(() => { P = PJ.normalize(ex.project); take = null; });
+    }
+    ensureSamples();
+    patCursor = songCursor = 0;
+    roll.sel.clear(); roll.fit(); playlist.fit();
+    say(opts.replace
+      ? 'This is "' + ex.title + '", one of the example songs. Press Space to play it, then click any clip to see how it is made.'
+      : 'Loaded "' + ex.title + '". Press Space to play it; click any clip to see how it is made. Undo brings back what you had.');
+  }
+
+  const fmtLen = (s) => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  function closeExamples() {
+    $('exPanel').hidden = true;
+    $('examplesBtn').setAttribute('aria-expanded', 'false');
+  }
+  async function toggleExamples() {
+    const panel = $('exPanel');
+    if (!panel.hidden) { closeExamples(); return; }
+    panel.hidden = false;
+    $('examplesBtn').setAttribute('aria-expanded', 'true');
+    panel.innerHTML = '<p class="exnote">Loading the example songs…</p>';
+    let list = [];
+    try { list = await loadExamples(); } catch (err) {
+      panel.innerHTML = '<p class="exnote">The example songs could not be loaded here. Open a project file instead.</p>';
+      return;
+    }
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const items = list.map((ex) => `<button type="button" class="exitem" role="menuitem" data-ex="${esc(ex.id)}">` +
+      `<span class="t">${esc(ex.title)}</span><span class="m">${ex.bpm} BPM · ${fmtLen(ex.secs)}</span>` +
+      `<span class="b"><span class="s">${esc(ex.style)}</span> · ${esc(ex.blurb)}</span></button>`);
+    items.push('<button type="button" class="exitem" role="menuitem" data-ex="starter"><span class="t">Starter</span><span class="m">124 BPM · 0:15</span>' +
+      '<span class="b"><span class="s">House</span> · Drums, bass and a hook: a small song that is easy to take apart.</span></button>');
+    panel.innerHTML = items.join('') + '<p class="exnote">Opening an example replaces what is loaded; Undo brings it back.</p>';
+    const firstItem = panel.querySelector('.exitem');
+    if (firstItem) firstItem.focus();
+  }
+
   /* ---------- UI sync ---------- */
   const keyLabel = () => (P.scale === 'chromatic' ? 'no key' : E.NOTE_NAMES[P.root] + ' ' + E.SCALES[P.scale].name.toLowerCase());
 
@@ -1098,6 +1161,28 @@
   });
   on('undoBtn', 'click', undo);
   on('redoBtn', 'click', redo);
+  // example picker and welcome card
+  on('examplesBtn', 'click', (e) => { e.stopPropagation(); toggleExamples(); });
+  on('exPanel', 'click', (e) => {
+    const b = e.target.closest('[data-ex]');
+    if (!b) return;
+    const id = b.dataset.ex;
+    closeExamples();
+    if (id === 'starter') { openExample({ title: 'Starter', project: PJ.example() }); return; }
+    const ex = (BDJ.EXAMPLES || []).find((x) => x.id === id);
+    if (ex) openExample(ex);
+  });
+  document.addEventListener('click', (e) => { if (!$('exPanel').hidden && !e.target.closest('.exwrap')) closeExamples(); });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('exPanel').hidden) { closeExamples(); $('examplesBtn').focus(); } });
+  const closeWelcome = () => {
+    $('welcome').hidden = true;
+    try { localStorage.setItem('browserdj.ui.welcomed', '1'); } catch (err) { /* storage blocked */ }
+  };
+  on('wClose', 'click', closeWelcome);
+  on('wPlay', 'click', () => { closeWelcome(); if (!T.on) togglePlay(); });
+  on('wExamples', 'click', (e) => { e.stopPropagation(); closeWelcome(); toggleExamples(); });
+  on('wNew', 'click', () => { closeWelcome(); $('newBtn').click(); });
+
   on('newBtn', 'click', () => {
     stopAll();
     commit(() => { P = PJ.blank(); take = null; });
@@ -1342,6 +1427,35 @@
   if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { roll.draw(); playlist.draw(); });
   say(restored
     ? 'Welcome back, your last project is loaded. Press Space to play.'
-    : 'This is an example song. Press Space to hear it. Click a clip in the playlist to edit its pattern below, or press Record and hum a new idea.');
+    : 'This is a small example song. Press Space to hear it. Click a clip in the playlist to edit its pattern below, or press Record and hum a new idea.');
   ensureSamples(); // your own drum sounds, from this browser's sample store
+
+  // A link like ?example=gabber opens that song (undoable when it replaces your own project); the parameter is
+  // then dropped from the address bar so a reload does not open it again over what you made since.
+  // First visit: say hello, and swap the small built-in song for a full example (if the library loads).
+  // ('browserdj.dev.plain' in local storage skips both, for automated tests.)
+  let welcomed = false, plain = false;
+  try { welcomed = localStorage.getItem('browserdj.ui.welcomed') === '1'; plain = localStorage.getItem('browserdj.dev.plain') === '1'; } catch (err) { /* storage blocked */ }
+  const wanted = new URLSearchParams(location.search).get('example');
+  if (wanted) {
+    const dropParam = () => { try { history.replaceState(null, '', location.pathname + location.hash); } catch (err) { /* fine */ } };
+    if (wanted === 'starter') { if (restored) openExample({ title: 'Starter', project: PJ.example() }); dropParam(); }
+    else {
+      loadExamples().then((list) => {
+        const ex = list.find((x) => x.id === wanted);
+        if (ex) openExample(ex, { replace: !restored });
+        else say('There is no example called "' + wanted + '". The Examples button lists them all.', 'warn');
+      }).catch(() => say('The example songs could not be loaded here.', 'warn')).finally(dropParam);
+    }
+  }
+  if (!restored && !plain) {
+    if (!welcomed) $('welcome').hidden = false;
+    if (!wanted) {
+      loadExamples().then((list) => {
+        if (P.name !== 'Example' || H.undo.length) return; // the visitor already started on something
+        const first = list.find((x) => x.id === FIRST_EXAMPLE) || list[0];
+        if (first) openExample(first, { replace: true });
+      }).catch(() => { /* the small built-in song stays */ });
+    }
+  }
 })();

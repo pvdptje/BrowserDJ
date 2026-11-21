@@ -370,6 +370,24 @@ test('master loudness: default none, clamped, survives a round trip', () => {
   assert.strictEqual(PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'synth' }] }).loud, 0);
 });
 
+test('example library: examples.js matches the song files, and every song loads cleanly', () => {
+  const { build } = require('../tools/pack-examples.js');
+  const packed = fs.readFileSync(path.join(__dirname, '..', 'examples', 'examples.js'), 'utf8');
+  assert.strictEqual(packed, build(), 'examples/examples.js is out of date: run node tools/pack-examples.js');
+  const lib = { window: {} };
+  lib.BDJ = lib.window.BDJ = {};
+  vm.runInNewContext(packed, lib);
+  const list = lib.BDJ.EXAMPLES;
+  assert.ok(list.length >= 4);
+  assert.strictEqual(new Set(list.map((x) => x.id)).size, list.length);
+  for (const ex of list) {
+    const raw = JSON.parse(JSON.stringify(ex.project));
+    const p = PJ.normalize(raw);
+    assert.strictEqual(p.clips.length, raw.clips.length, ex.id + ': every clip survives');
+    assert.ok(ex.title && ex.style && ex.blurb && ex.bpm === p.bpm && ex.secs > 30, ex.id + ': catalogue details');
+  }
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

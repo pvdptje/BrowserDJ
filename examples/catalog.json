@@ -1,0 +1,6 @@
+[
+  { "id": "hemelhoog", "file": "hemelhoog.browserdj.json", "title": "Hemelhoog", "style": "Trance", "blurb": "Soaring leads, a rolling bass and two breakdowns that build back up." },
+  { "id": "sera", "file": "sera-d-estate.browserdj.json", "title": "Sera d'Estate", "style": "Melodic house", "blurb": "A summer-evening pluck melody floating over strings." },
+  { "id": "samenloop", "file": "samenloop.browserdj.json", "title": "Samenloop", "style": "Ambient", "blurb": "Loops of 3, 4, 5 and 6 bars drift apart and meet again." },
+  { "id": "gabber", "file": "gabber-in-de-browser.browserdj.json", "title": "Gabber in de Browser", "style": "Hardcore", "blurb": "Distorted kicks, a hoover riff and a high-pass build into every drop." }
+]
