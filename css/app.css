@@ -291,6 +291,15 @@ button.sname:hover { background: rgba(255,255,255,0.06); }
 .exitem .s { color: var(--trace); font-weight: 500; }
 .exnote { margin: 4px 12px 2px; font-size: 12px; color: var(--muted); }
 
+/* share */
+.sharepanel { padding: 14px; gap: 10px; }
+.sharehead { margin: 0; font-size: 14px; }
+.sharerow { display: flex; gap: 8px; }
+.sharerow input {
+  flex: 1; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 6px 8px; font: 12px var(--font-mono); color: var(--muted);
+}
+
 /* welcome */
 .welcome {
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; position: relative;
@@ -325,6 +334,7 @@ body.dropping .capture { outline: 2px dashed var(--trace); outline-offset: 3px; 
   .transport { position: static; }
   .drow { grid-template-columns: 150px 1fr; min-width: calc(160px + var(--steps, 16) * 24px); }
   .expanel { left: 0; right: auto; } /* the header wraps, so the button sits on the left here */
+  .sharepanel { position: fixed; top: 12px; left: 16px; right: 16px; width: auto; } /* mid-row button: pin to the screen instead */
   .welcome { padding: 14px 44px 14px 16px; }
   .plgrid { grid-template-columns: 132px 1fr; }
   .plvol, .tog.x { display: none; }

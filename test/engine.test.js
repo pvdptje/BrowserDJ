@@ -18,7 +18,9 @@ const E = ctx.HumEngine, PJ = ctx.BDJ.Project;
 let passed = 0;
 // values built inside the vm context have their own Array prototype, so compare plain copies
 const eq = (a, b) => assert.deepStrictEqual(JSON.parse(JSON.stringify(a)), JSON.parse(JSON.stringify(b)));
-const test = (name, fn) => { fn(); passed++; console.log('  ok  ' + name); };
+// tests run in order and may be async; the first failure stops the run with a non-zero exit
+const tests = [];
+const test = (name, fn) => tests.push([name, fn]);
 
 /* synthesize a hummed melody: [midi, startSec, durSec] with a little vibrato and gaps */
 function hum(notes, sr = 44100, lead = 0.3) {
@@ -388,6 +390,76 @@ test('example library: examples.js matches the song files, and every song loads 
   }
 });
 
+test('share links: every example survives the trip, links stay short, bad links fail clearly', async () => {
+  const S = require('../js/share.js');
+  const dir = path.join(__dirname, '..', 'examples');
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'catalog.json')) {
+    const raw = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    const token = await S.encode(raw);
+    assert.ok(/^z[A-Za-z0-9_-]+$/.test(token), f + ': URL-safe');
+    assert.ok(token.length < 8000, f + ': ' + token.length + ' characters');
+    eq(await S.decode(token), raw);
+  }
+  // sample audio never goes into a link
+  const withData = { name: 'x', tracks: [], sampleData: { abc: { data: 'A'.repeat(5000) } } };
+  assert.strictEqual((await S.decode(await S.encode(withData))).sampleData, undefined);
+  for (const bad of ['', 'q123', 'zAAAA', 'z' + 'B'.repeat(40)]) {
+    await assert.rejects(() => S.decode(bad), undefined, 'bad link: ' + bad);
+  }
+});
+
+/* synthetic mouth drums: 'K' boots (low pitch drop), 'S' ka (mid noise + a little body), 'H' ts (bright hiss) */
+function beatbox(pattern, bpm, sr = 44100, sloppy = 0.012) {
+  const step = 60 / bpm / 4, lead = 0.4, out = new Float32Array(Math.ceil((lead + pattern.length * step + 0.5) * sr));
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x3fffffff - 1; };
+  for (let i = 0; i < out.length; i++) out[i] = rnd() * 0.002; // room noise
+  [...pattern].forEach((ch, i) => {
+    if (ch === '.') return;
+    const a = Math.round((lead + i * step + rnd() * sloppy) * sr);
+    let ph = 0, lp = 0, hp = 0, prev = 0, bp = 0;
+    const len = Math.round(sr * (ch === 'K' ? 0.16 : ch === 'S' ? 0.12 : 0.06));
+    for (let j = 0; j < len && a + j < out.length; j++) {
+      const t = j / sr, n = rnd();
+      let v;
+      if (ch === 'K') { ph += (2 * Math.PI * (60 + 90 * Math.exp(-t / 0.03))) / sr; v = Math.sin(ph) * Math.exp(-t / 0.05) * 0.8; }
+      // a 'ka': noise band-limited to roughly 1-5 kHz (two low-passes minus a slow one), plus a little body
+      else if (ch === 'S') { lp += 0.25 * (n - lp); bp += 0.25 * (lp - bp); hp += 0.03 * (bp - hp); ph += (2 * Math.PI * 190) / sr; v = ((bp - hp) * 2.2 + Math.sin(ph) * 0.12) * Math.exp(-t / 0.04) * 0.7; }
+      else { hp = n - prev; prev = n; v = hp * Math.exp(-t / 0.018) * 0.35; }
+      out[a + j] += v * Math.min(1, j / 40);
+    }
+  });
+  return { samples: out, sr, lead };
+}
+
+test('beatbox: boots / ka / ts become kick, snare and hi-hat on the right steps', () => {
+  const BB = require('../js/beatbox.js');
+  const pat = 'K.H.S.H.K.H.S.HHK.H.S.H.KKH.S.H.';
+  const { samples, sr, lead } = beatbox(pat, 100);
+  const hits = BB.analyze(samples, sr);
+  const want = [...pat].map((c, i) => [i, c]).filter(([, c]) => c !== '.');
+  assert.strictEqual(hits.length, want.length, 'found ' + hits.length + ' of ' + want.length + ' hits');
+  const names = { K: 'kick', S: 'snare', H: 'chat' };
+  const wrong = want.filter(([, c], i) => hits[i].drum !== names[c]);
+  assert.strictEqual(wrong.length, 0, 'misheard: ' + JSON.stringify(wrong.map(([i, c]) => [i, c, hits[want.findIndex((w) => w[0] === i)].drum])));
+  const st = BB.toSteps(hits, 100, lead);
+  assert.strictEqual(st.bars, 2);
+  for (const [i, c] of want) assert.ok(st.steps[names[c]][i] > 0, 'step ' + i + ' ' + c);
+  // without an anchor, the first hit is beat 0
+  const st2 = BB.toSteps(hits, 100, null);
+  assert.ok(st2.steps.kick[0] > 0 && st2.steps.chat[2] > 0);
+});
+
+test('beatbox: just two sounds, or silence', () => {
+  const BB = require('../js/beatbox.js');
+  const two = BB.analyze(beatbox('K.H.K.H.K.H.KKH.', 120).samples, 44100).map((h) => h.drum);
+  eq(two, ['kick', 'chat', 'kick', 'chat', 'kick', 'chat', 'kick', 'kick', 'chat']);
+  const ks = BB.analyze(beatbox('K...S...K...S...', 110).samples, 44100).map((h) => h.drum);
+  eq(ks, ['kick', 'snare', 'kick', 'snare']);
+  assert.strictEqual(BB.analyze(new Float32Array(44100), 44100).length, 0);
+  assert.strictEqual(BB.toSteps([], 120, null), null);
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');
@@ -398,4 +470,7 @@ test('history undo/redo', () => {
   assert.strictEqual(h.redo.length, 0);
 });
 
-console.log(passed + ' tests passed');
+(async () => {
+  for (const [name, fn] of tests) { await fn(); passed++; console.log('  ok  ' + name); }
+  console.log(passed + ' tests passed');
+})().catch((e) => { console.error(e); process.exit(1); });

@@ -944,6 +944,65 @@
     if (firstItem) firstItem.focus();
   }
 
+  /* ---------- share links ----------
+     The whole song travels in the link after '#s=' (compressed), so nothing is uploaded anywhere.
+     Opened from disk, links point at the public site so they work for whoever gets them. */
+  const SHARE_HOST = 'https://browserdj.dev/';
+  const shareBase = () => (/^https?:$/.test(location.protocol) ? location.origin + location.pathname : SHARE_HOST);
+  const sharedToken = () => { const m = /^#s=(.+)$/.exec(location.hash); return m ? m[1] : null; };
+
+  async function openShared(token, replace) {
+    try {
+      const obj = await BDJ.Share.decode(token);
+      stopAll();
+      if (replace) { P = PJ.normalize(obj); take = null; changed('all'); }
+      else commit(() => { P = PJ.normalize(obj); take = null; });
+      patCursor = songCursor = 0;
+      roll.sel.clear(); roll.fit(); playlist.fit();
+      say('Opened the shared song "' + P.name + '". Press Space to play it; everything in it is yours to change.' + (replace ? '' : ' Undo brings back what you had.'));
+      ensureSamples(); // its maker's own drum sounds do not travel in a link; this explains if they are missing
+    } catch (err) {
+      say('This share link could not be opened (' + (err && err.message ? err.message : 'unreadable') + '). Maybe it got cut off when it was copied.', 'warn');
+    } finally {
+      try { history.replaceState(null, '', location.pathname + location.search); } catch (err) { /* fine */ }
+    }
+  }
+
+  function closeShare() { $('sharePanel').hidden = true; $('shareBtn').setAttribute('aria-expanded', 'false'); }
+  async function toggleShare() {
+    const panel = $('sharePanel');
+    if (!panel.hidden) { closeShare(); return; }
+    closeExamples();
+    panel.hidden = false;
+    $('shareBtn').setAttribute('aria-expanded', 'true');
+    panel.innerHTML = '<p class="exnote">Making a link…</p>';
+    let link;
+    try { link = shareBase() + '#s=' + (await BDJ.Share.encode(P)); } catch (err) {
+      panel.innerHTML = '<p class="exnote">Could not make a link here: ' + (err && err.message ? err.message : 'unknown error') + '.</p>';
+      return;
+    }
+    const ownSounds = P.tracks.some((t) => (t.kit || []).some((k) => k.sample));
+    panel.innerHTML =
+      '<p class="sharehead">Anyone with this link hears "' + escHtml(P.name) + '" and can change it. Nothing is uploaded: the song travels inside the link.</p>' +
+      '<div class="sharerow"><input id="shareLink" type="text" readonly aria-label="Share link"><button id="shareCopy" class="btn primary small" type="button">Copy link</button></div>' +
+      '<p class="exnote">' + link.length.toLocaleString() + ' characters.' +
+      (location.protocol === 'file:' ? ' It opens on browserdj.dev.' : '') +
+      (ownSounds ? ' Your own drum sounds do not fit in a link; there the built-in sounds play. Use Save to pass them on.' : '') + '</p>';
+    const input = $('shareLink');
+    input.value = link;
+    input.focus(); input.select();
+    $('shareCopy').addEventListener('click', async () => {
+      let ok = false;
+      try { await navigator.clipboard.writeText(link); ok = true; } catch (err) {
+        input.focus(); input.select();
+        try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+      }
+      $('shareCopy').textContent = ok ? 'Copied!' : 'Press Ctrl+C';
+      say(ok ? 'Share link copied. Paste it anywhere: chat, email, a post.' : 'The link is selected; press Ctrl+C to copy it.');
+    });
+  }
+  const escHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
   /* ---------- UI sync ---------- */
   const keyLabel = () => (P.scale === 'chromatic' ? 'no key' : E.NOTE_NAMES[P.root] + ' ' + E.SCALES[P.scale].name.toLowerCase());
 
@@ -1172,8 +1231,18 @@
     const ex = (BDJ.EXAMPLES || []).find((x) => x.id === id);
     if (ex) openExample(ex);
   });
-  document.addEventListener('click', (e) => { if (!$('exPanel').hidden && !e.target.closest('.exwrap')) closeExamples(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('exPanel').hidden) { closeExamples(); $('examplesBtn').focus(); } });
+  document.addEventListener('click', (e) => {
+    if (!$('exPanel').hidden && !e.target.closest('.exwrap:not(.sharewrap)')) closeExamples();
+    if (!$('sharePanel').hidden && !e.target.closest('.sharewrap')) closeShare();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    if (!$('exPanel').hidden) { closeExamples(); $('examplesBtn').focus(); }
+    if (!$('sharePanel').hidden) { closeShare(); $('shareBtn').focus(); }
+  });
+  on('shareBtn', 'click', (e) => { e.stopPropagation(); toggleShare(); });
+  // a share link pasted into this tab only changes the part after '#': no reload, so listen for it
+  window.addEventListener('hashchange', () => { const t = sharedToken(); if (t) openShared(t, false); });
   const closeWelcome = () => {
     $('welcome').hidden = true;
     try { localStorage.setItem('browserdj.ui.welcomed', '1'); } catch (err) { /* storage blocked */ }
@@ -1436,7 +1505,9 @@
   // ('browserdj.dev.plain' in local storage skips both, for automated tests.)
   let welcomed = false, plain = false;
   try { welcomed = localStorage.getItem('browserdj.ui.welcomed') === '1'; plain = localStorage.getItem('browserdj.dev.plain') === '1'; } catch (err) { /* storage blocked */ }
-  const wanted = new URLSearchParams(location.search).get('example');
+  const shared = sharedToken();
+  if (shared) openShared(shared, !restored);
+  const wanted = shared ? null : new URLSearchParams(location.search).get('example');
   if (wanted) {
     const dropParam = () => { try { history.replaceState(null, '', location.pathname + location.hash); } catch (err) { /* fine */ } };
     if (wanted === 'starter') { if (restored) openExample({ title: 'Starter', project: PJ.example() }); dropParam(); }
@@ -1450,7 +1521,7 @@
   }
   if (!restored && !plain) {
     if (!welcomed) $('welcome').hidden = false;
-    if (!wanted) {
+    if (!wanted && !shared) {
       loadExamples().then((list) => {
         if (P.name !== 'Example' || H.undo.length) return; // the visitor already started on something
         const first = list.find((x) => x.id === FIRST_EXAMPLE) || list[0];

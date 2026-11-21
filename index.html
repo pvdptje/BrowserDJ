@@ -31,6 +31,10 @@
       <button id="newBtn" class="btn small" type="button">New</button>
       <button id="openBtn" class="btn small" type="button">Open</button>
       <button id="saveBtn" class="btn small" type="button" title="Save the project as a file">Save</button>
+      <div class="exwrap sharewrap">
+        <button id="shareBtn" class="btn small" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="sharePanel" title="A link that holds the whole song">Share</button>
+        <div id="sharePanel" class="expanel sharepanel" role="dialog" aria-label="Share this song" hidden></div>
+      </div>
       <button id="wavBtn" class="btn small" type="button" title="Render what Play plays (song or pattern) to a WAV file">Export WAV</button>
       <button id="stemsBtn" class="btn small" type="button" title="One WAV per track, all the same length, to mix in another program">Stems</button>
       <button id="midiBtn" class="btn primary" type="button" title="What Play plays (song or pattern) as a MIDI file, one track per instrument">Download MIDI</button>
@@ -311,6 +315,7 @@
 <script src="js/playlist.js"></script>
 <script src="js/mixer.js"></script>
 <script src="js/live.js"></script>
+<script src="js/share.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
