@@ -449,6 +449,7 @@ BDJ.PianoRoll = (() => {
       const GB = H - VEL;
       const L = this.host.length();
       const NOTE = this.host.color();
+      const held = this.host.held ? this.host.held() : null;
       const steps = E.SCALES[p.scale].steps, keyed = p.scale !== 'chromatic';
       const pHi = Math.ceil(v.top), pLo = Math.max(0, Math.floor(this.pitchAt(GB)));
 
@@ -587,7 +588,7 @@ BDJ.PianoRoll = (() => {
       g.beginPath(); g.rect(0, RULER, KEYS, GB - RULER); g.clip();
       for (let q = pLo; q <= pHi; q++) {
         const y = this.y(q), pc = ((q % 12) + 12) % 12, black = BLACK.includes(pc);
-        g.fillStyle = q === this.hover ? C.trace : black ? '#15131f' : '#cfcadf';
+        g.fillStyle = held && held.has(q) ? NOTE : q === this.hover ? C.trace : black ? '#15131f' : '#cfcadf';
         g.fillRect(black ? 0 : 0, y, black ? KEYS * 0.62 : KEYS, v.rowH);
         g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(0, Math.round(y), KEYS, 1);
         if (pc === 0 || v.rowH >= 14) {

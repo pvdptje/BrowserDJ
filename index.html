@@ -134,6 +134,16 @@
         <button id="drumClear" class="btn small" type="button">Clear</button>
       </span>
     </div>
+    <div class="keysbar">
+      <button id="keysToggle" class="btn small tgl" type="button" aria-pressed="true" title="Play the selected track with your computer keyboard">&#9000; Keyboard plays</button>
+      <span class="lab">Octave</span>
+      <button id="kOctDown" class="btn small" type="button" title="Keyboard octave down">&minus;</button>
+      <span id="kOct" class="readout">C3</span>
+      <button id="kOctUp" class="btn small" type="button" title="Keyboard octave up">+</button>
+      <button id="midiConnect" class="btn small" type="button" title="Use a MIDI keyboard or pad controller">Connect MIDI keyboard</button>
+      <button id="recNotes" class="btn small tgl rec" type="button" aria-pressed="false" title="Record what you play into this pattern while it plays">&#9679; Record notes</button>
+      <span class="hint">Z&ndash;M and Q&ndash;U play two octaves (Shift = louder). On a drum track, Z, S, X, D&hellip; play the kit.</span>
+    </div>
     <p id="notInSong" class="edhint" hidden>This pattern is not in the song yet. Click its lane in the playlist to place it, or <button id="addToSong" class="linkbtn" type="button">add it after the last clip</button>.</p>
     <div class="ptools" id="rollTools">
       <label for="snap" class="lab">Snap</label>
@@ -191,8 +201,15 @@
           <li><b>&uarr; &darr;</b> transpose (<b>Shift</b> for an octave) &nbsp; <b>&larr; &rarr;</b> nudge</li>
           <li><b>Delete</b> remove &nbsp; <b>Ctrl+A</b> select all &nbsp; <b>Esc</b> deselect</li>
           <li><b>Ctrl+C / X / V</b> copy, cut, paste at the marker &nbsp; <b>Ctrl+D</b> duplicate</li>
-          <li><b>Q</b> quantize</li>
+          <li><b>Q</b> quantize (when &ldquo;Keyboard plays&rdquo; is off)</li>
           <li><b>Wheel</b> scroll &nbsp; <b>Shift+wheel</b> scroll sideways &nbsp; <b>Ctrl+wheel</b> zoom &nbsp; <b>Alt+wheel</b> row height &nbsp; <b>Middle-drag</b> pan</li>
+        </ul></div>
+      <div><h3>Playing live</h3>
+        <ul>
+          <li>With <b>Keyboard plays</b> on, <b>Z&ndash;M</b> (with S, D, G, H, J as the black keys) and <b>Q&ndash;U</b> (with 2, 3, 5, 6, 7) play two octaves of the selected track. <b>Shift</b> plays louder</li>
+          <li>On a drum track the same keys play the kit, one drum per key from Z</li>
+          <li><b>Connect MIDI keyboard</b> to play from a real keyboard or pad controller (Chrome and Edge)</li>
+          <li>Turn on <b>Record notes</b> and press <b>Space</b>: what you play goes into the pattern while it loops, snapped to the grid. Stopping ends the take; one undo removes it</li>
         </ul></div>
       <div><h3>Playlist</h3>
         <ul>
@@ -229,6 +246,7 @@
 <script src="js/drums.js"></script>
 <script src="js/playlist.js"></script>
 <script src="js/mixer.js"></script>
+<script src="js/live.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

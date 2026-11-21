@@ -15,6 +15,7 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 | `js/drums.js` | Step sequencer UI. |
 | `js/playlist.js` | Song timeline: track headers, clips, loop region and markers. |
 | `js/mixer.js` | Mixer strips: volume, DJ filter, pan, drive, echo send, mute/solo, level meters, master. |
+| `js/live.js` | Playing live: computer keyboard (by key position) and Web MIDI input. |
 | `js/app.js` | Transport (look-ahead scheduler), recording, export, controls. |
 
 `window.BrowserDJ.project` is the live project, the natural hook for an AI helper later.

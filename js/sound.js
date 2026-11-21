@@ -219,9 +219,15 @@ BDJ.Sound = (() => {
   }
 
   /* ---------- melody voices ---------- */
-  /* note: {pitch, vel}; when/dur in seconds */
+  /* A note of known length: {pitch, vel}, when/dur in seconds. */
   function melodyNote(ac, out, note, when, dur, preset, live) {
-    const f = midiToHz(note.pitch), a = when, b = Math.max(a + 0.03, when + dur);
+    voiceStart(ac, out, note, when, preset, live, Math.max(0.03, dur)).release(when + Math.max(0.03, dur), true);
+  }
+
+  /* Starts a voice and returns {release(at, planned)}. A live key calls release when it is let go;
+     planned releases (known length) are scheduled straight away. maxDur keeps short notes' attack short. */
+  function voiceStart(ac, out, note, when, preset, live, maxDur) {
+    const f = midiToHz(note.pitch), a = when;
     const v = Math.pow(note.vel / 127, 1.3) * 0.3;
     const filt = ac.createBiquadFilter();
     filt.type = 'lowpass';
@@ -274,12 +280,27 @@ BDJ.Sound = (() => {
       filt.frequency.exponentialRampToValueAtTime(Math.max(350, f * 1.6), a + 0.24);
       att = 0.004; rel = 0.12; decayTo = 0.3;
     }
-    att = Math.min(att, (b - a) * 0.4);
+    if (maxDur) att = Math.min(att, maxDur * 0.4);
     amp.gain.setValueAtTime(0, a);
     amp.gain.linearRampToValueAtTime(peak, a + att);
     if (decayTo != null) amp.gain.setTargetAtTime(peak * decayTo, a + att, decayT);
-    amp.gain.setTargetAtTime(0, b, rel / 3);
-    for (const o of mine) { o.start(a); track(live, o, b + rel * 2 + 0.1); }
+    for (const o of mine) o.start(a);
+    let done = false;
+    return {
+      release(at, planned) {
+        if (done) return;
+        done = true;
+        at = Math.max(at, a + 0.03);
+        if (!planned) {
+          // let go early: freeze the envelope where it is, then fade from there
+          const g = amp.gain;
+          if (g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(at);
+          else { g.cancelScheduledValues(at); g.setValueAtTime(Math.min(peak, g.value || peak), at); }
+        }
+        amp.gain.setTargetAtTime(0, at, rel / 3);
+        for (const o of mine) track(live, o, at + rel * 2 + 0.1);
+      },
+    };
   }
 
   /* ---------- drum kit ---------- */
@@ -422,5 +443,5 @@ BDJ.Sound = (() => {
     return new Blob([data], { type: 'audio/wav' });
   }
 
-  return { INSTRUMENTS, DRUMS, PARAMS, trackParam, filterFreqs, createMixer, melodyNote, drumHit, encodeWav, midiToHz };
+  return { INSTRUMENTS, DRUMS, PARAMS, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, encodeWav, midiToHz };
 })();

@@ -84,6 +84,8 @@
   }
 
   function select(trackId, patternId) {
+    finishRec();
+    for (const p of [...held.keys()]) noteOff(p);
     if (trackId === P.sel.trackId && (patternId == null || patternId === P.sel.patternId)) return;
     PJ.select(P, trackId, patternId);
     playlist.remember(P.sel.trackId, P.sel.patternId);
@@ -162,16 +164,19 @@
     return actx;
   }
 
-  let previewBus = null;
-  function previewOut(ac) {
-    if (!previewBus) { previewBus = ac.createGain(); previewBus.gain.value = 0.9; previewBus.connect(ac.destination); }
-    return previewBus;
+  /* A mixer that is always there for sounds you trigger by hand (previews, live keys), so they go through
+     the track's own channel: drive, filter, pan and volume sound exactly like playback. */
+  let liveM = null;
+  function liveMixer() {
+    const ac = audio();
+    if (!liveM) liveM = SND.createMixer(ac, { bpm: P.bpm, master: P.master });
+    return liveM;
   }
   function preview(pitch) {
     if (T.on) return;
     try {
       const ac = audio(), t = curTrack();
-      SND.melodyNote(ac, previewOut(ac), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, t.instrument || 'pluck', null);
+      SND.melodyNote(ac, liveMixer().channel(t), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, t.instrument || 'pluck', null);
     } catch (err) { /* sound is optional */ }
   }
   function previewDrum(id, vel) {
@@ -179,8 +184,91 @@
       const ac = audio(), t = curTrack();
       const k = (t.kit || []).find((r) => r.id === id);
       const s = samples.get(t.id + ':' + id);
-      SND.drumHit(ac, previewOut(ac), id, ac.currentTime + 0.01, vel || 110, s && s.buffer, null, k ? k.vol : 0.8);
+      SND.drumHit(ac, liveMixer().channel(t), id, ac.currentTime + 0.01, vel || 110, s && s.buffer, null, k ? k.vol : 0.8);
     } catch (err) { /* sound is optional */ }
+  }
+
+  /* ---------- live playing (computer keyboard, MIDI) and recording it ---------- */
+  const held = new Map();   // pitch -> {voice, start (pattern beat or null), vel}
+  let recArmed = false, recBefore = null, recCount = 0;
+  let keysOn = true;
+  try { keysOn = localStorage.getItem('browserdj.ui.keys') !== '0'; } catch (err) { /* storage blocked */ }
+
+  /* where a note played right now lands in the edited pattern, or null when not recording */
+  function recPos() {
+    if (!recArmed || !T.on || T.rec) return null;
+    const b = editorPlayhead();
+    if (b == null || b < 0) return null;
+    // the player hears the beat a little late; take that back off
+    const lat = ((actx.outputLatency || 0) + (actx.baseLatency || 0)) * T.bpm / 60;
+    const PL = PJ.patternBeats(curPat());
+    return (((b - lat) % PL) + PL) % PL;
+  }
+  function drumFor(pitch, source) {
+    const D = SND.DRUMS;
+    if (source === 'midi') {
+      const gm = D.find((d) => d.gm === pitch);
+      if (gm) return gm.id;
+    }
+    const k = source === 'keys' ? pitch - (live.octave + 1) * 12 : pitch - 36;
+    return D[((k % D.length) + D.length) % D.length].id;
+  }
+  function startRecUndo() { if (recBefore == null) { recBefore = begin(); recCount = 0; } }
+  function finishRec() {
+    if (recBefore == null) return;
+    const b = recBefore, n = recCount;
+    recBefore = null;
+    end(b);
+    changed(curTrack().type === 'drums' ? 'drums' : 'notes');
+    if (n) say('Recorded ' + n + (n === 1 ? ' note' : ' notes') + ' into "' + curPat().name + '". Undo removes the whole take.');
+  }
+
+  function noteOn(pitch, vel, source) {
+    let ac;
+    try { ac = audio(); } catch (err) { return; }
+    const t = curTrack(), out = liveMixer().channel(t), now = ac.currentTime + 0.003;
+    if (t.type === 'drums') {
+      const id = drumFor(pitch, source), k = t.kit.find((r) => r.id === id), smp = samples.get(t.id + ':' + id);
+      SND.drumHit(ac, out, id, now, vel, smp && smp.buffer, null, k ? k.vol : 0.8);
+      rack.flash(id);
+      const pos = recPos();
+      if (pos != null) {
+        const pat = curPat(), N = pat.bars * PJ.STEPS_PER_BAR;
+        startRecUndo();
+        pat.steps[id][Math.round(pos * 4) % N] = Math.max(1, Math.min(127, vel));
+        recCount++;
+        rack.render();
+      } else if (recArmed && !T.on) say('Press Play (or Space) to start recording.');
+      return;
+    }
+    noteOff(pitch);
+    const voice = SND.voiceStart(ac, out, { pitch, vel }, now, t.instrument || 'pluck', null);
+    held.set(pitch, { voice, start: recPos(), vel });
+    if (recArmed && !T.on) say('Press Play (or Space) to start recording.');
+    roll.draw();
+  }
+
+  function noteOff(pitch) {
+    const h = held.get(pitch);
+    if (!h) return;
+    held.delete(pitch);
+    h.voice.release(actx.currentTime);
+    if (h.start != null && curTrack().type === 'synth') {
+      const pat = curPat(), PL = PJ.patternBeats(pat), step = PJ.snapBeats(P);
+      const endPos = recPos();
+      let start = h.start, len = endPos == null ? 0.25 : endPos - start;
+      if (len <= 0) len += PL; // held across the loop point
+      if (step) { start = (Math.round(start / step) * step) % PL; len = Math.max(step, Math.round(len / step) * step); }
+      else len = Math.max(1 / 32, len);
+      len = Math.min(len, PL - start); // stay inside the loop so the pattern does not grow mid-take
+      if (len > 1e-6) {
+        startRecUndo();
+        pat.notes.push({ id: P.nextId++, start, len, pitch, vel: h.vel });
+        pat.notes.sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+        recCount++;
+      }
+    }
+    roll.draw();
   }
 
   /* ---------- scheduling (shared by live playback and WAV rendering) ---------- */
@@ -360,6 +448,7 @@
   }
 
   function stopAll() {
+    finishRec();
     if (T.on) {
       T.on = false;
       clearInterval(T.timer);
@@ -400,7 +489,10 @@
     showPos(null);
   }
 
-  function updateMixer() { if (T.on && T.M) for (const t of P.tracks) T.M.update(t); }
+  function updateMixer() {
+    if (T.on && T.M) for (const t of P.tracks) T.M.update(t);
+    if (liveM) { for (const t of P.tracks) liveM.update(t); liveM.setMaster(P.master); }
+  }
 
   function playTake() {
     if (!take || !take.audio) return;
@@ -812,6 +904,7 @@
       if (T.on && !T.rec) play();
     },
     trace: hostTrace,
+    held: () => held,
   });
 
   const rack = new BDJ.DrumRack($('rack'), {
@@ -836,7 +929,7 @@
       showPos(null); playlist.draw();
       if (T.on && !T.rec) play();
     },
-    trackChanged: (t) => { if (T.on && T.M) T.M.update(t); mixer.render(); },
+    trackChanged: (t) => { if (T.on && T.M) T.M.update(t); if (liveM) liveM.update(t); mixer.render(); },
     removeTrack: (id) => {
       const t = PJ.track(P, id);
       commit(() => PJ.deleteTrack(P, id));
@@ -846,15 +939,21 @@
   playlist.remember(P.sel.trackId, P.sel.patternId);
   if (curTrack().type === 'synth') lastSynth = curTrack().id;
 
+  const live = new BDJ.Live({
+    enabled: () => keysOn,
+    noteOn, noteOff: (pitch) => noteOff(pitch),
+    status: (text, kind) => { say(text, kind); $('midiConnect').textContent = live.inputs && live.inputs.length ? 'MIDI: ' + live.inputs.length + ' connected' : 'Connect MIDI keyboard'; },
+  });
+
   // handle for debugging and tests (and, later, for an AI helper to read and write the project)
   const mixer = new BDJ.Mixer($('mixer'), {
     project: () => P,
     begin, end, changed, select,
-    trackChanged: (t) => { if (T.on && T.M) T.M.update(t); },
-    masterChanged: (v) => { if (T.on && T.M) T.M.setMaster(v); },
+    trackChanged: (t) => { if (T.on && T.M) T.M.update(t); if (liveM) liveM.update(t); },
+    masterChanged: (v) => { if (T.on && T.M) T.M.setMaster(v); if (liveM) liveM.setMaster(v); },
   });
 
-  window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, mixer, transport: T };
+  window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, mixer, live, transport: T };
 
   /* ---------- wiring ---------- */
   E.NOTE_NAMES.forEach((nm, i) => $('root').add(new Option(nm, i)));
@@ -1029,6 +1128,32 @@
     say('Pattern cleared. Undo brings the notes back.');
   });
   on('fitBtn', 'click', () => roll.fit());
+
+  // live keys
+  const syncKeys = () => {
+    $('keysToggle').classList.toggle('on', keysOn);
+    $('keysToggle').setAttribute('aria-pressed', String(keysOn));
+    $('recNotes').classList.toggle('on', recArmed);
+    $('recNotes').setAttribute('aria-pressed', String(recArmed));
+    $('kOct').textContent = 'C' + live.octave;
+  };
+  on('keysToggle', 'click', () => {
+    keysOn = !keysOn;
+    if (!keysOn) live.releaseAll();
+    try { localStorage.setItem('browserdj.ui.keys', keysOn ? '1' : '0'); } catch (err) { /* storage blocked */ }
+    syncKeys();
+    say(keysOn ? 'Your keyboard plays the selected track: Z to M and Q to U are two octaves. Shift plays louder.' : 'Keyboard playing is off; letter shortcuts like Q (quantize) work again.');
+  });
+  on('kOctDown', 'click', () => { live.shiftOctave(-1); syncKeys(); });
+  on('kOctUp', 'click', () => { live.shiftOctave(1); syncKeys(); });
+  on('midiConnect', 'click', () => live.connectMidi());
+  on('recNotes', 'click', () => {
+    recArmed = !recArmed;
+    if (!recArmed) finishRec();
+    syncKeys();
+    if (recArmed) say(T.on ? 'Recording: play and your notes go into "' + curPat().name + '".' : 'Armed. Press Play (Space) and play along; notes go into "' + curPat().name + '" while it loops.');
+  });
+  syncKeys();
 
   // editor: drums
   on('preset', 'change', () => {

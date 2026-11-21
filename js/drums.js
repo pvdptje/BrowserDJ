@@ -66,6 +66,15 @@ BDJ.DrumRack = (() => {
       this.el.style.setProperty('--steps', n);
     }
 
+    /* briefly light up a row's name when it is played live */
+    flash(id) {
+      const b = this.el.querySelector(`.drow[data-id="${id}"] .dname`);
+      if (!b) return;
+      b.classList.remove('hit');
+      void b.offsetWidth; // restart the animation
+      b.classList.add('hit');
+    }
+
     setPlayhead(i) {
       if (i === this.cur) return;
       for (const b of this.el.querySelectorAll('.step.now')) b.classList.remove('now');
