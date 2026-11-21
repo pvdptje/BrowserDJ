@@ -94,6 +94,8 @@ input[type="range"].vol { width: 84px; }
 .caprow, .takerow { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
 .takerow { border-top: 1px solid var(--line); padding-top: 10px; gap: 8px 14px; }
 .takerow.off > :not(.lab) { opacity: 0.4; pointer-events: none; }
+.takerow.drums { display: none; } /* those settings are about humming */
+.seg.capmode button { padding: 7px 11px; }
 .rangebox { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
 #recBtn {
   display: inline-flex; align-items: center; gap: 10px;

@@ -113,6 +113,51 @@
     roll.sel.clear();
   }
 
+  /* The drum pattern a beatbox take goes into: the selected one, or a fresh "Beatbox" pattern on a drum track. */
+  function beatTarget() {
+    if (curTrack().type === 'drums') return curPat();
+    let t = P.tracks.find((x) => x.type === 'drums');
+    if (!t) t = PJ.addTrack(P, 'drums', { name: 'Beatbox' });
+    const pat = PJ.addPattern(P, t.id, PJ.uniqueName(P, t.id, 'Beatbox'));
+    PJ.select(P, t.id, pat.id);
+    return pat;
+  }
+
+  /* Mouth drums -> a drum pattern. samples: mono Float32Array. anchor: seconds where beat 0 fell (hum over the beat). */
+  function beatIngest(samples, sr, anchor, targetId) {
+    const hits = BDJ.Beatbox.analyze(samples, sr);
+    if (hits.length < 2) {
+      say('I heard ' + (hits.length ? 'only one hit' : 'no hits') + '. Make short, sharp sounds close to the microphone: "boots" for a kick, "ka" or "psh" for a snare, "ts" for a hi-hat.', 'warn');
+      return false;
+    }
+    const aligned = anchor != null;
+    let kept = false, st = null;
+    commit(() => {
+      const pat = PJ.pattern(P, targetId) || beatTarget();
+      kept = otherMusic(pat.id);
+      // A beat is about which 16th each hit falls on, so read it at the tempo it was performed at; the pattern
+      // then simply plays at the song's tempo. Over the song (aligned) the song's own grid is the right one.
+      // A first idea also hands its tempo to the song.
+      const performed = hits.length >= 4 ? E.guessTempo(hits.map((h) => ({ start: h.t }))).bpm : P.bpm;
+      if (!kept && !aligned) P.bpm = performed;
+      st = BDJ.Beatbox.toSteps(hits, aligned ? P.bpm : performed, aligned ? anchor : null);
+      if (!st) return;
+      pat.bars = st.bars;
+      pat.steps = Object.fromEntries(SND.DRUMS.map((d) => [d.id, st.steps[d.id] ? st.steps[d.id].slice() : new Array(st.bars * PJ.STEPS_PER_BAR).fill(0)]));
+      PJ.select(P, pat.trackId, pat.id);
+      const at = aligned ? songCursor : (P.clips.some((c) => c.patternId === pat.id) ? null : songCursor);
+      if (at != null && !P.clips.some((c) => c.patternId === pat.id && c.start === at)) PJ.addClip(P, pat, at);
+    });
+    if (!st) { say('Those hits all came before the song marker. Try again and start on the beat.', 'warn'); return false; }
+    const count = (id) => st.steps[id].filter((v) => v).length;
+    const parts = [['kick', 'kick'], ['snare', 'snare'], ['chat', 'hi-hat']].map(([id, n]) => [count(id), n]).filter(([c]) => c)
+      .map(([c, n]) => c + ' ' + n + (c === 1 ? '' : 's'));
+    say('Heard ' + parts.join(', ') + ' in "' + curPat().name + '" (' + st.bars + (st.bars === 1 ? ' bar' : ' bars') + ').' +
+      (aligned ? ' They sit where you made them against the beat.' : kept ? ' It plays at your song’s tempo.' : ' The tempo follows your rhythm: ' + P.bpm + ' BPM.') +
+      ' Fix any step by clicking it.');
+    return true;
+  }
+
   /* The synth pattern a new take goes into: the selected one, or a fresh pattern on a synth track. */
   function takeTarget() {
     if (curTrack().type === 'synth') return curPat();
@@ -577,8 +622,10 @@
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
     } catch (err) { say(micHelp(err), 'warn'); return; } finally { starting = false; }
-    // make sure a synth pattern is selected so the live pitch shows where the notes will land
-    if (curTrack().type !== 'synth') { commit(() => takeTarget()); }
+    const drumsMode = P.capture.mode === 'drums';
+    // melody: a synth pattern, so the live pitch shows where the notes will land; drums: a drum pattern
+    if (drumsMode && curTrack().type !== 'drums') commit(() => beatTarget());
+    if (!drumsMode && curTrack().type !== 'synth') commit(() => takeTarget());
     const target = curPat();
     const an = new E.Analyzer(ac.sampleRate), chunks = [];
     const onChunk = (c) => { chunks.push(c); an.push(c); };
@@ -598,16 +645,16 @@
     src.connect(node);
     node.connect(mute);
     const ctxStart = ac.currentTime;
-    R = { stream, src, node, mute, an, chunks, started: performance.now(), timer: setInterval(recTick, 50), anchor: null, liveBeat: null, targetId: target.id };
+    R = { stream, src, node, mute, an, chunks, started: performance.now(), timer: setInterval(recTick, 50), anchor: null, liveBeat: null, targetId: target.id, drums: drumsMode };
     if (P.capture.playBeat) {
       // one bar of count-in before the song marker, then the rest of the song plays along (minus this track)
       play(songCursor - 4, { rec: true, skipTrack: target.trackId });
       let inLat = 0.01;
       try { const st = stream.getAudioTracks()[0].getSettings(); if (st && isFinite(st.latency)) inLat = st.latency; } catch (err) { /* unknown */ }
       R.anchor = timeOf(songCursor) - ctxStart + (ac.outputLatency || 0) + (ac.baseLatency || 0) + inLat;
-      say('Count-in: one bar of clicks, then hum along with the song from bar ' + (Math.floor(songCursor / 4) + 1) + '. Press Stop (or Space) when you are done.');
+      say('Count-in: one bar of clicks, then ' + (drumsMode ? 'beatbox' : 'hum') + ' along with the song from bar ' + (Math.floor(songCursor / 4) + 1) + '. Press Stop (or Space) when you are done.');
     } else {
-      say('Listening. Hum your tune, then press Stop.');
+      say(drumsMode ? 'Listening. Beatbox: "boots" for a kick, "ka" for a snare, "ts" for a hi-hat. Then press Stop.' : 'Listening. Hum your tune, then press Stop.');
       frame();
     }
     $('recBtn').classList.add('on');
@@ -623,8 +670,9 @@
     if (n) {
       const rms = R.an.rms[n - 1], heard = R.an.conf[n - 1] < 0.25 && rms > 0.006;
       $('level').style.width = clamp(Math.sqrt(rms) * 160, 0, 100) + '%';
-      $('liveNote').textContent = heard ? E.noteName(Math.round(R.an.midi[n - 1])) : '--';
-      $('liveNote').classList.toggle('idle', !heard);
+      // in drums mode a note name means nothing; show the level only
+      $('liveNote').textContent = heard && !R.drums ? E.noteName(Math.round(R.an.midi[n - 1])) : '--';
+      $('liveNote').classList.toggle('idle', !heard || R.drums);
     }
     R.liveBeat = T.on && T.rec ? beatAbs() - songCursor : (n * R.an.dt) * P.bpm / 60;
     if (el > 180) stopRec();
@@ -650,14 +698,15 @@
     let len = 0;
     for (const c of r.chunks) len += c.length;
     if (len < actx.sampleRate * 0.4) {
-      say('That was too short to find a tune. Press Record and hum for a few seconds.', 'warn');
+      say(r.drums ? 'That was too short to find a beat. Press Record and beatbox for a few seconds.' : 'That was too short to find a tune. Press Record and hum for a few seconds.', 'warn');
       refreshInfo(); roll.draw();
       return;
     }
     const buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
     let o = 0;
     for (const c of r.chunks) { ch.set(c, o); o += c.length; }
-    ingest(r.an.frames(), buf, r.anchor, r.targetId);
+    if (r.drums) beatIngest(ch, actx.sampleRate, r.anchor, r.targetId);
+    else ingest(r.an.frames(), buf, r.anchor, r.targetId);
     refreshInfo(); roll.draw();
   }
 
@@ -679,6 +728,10 @@
     for (let c = 0; c < buf.numberOfChannels; c++) {
       const d = buf.getChannelData(c);
       for (let i = 0; i < n; i++) mono[i] += d[i] / buf.numberOfChannels;
+    }
+    if (P.capture.mode === 'drums') {
+      beatIngest(mono, buf.sampleRate, null, curTrack().type === 'drums' ? P.sel.patternId : null);
+      return;
     }
     const an = new E.Analyzer(buf.sampleRate), CH = 16384;
     for (let i = 0, k = 0; i < n; i += CH, k++) {
@@ -1040,6 +1093,14 @@
     }
   }
 
+  function syncCapMode() {
+    const drums = P.capture.mode === 'drums';
+    $('capMelody').classList.toggle('on', !drums); $('capMelody').setAttribute('aria-pressed', String(!drums));
+    $('capDrums').classList.toggle('on', drums); $('capDrums').setAttribute('aria-pressed', String(drums));
+    // the take settings (note detail, tuning...) are about humming
+    $('takeRow').classList.toggle('drums', drums);
+  }
+
   function syncControls() {
     $('bpm').value = P.bpm;
     $('root').value = P.root;
@@ -1050,6 +1111,7 @@
     $('detail').value = Math.round(P.capture.detail * 100);
     $('fixTuning').checked = P.capture.fixTuning;
     $('playBeat').checked = P.capture.playBeat;
+    syncCapMode();
     syncMode();
     updateMixer();
   }
@@ -1270,6 +1332,17 @@
   on('fileBtn', 'click', () => $('fileInput').click());
   on('fileInput', 'change', (e) => { loadFile(e.target.files[0]); e.target.value = ''; });
   on('playBeat', 'change', () => { P.capture.playBeat = $('playBeat').checked; autosave(); });
+  const setCapMode = (m) => {
+    if (R) return; // not while recording
+    P.capture.mode = m;
+    syncCapMode();
+    autosave();
+    say(m === 'drums'
+      ? 'Drums: Record listens for beatboxing. "Boots" is a kick, "ka" or "psh" a snare, "ts" a hi-hat; they become a drum pattern.'
+      : 'Melody: Record listens for humming or singing; it becomes notes in a synth pattern.');
+  };
+  on('capMelody', 'click', () => setCapMode('melody'));
+  on('capDrums', 'click', () => setCapMode('drums'));
   let detailBefore = null;
   on('detail', 'input', () => {
     if (!take || !takePattern()) return;

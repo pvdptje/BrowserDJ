@@ -90,6 +90,10 @@
   <section class="capture" aria-label="Record">
     <div class="caprow">
       <button id="recBtn" type="button"><span class="dot"></span><span id="recLabel">Record</span></button>
+      <div class="seg capmode" role="group" aria-label="What Record listens for">
+        <button id="capMelody" type="button" title="Hum or sing: becomes notes in a synth pattern">&#9835; Melody</button>
+        <button id="capDrums" type="button" title="Beatbox (&quot;boots&quot;, &quot;ka&quot;, &quot;ts&quot;): becomes a drum pattern">&#9679; Drums</button>
+      </div>
       <div class="live">
         <div id="liveNote" class="idle" aria-label="Note being heard">--</div>
         <div class="meterbox">
@@ -270,6 +274,7 @@
         </ul></div>
       <div><h3>Playing live</h3>
         <ul>
+          <li><b>Record</b> with <b>Melody</b> picked: hum or sing, and it becomes notes. With <b>Drums</b> picked: beatbox, and it becomes a drum pattern (&ldquo;boots&rdquo; = kick, &ldquo;ka&rdquo; or &ldquo;psh&rdquo; = snare, &ldquo;ts&rdquo; = hi-hat). <b>Load a recording</b> works both ways too</li>
           <li>With <b>Keyboard plays</b> on, <b>Z&ndash;M</b> (with S, D, G, H, J as the black keys) and <b>Q&ndash;U</b> (with 2, 3, 5, 6, 7) play two octaves of the selected track. <b>Shift</b> plays louder</li>
           <li>On a drum track the same keys play the kit, one drum per key from Z</li>
           <li><b>Connect MIDI keyboard</b> to play from a real keyboard or pad controller (Chrome and Edge)</li>
@@ -315,6 +320,7 @@
 <script src="js/playlist.js"></script>
 <script src="js/mixer.js"></script>
 <script src="js/live.js"></script>
+<script src="js/beatbox.js"></script>
 <script src="js/share.js"></script>
 <script src="js/app.js"></script>
 </body>
