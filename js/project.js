@@ -65,7 +65,7 @@ BDJ.Project = (() => {
     const n = p.tracks.filter((t) => t.type === type).length + 1;
     const t = {
       id: p.nextId++, type, name: opts.name || (type === 'drums' ? 'Drums' : 'Synth') + (n > 1 ? ' ' + n : ''),
-      color: opts.color || nextColor(p), volume: 0.8, pan: 0, mute: false, solo: false,
+      color: opts.color || nextColor(p), volume: 0.8, pan: 0, drive: 0, mute: false, solo: false,
       echoSend: type === 'drums' ? 0 : opts.echo === false ? 0 : 1,
     };
     if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; } else { t.instrument = opts.instrument || 'pluck'; }
@@ -354,7 +354,7 @@ BDJ.Project = (() => {
       const nt = {
         id: p.nextId++, type: t.type, name: str(t.name, t.type === 'drums' ? 'Drums' : 'Synth'),
         color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : nextColor(p),
-        volume: num(t.volume, 0.8, 0, 1), pan: num(t.pan, 0, -1, 1), mute: !!t.mute, solo: !!t.solo,
+        volume: num(t.volume, 0.8, 0, 1), pan: num(t.pan, 0, -1, 1), drive: num(t.drive, 0, 0, 1), mute: !!t.mute, solo: !!t.solo,
         // older saves had echo on/off for synths
         echoSend: t.echoSend != null ? num(t.echoSend, 0, 0, 1) : t.type === 'synth' && t.echo !== false ? 1 : 0,
       };

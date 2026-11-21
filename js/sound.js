@@ -18,6 +18,7 @@ BDJ.Sound = (() => {
 
   const DRUMS = [
     { id: 'kick', name: 'Kick', gm: 36 },
+    { id: 'hkick', name: 'Hard kick', gm: 35 },
     { id: 'snare', name: 'Snare', gm: 38 },
     { id: 'clap', name: 'Clap', gm: 39 },
     { id: 'chat', name: 'Closed hat', gm: 42 },
@@ -39,6 +40,25 @@ BDJ.Sound = (() => {
       noiseCache.set(ac, b);
     }
     return b;
+  }
+
+  /* Soft-clip curves for distortion, shared by every context. */
+  const curves = new Map();
+  function clipCurve(hardness) {
+    let c = curves.get(hardness);
+    if (!c) {
+      c = new Float32Array(2048);
+      const n = Math.tanh(hardness);
+      for (let i = 0; i < c.length; i++) { const x = (i / (c.length - 1)) * 2 - 1; c[i] = Math.tanh(hardness * x) / n; }
+      curves.set(hardness, c);
+    }
+    return c;
+  }
+  /* Track drive 0..1 -> {pre gain, curve, makeup gain}; 0 is a clean bypass. */
+  function driveSettings(drive) {
+    drive = Math.max(0, Math.min(1, drive || 0));
+    if (drive < 0.005) return { pre: 1, curve: null, post: 1 };
+    return { pre: 1 + 14 * drive, curve: clipCurve(2.5), post: 1 / (1 + 2 * drive) };
   }
 
   /* Keeps track of scheduled sources so playback can be stopped cleanly. */
@@ -73,13 +93,23 @@ BDJ.Sound = (() => {
     comp.connect(masterTap);
 
     const channels = new Map();
-    /* track: {id, volume, pan, echoSend} -> the node to play into.
-       input -> fader -> panner -> master, with a post-fader echo send and a meter tap */
+    /* track: {id, volume, pan, echoSend, drive} -> the node to play into.
+       input -> drive (pre gain, waveshaper, makeup) -> fader -> panner -> master,
+       with a post-fader echo send and a meter tap */
+    function applyDrive(ch, drive, at) {
+      const d = driveSettings(drive);
+      ch.shaper.curve = d.curve;
+      if (at == null) { ch.pre.gain.value = d.pre; ch.post.gain.value = d.post; }
+      else { ch.pre.gain.setTargetAtTime(d.pre, at, 0.02); ch.post.gain.setTargetAtTime(d.post, at, 0.02); }
+    }
     function channel(track) {
       let ch = channels.get(track.id);
       if (!ch) {
+        const pre = ac.createGain(), shaper = ac.createWaveShaper(), post = ac.createGain();
         const gain = ac.createGain(), send = ac.createGain(), tap = ac.createAnalyser();
         const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+        shaper.oversample = '2x';
+        pre.connect(shaper); shaper.connect(post); post.connect(gain);
         tap.fftSize = 512;
         gain.gain.value = track.volume;
         send.gain.value = track.echoSend || 0;
@@ -87,10 +117,11 @@ BDJ.Sound = (() => {
         else { gain.connect(master); gain.connect(tap); }
         gain.connect(send);
         send.connect(echoIn);
-        ch = { gain, send, pan, tap, buf: new Float32Array(512) };
+        ch = { pre, shaper, post, gain, send, pan, tap, buf: new Float32Array(512) };
+        applyDrive(ch, track.drive);
         channels.set(track.id, ch);
       }
-      return ch.gain;
+      return ch.pre;
     }
     const peak = (tap, buf) => {
       tap.getFloatTimeDomainData(buf);
@@ -110,6 +141,7 @@ BDJ.Sound = (() => {
         ch.gain.gain.setTargetAtTime(track.volume, now, 0.02);
         ch.send.gain.setTargetAtTime(track.echoSend || 0, now, 0.02);
         if (ch.pan) ch.pan.pan.setTargetAtTime(track.pan || 0, now, 0.02);
+        applyDrive(ch, track.drive, now);
       },
       setMaster(v) { master.gain.setTargetAtTime(v, ac.currentTime, 0.02); },
       /* current peak level (0..1+) of a track's channel, or of the master when id is null */
@@ -242,6 +274,27 @@ BDJ.Sound = (() => {
       o.start(when); track(live, o, when + 0.5);
       const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 2500;
       hp.connect(env(ac, out, when, 0.35 * amt, 0.012));
+      noiseSrc(ac, when, 0.03, live).connect(hp);
+    } else if (id === 'hkick') {
+      // hardcore kick: a long pitch drop driven hard into a clipper, so the tail buzzes
+      const o = ac.createOscillator();
+      o.frequency.setValueAtTime(320, when);
+      o.frequency.exponentialRampToValueAtTime(62, when + 0.07);
+      o.frequency.exponentialRampToValueAtTime(46, when + 0.5);
+      const body = ac.createGain();
+      body.gain.setValueAtTime(1, when);
+      body.gain.exponentialRampToValueAtTime(0.25, when + 0.55);
+      const drive = ac.createGain(); drive.gain.value = 9;
+      const sh = ac.createWaveShaper(); sh.curve = clipCurve(3); sh.oversample = '2x';
+      const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5200;
+      const out2 = ac.createGain();
+      out2.gain.setValueAtTime(0.5 * amt, when);
+      out2.gain.setValueAtTime(0.5 * amt, when + 0.42);
+      out2.gain.linearRampToValueAtTime(0, when + 0.62);
+      o.connect(body); body.connect(drive); drive.connect(sh); sh.connect(lp); lp.connect(out2); out2.connect(out);
+      o.start(when); track(live, o, when + 0.65);
+      const hp = ac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 3000;
+      hp.connect(env(ac, out, when, 0.3 * amt, 0.01));
       noiseSrc(ac, when, 0.03, live).connect(hp);
     } else if (id === 'snare') {
       const o = ac.createOscillator(); o.type = 'triangle';

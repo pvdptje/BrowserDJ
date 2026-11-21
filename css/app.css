@@ -231,6 +231,7 @@ button.sname:hover { background: rgba(255,255,255,0.06); }
 .knob { width: 100%; display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0 4px; font-size: 11px; color: var(--muted); }
 .knob input { grid-column: 1 / -1; width: 100%; min-width: 0; accent-color: var(--tc); margin: 2px 0 0; }
 .knob output { text-align: right; font-family: var(--font-mono); }
+.knob.drive input { accent-color: var(--rec); }
 .ms { display: flex; gap: 6px; }
 .mnote { margin: auto 0 0; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.3; }
 

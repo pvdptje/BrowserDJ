@@ -31,6 +31,7 @@ BDJ.Mixer = (() => {
         html.push(`<button type="button" class="sname" data-act="sel" title="Edit ${esc(t.name)}">${esc(t.name)}</button>`);
         html.push(this.faderHtml(t.volume, t.name));
         html.push(`<label class="knob"><span>Pan</span><input type="range" class="pan" min="-100" max="100" value="${Math.round((t.pan || 0) * 100)}" aria-label="${esc(t.name)} pan" title="Pan (double-click to centre)"><output>${panText(t.pan || 0)}</output></label>`);
+        html.push(`<label class="knob drive"><span>Drive</span><input type="range" class="drv" min="0" max="100" value="${Math.round((t.drive || 0) * 100)}" aria-label="${esc(t.name)} distortion" title="Distortion (double-click for none)"><output>${Math.round((t.drive || 0) * 100)}</output></label>`);
         html.push(`<label class="knob"><span>Echo</span><input type="range" class="send" min="0" max="100" value="${Math.round((t.echoSend || 0) * 100)}" aria-label="${esc(t.name)} echo send" title="How much of this track goes into the echo"><output>${Math.round((t.echoSend || 0) * 100)}</output></label>`);
         html.push(`<div class="ms"><button type="button" class="tog${t.mute ? ' on' : ''}" data-act="mute" aria-pressed="${t.mute}" title="Mute">M</button><button type="button" class="tog solo${t.solo ? ' on' : ''}" data-act="solo" aria-pressed="${t.solo}" title="Solo">S</button></div>`);
         html.push('</div>');
@@ -68,6 +69,7 @@ BDJ.Mixer = (() => {
       if (e.target.classList.contains('fader')) { t.volume = v; e.target.closest('.strip').querySelector('.db').textContent = dbText(v); }
       else if (e.target.classList.contains('pan')) { t.pan = v; if (out) out.textContent = panText(v); }
       else if (e.target.classList.contains('send')) { t.echoSend = v; if (out) out.textContent = Math.round(v * 100); }
+      else if (e.target.classList.contains('drv')) { t.drive = v; if (out) out.textContent = Math.round(v * 100); }
       this.host.trackChanged(t);
     }
 
@@ -83,7 +85,7 @@ BDJ.Mixer = (() => {
       const id = this.stripOf(e.target);
       if (!id || e.target.tagName !== 'INPUT') return;
       const c = e.target.classList;
-      const value = c.contains('pan') ? 0 : c.contains('fader') ? (id === 'master' ? 85 : 80) : null;
+      const value = c.contains('pan') || c.contains('drv') ? 0 : c.contains('fader') ? (id === 'master' ? 85 : 80) : null;
       if (value == null) return;
       e.target.value = value;
       this.input({ target: e.target });

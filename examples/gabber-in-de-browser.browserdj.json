@@ -53,13 +53,14 @@
    "type": "drums",
    "name": "Kick",
    "color": "#ff4d5e",
-   "volume": 1,
+   "volume": 0.9,
    "pan": 0,
+   "drive": 0.2,
    "echoSend": 0,
    "swing": 0,
    "kit": [
     {
-     "id": "kick",
+     "id": "hkick",
      "vol": 1
     },
     {
@@ -102,8 +103,9 @@
    "name": "Bass",
    "color": "#a58bff",
    "instrument": "bass",
-   "volume": 0.72,
+   "volume": 0.7,
    "pan": 0,
+   "drive": 0.25,
    "echoSend": 0
   },
   {
@@ -112,8 +114,9 @@
    "name": "Hoover lead",
    "color": "#ffb04f",
    "instrument": "lead",
-   "volume": 0.68,
+   "volume": 0.66,
    "pan": 0.05,
+   "drive": 0.35,
    "echoSend": 0.45
   },
   {
@@ -134,7 +137,7 @@
    "name": "Kick",
    "bars": 1,
    "steps": {
-    "kick": [
+    "hkick": [
      127,
      0,
      0,
@@ -160,7 +163,7 @@
    "name": "Kick + crash",
    "bars": 1,
    "steps": {
-    "kick": [
+    "hkick": [
      127,
      0,
      0,
@@ -204,7 +207,7 @@
    "name": "Kick roll",
    "bars": 1,
    "steps": {
-    "kick": [
+    "hkick": [
      112,
      0,
      112,

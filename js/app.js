@@ -630,11 +630,40 @@
     say('Rendering ' + whatPlays() + '…');
     $('wavBtn').disabled = true;
     try {
-      const oac = new Ctx(2, Math.ceil((secs + 2.5) * sr), sr);
+      const total = secs + 2.5;
+      const oac = new Ctx(2, Math.ceil(total * sr), sr);
       const M = SND.createMixer(oac, { bpm: P.bpm, master: P.master });
       M.live = null;
-      scheduleEvents(oac, M, items, 0, L, 0, (b) => 0.02 + b * 60 / P.bpm, P.bpm);
+      const tOf = (b) => 0.02 + b * 60 / P.bpm;
+      // Schedule a few seconds at a time: the renderer pauses at each chunk boundary, we add the next
+      // chunk's notes and report progress. Far fewer nodes exist at once, which also makes it faster.
+      const CHUNK = 3, chunkBeats = CHUNK * P.bpm / 60;
+      let next = 0;
+      const scheduleChunk = () => {
+        const a = next, b = Math.min(L, next + chunkBeats);
+        if (a < b) scheduleEvents(oac, M, items, a, b, 0, tOf, P.bpm);
+        next = b;
+      };
+      let chunked = typeof oac.suspend === 'function';
+      if (chunked) {
+        try {
+          scheduleChunk();
+          for (let k = 1; k * CHUNK < secs; k++) {
+            const at = k * CHUNK;
+            oac.suspend(at).then(() => {
+              if (chunked) scheduleChunk();
+              say('Rendering ' + whatPlays() + '… ' + Math.round((at / total) * 100) + '%');
+              oac.resume();
+            });
+          }
+        } catch (err) { chunked = false; }
+      }
+      // no suspend support (or it failed): schedule whatever is left in one go
+      if (!chunked && next < L) { scheduleEvents(oac, M, items, next, L, 0, tOf, P.bpm); next = L; }
+      const t0 = performance.now();
       const buf = await oac.startRendering();
+      if (next < L - 1e-9) throw new Error('rendering stopped early');
+      console.debug('BrowserDJ: rendered ' + total.toFixed(1) + ' s in ' + ((performance.now() - t0) / 1000).toFixed(1) + ' s');
       downloadBlob(SND.encodeWav(buf), slug() + '.wav');
       say('Saved ' + slug() + '.wav with ' + whatPlays() + ' (' + secs.toFixed(1) + ' s at ' + P.bpm + ' BPM).');
     } catch (err) {

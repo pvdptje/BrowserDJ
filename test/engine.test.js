@@ -285,6 +285,19 @@ test('MIDI carries markers and per-track volume and pan', () => {
   eq(cc, [[7, 64], [10, 1]]);
 });
 
+test('drive and the hard kick', () => {
+  const p = PJ.blank();
+  assert.strictEqual(p.tracks[0].drive, 0);
+  const back = PJ.normalize({ ...JSON.parse(PJ.serialize(p)), tracks: p.tracks.map((t) => ({ ...t, drive: 7 })) });
+  assert.ok(back.tracks.every((t) => t.drive === 1)); // clamped
+  const dt = p.tracks.find((t) => t.type === 'drums'), pat = PJ.patternsOf(p, dt.id)[0];
+  assert.ok(dt.kit.some((k) => k.id === 'hkick'));
+  pat.steps.hkick[0] = 127;
+  PJ.addClip(p, pat, 0, 4);
+  const m = parseMidi(E.writeMidiTracks(PJ.midiTracks(p, 'song'), p.bpm));
+  eq(m.tracks[1].filter((e) => e.type === 0x90).map((e) => [e.ch, e.a]), [[9, 35]]);
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');
