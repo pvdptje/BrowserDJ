@@ -17,6 +17,8 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 | `js/mixer.js` | Mixer strips: volume, DJ filter, pan, drive, echo send, mute/solo, level meters, master. |
 | `js/beatbox.js` | Beatbox to drums: onsets, spectral centroid, grouping into kick / snare / hi-hat. Also loads in Node. |
 | `js/share.js` | Share links: the song compressed into the link after `#s=`. Also loads in Node. |
+| `js/library.js` | My songs: every song you work on, kept in IndexedDB. |
+| `js/midiimport.js` | MIDI import: format 0/1 files into tracks, 4-bar patterns (shared when they repeat) and clips. Also loads in Node. |
 | `js/live.js` | Playing live: computer keyboard (by key position) and Web MIDI input. |
 | `js/samples.js` | Your own sounds: stored in IndexedDB by content hash; packed into saved project files as base64. |
 | `js/app.js` | Transport (look-ahead scheduler), recording, export, controls. |

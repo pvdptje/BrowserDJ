@@ -114,6 +114,22 @@
       }
     });
 
+    // parts that share a name (one-track files often do) are named after their instrument family instead
+    const FAMILY = ['Piano', 'Bells', 'Organ', 'Guitar', 'Bass', 'Strings', 'Ensemble', 'Brass', 'Reed', 'Flute', 'Lead', 'Pad', 'Synth FX', 'Ethnic', 'Percussion', 'Sound FX'];
+    const used = new Map();
+    for (const part of parts.values()) if (part.name) used.set(part.name, (used.get(part.name) || 0) + 1);
+    for (const part of parts.values()) {
+      if (part.name && used.get(part.name) < 2) continue;
+      part.name = part.ch === 9 ? 'Drums' : part.program != null ? FAMILY[part.program >> 3] : '';
+    }
+    const taken = new Map();
+    for (const part of parts.values()) {
+      if (!part.name) continue;
+      const n = (taken.get(part.name) || 0) + 1;
+      taken.set(part.name, n);
+      if (n > 1) part.name += ' ' + n;
+    }
+
     const BLOCK = 16; // beats: 4 bars
     let nextId = 1;
     const tracks = [], patterns = [], clips = [];

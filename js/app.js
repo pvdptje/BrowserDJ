@@ -738,6 +738,7 @@
   async function loadFile(file) {
     if (!file || R) return;
     if (/\.(json|bdj)$/i.test(file.name) || file.type === 'application/json') { openProject(file); return; }
+    if (/\.(mid|midi|smf)$/i.test(file.name) || file.type === 'audio/midi' || file.type === 'audio/x-midi') { importMidi(file); return; }
     stopAll();
     say('Reading ' + file.name + '…');
     let buf;
@@ -939,6 +940,25 @@
     const file = n ? { ...P, sampleData } : P;
     downloadBlob(new Blob([JSON.stringify(file, null, n ? undefined : 1)], { type: 'application/json' }), slug() + '.browserdj.json');
     say('Saved ' + slug() + '.browserdj.json' + (n ? ' with ' + n + (n === 1 ? ' sample' : ' samples') + ' inside' : '') + '. Open it here any time to keep working.');
+  }
+
+  /* a MIDI file (from FL Studio or anywhere): tracks, patterns and clips, as one undo step */
+  async function importMidi(file) {
+    try {
+      const obj = BDJ.MidiImport.toProject(new Uint8Array(await file.arrayBuffer()), file.name);
+      stopAll();
+      loadCommit(() => {
+        P = PJ.normalize(obj); take = null; P.songId = BDJ.Library.newId();
+        const k = PJ.detectKey(P, null); P.root = k.root; P.scale = k.scale;
+      });
+      patCursor = songCursor = 0;
+      roll.sel.clear(); roll.fit(); playlist.fit();
+      const synths = P.tracks.filter((t) => t.type === 'synth').length, drums = P.tracks.length - synths;
+      say('Imported ' + file.name + ': ' + [synths && synths + (synths === 1 ? ' synth track' : ' synth tracks'), drums && drums + (drums === 1 ? ' drum track' : ' drum tracks')].filter(Boolean).join(' and ') +
+        ', ' + P.patterns.length + ' patterns, ' + P.bpm + ' BPM. The sounds are a best guess from the file; change them in the editor. Undo brings back what you had.');
+    } catch (err) {
+      say('Could not import "' + file.name + '": ' + (err && err.message ? err.message : 'unreadable') + '.', 'warn');
+    }
   }
 
   async function openProject(file) {
@@ -1421,7 +1441,7 @@
     say('A fresh project with a melody track and a drum track. Hum something, draw notes, or load a drum pattern. Undo brings the old one back.');
   });
   on('openBtn', 'click', () => $('projectInput').click());
-  on('projectInput', 'change', (e) => { if (e.target.files[0]) openProject(e.target.files[0]); e.target.value = ''; });
+  on('projectInput', 'change', (e) => { const f = e.target.files[0]; if (f) loadFile(f); e.target.value = ''; });
   on('saveBtn', 'click', saveProject);
   on('midiBtn', 'click', exportMidi);
   on('wavBtn', 'click', exportWav);
