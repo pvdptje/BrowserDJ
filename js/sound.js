@@ -55,6 +55,7 @@ BDJ.Sound = (() => {
     const dest = opts.destination || ac.destination;
     const master = ac.createGain();
     master.gain.value = opts.master == null ? 0.85 : opts.master;
+    // the master fader sits before the compressor; the compressor keeps the mix from clipping
     const comp = ac.createDynamicsCompressor();
     comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.15;
     master.connect(comp);
@@ -66,22 +67,38 @@ BDJ.Sound = (() => {
     fb.gain.value = 0.35; lp.type = 'lowpass'; lp.frequency.value = 2600; wet.gain.value = 0.28;
     echoIn.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(wet); wet.connect(master);
 
+    // master meter, after the compressor
+    const masterTap = ac.createAnalyser();
+    masterTap.fftSize = 512;
+    comp.connect(masterTap);
+
     const channels = new Map();
-    /* track: {id, volume, echo} -> the node to play into */
+    /* track: {id, volume, pan, echoSend} -> the node to play into.
+       input -> fader -> panner -> master, with a post-fader echo send and a meter tap */
     function channel(track) {
       let ch = channels.get(track.id);
       if (!ch) {
-        const gain = ac.createGain(), send = ac.createGain();
+        const gain = ac.createGain(), send = ac.createGain(), tap = ac.createAnalyser();
+        const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
+        tap.fftSize = 512;
         gain.gain.value = track.volume;
-        send.gain.value = track.echo ? 1 : 0;
-        gain.connect(master);
+        send.gain.value = track.echoSend || 0;
+        if (pan) { pan.pan.value = track.pan || 0; gain.connect(pan); pan.connect(master); pan.connect(tap); }
+        else { gain.connect(master); gain.connect(tap); }
         gain.connect(send);
         send.connect(echoIn);
-        ch = { gain, send };
+        ch = { gain, send, pan, tap, buf: new Float32Array(512) };
         channels.set(track.id, ch);
       }
       return ch.gain;
     }
+    const peak = (tap, buf) => {
+      tap.getFloatTimeDomainData(buf);
+      let m = 0;
+      for (let i = 0; i < buf.length; i++) { const v = Math.abs(buf[i]); if (v > m) m = v; }
+      return m;
+    };
+    const masterBuf = new Float32Array(512);
 
     const live = new Set();
     return {
@@ -89,8 +106,17 @@ BDJ.Sound = (() => {
       update(track) {
         const ch = channels.get(track.id);
         if (!ch) return;
-        ch.gain.gain.setTargetAtTime(track.volume, ac.currentTime, 0.02);
-        ch.send.gain.setTargetAtTime(track.echo ? 1 : 0, ac.currentTime, 0.02);
+        const now = ac.currentTime;
+        ch.gain.gain.setTargetAtTime(track.volume, now, 0.02);
+        ch.send.gain.setTargetAtTime(track.echoSend || 0, now, 0.02);
+        if (ch.pan) ch.pan.pan.setTargetAtTime(track.pan || 0, now, 0.02);
+      },
+      setMaster(v) { master.gain.setTargetAtTime(v, ac.currentTime, 0.02); },
+      /* current peak level (0..1+) of a track's channel, or of the master when id is null */
+      level(id) {
+        if (id == null) return peak(masterTap, masterBuf);
+        const ch = channels.get(id);
+        return ch ? peak(ch.tap, ch.buf) : 0;
       },
       setBpm(bpm) { dl.delayTime.setTargetAtTime(Math.min(1.9, (60 / bpm) * 0.75), ac.currentTime, 0.05); },
       stop() {

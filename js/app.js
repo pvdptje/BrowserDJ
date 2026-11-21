@@ -72,10 +72,11 @@
       const fit = Math.ceil(PJ.notesEnd(pat) / 4 - 1e-6);
       if (fit > pat.bars) pat.bars = fit;
     }
-    if (kind === 'all') { syncControls(); renderEditor(); playlist.renderHeads(); }
+    if (kind === 'all') { syncControls(); renderEditor(); playlist.renderHeads(); mixer.render(); }
     if (curTrack().type === 'synth') lastSynth = curTrack().id;
     if (kind === 'drums') rack.render();
-    if (kind === 'tracks') { playlist.renderHeads(); renderEditorHead(); rack.render(); updateMixer(); }
+    if (kind === 'tracks') { playlist.renderHeads(); renderEditorHead(); rack.render(); mixer.render(); updateMixer(); }
+    if (kind === 'mix') { playlist.renderHeads(); updateMixer(); }
     if (kind !== 'quiet') { refreshInfo(); roll.draw(); playlist.draw(); }
     autosave();
   }
@@ -88,6 +89,7 @@
     roll.sel.clear();
     renderEditor();
     playlist.markSelected();
+    mixer.markSelected();
     playlist.draw();
     refreshInfo();
     autosave();
@@ -214,15 +216,25 @@
   const timeOf = (b) => T.t0 + (b - T.beat0) * spb();
   const looping = () => P.loop && !T.rec;
 
+  /* Playback runs on an unwrapped beat counter ("abs"). The first pass goes from the start point to the loop end E,
+     then every pass repeats [S, E). songPos maps abs to the song position. */
+  function songPos(abs) {
+    if (!looping() || abs < T.E) return abs;
+    return T.S + ((abs - T.E) % (T.E - T.S));
+  }
+
   function play(from = cursor(), opts = {}) {
     stopAll();
     let ac;
     try { ac = audio(); } catch (err) { say('This browser cannot play sound here.', 'warn'); return false; }
     const mode = opts.rec ? 'song' : P.mode;
+    const L = PJ.playItems(P, mode).length, lr = PJ.loopRange(P, mode, L);
+    // starting outside the loop jumps to its start
+    if (!opts.rec && P.loop && (from < lr.start || from >= lr.end)) from = lr.start;
     Object.assign(T, {
-      on: true, rec: !!opts.rec, mode, bpm: P.bpm, L: PJ.playItems(P, mode).length,
+      on: true, rec: !!opts.rec, mode, bpm: P.bpm, L, S: lr.start, E: lr.end,
       t0: ac.currentTime + 0.08, beat0: from, sched: from, from, skipTrack: opts.skipTrack || null,
-      M: SND.createMixer(ac, { bpm: P.bpm }),
+      M: SND.createMixer(ac, { bpm: P.bpm, master: P.master }),
     });
     for (const t of P.tracks) T.M.channel(t);
     T.timer = setInterval(pump, 25);
@@ -237,50 +249,55 @@
     if (!T.on) return;
     const now = actx.currentTime;
     const { items, length: L } = PJ.playItems(P, T.mode);
-    if (P.bpm !== T.bpm || L !== T.L) {
-      // tempo or loop length changed while playing: re-anchor at the current position
-      let b = beatAbs();
+    const lr = PJ.loopRange(P, T.mode, L);
+    if (P.bpm !== T.bpm || L !== T.L || lr.start !== T.S || lr.end !== T.E) {
+      // tempo, length or loop region changed while playing: carry on from the current song position
+      const b = beatAbs();
+      let pos = songPos(b);
       const ahead = T.sched - b;
-      if (b >= 0 && looping()) b = ((b % T.L) + T.L) % T.L;
-      if (b >= 0 && looping() && b >= L) b = b % L;
-      T.beat0 = b; T.t0 = now; T.sched = b + ahead * (T.bpm / P.bpm);
-      T.bpm = P.bpm; T.L = L;
+      if (looping() && (pos < lr.start || pos >= lr.end)) pos = lr.start;
+      T.beat0 = pos; T.t0 = now; T.sched = pos + ahead * (T.bpm / P.bpm);
+      T.bpm = P.bpm; T.L = L; T.S = lr.start; T.E = lr.end;
       T.M.setBpm(P.bpm);
     }
     const endB = T.beat0 + (now + 0.15 - T.t0) / spb();
     if (endB > T.sched) {
-      const a = T.sched, b = endB;
       if (looping()) {
-        for (let k = Math.floor(a / L); k * L < b; k++) {
-          const lo = Math.max(a, k * L), hi = Math.min(b, (k + 1) * L);
-          if (hi > lo) {
-            scheduleEvents(actx, T.M, items, lo - k * L, hi - k * L, k * L, timeOf, T.bpm);
-            clicks(lo, hi, false);
-          }
+        // cut the window at every loop boundary
+        let a = T.sched;
+        const span = T.E - T.S;
+        for (let guard = 0; a < endB - 1e-9 && guard < 64; guard++) {
+          const pos = songPos(a), off = a - pos;
+          const wrapAt = a < T.E ? T.E : T.E + (Math.floor((a - T.E) / span) + 1) * span;
+          const b = Math.min(endB, wrapAt);
+          scheduleEvents(actx, T.M, items, pos, pos + (b - a), off, timeOf, T.bpm);
+          clicks(pos, pos + (b - a), off, false);
+          a = b;
         }
       } else {
+        const a = T.sched, b = endB;
         // a recording count-in starts before the marker: only clicks there
         const lo = Math.max(a, T.rec ? T.from + 4 : 0);
         if (lo < b && a < L) scheduleEvents(actx, T.M, items, lo, Math.min(b, L), 0, timeOf, T.bpm, T.skipTrack);
-        clicks(a, b, T.rec && !items.some((it) => it.track.id !== T.skipTrack && PJ.audible(P, it.track)));
+        clicks(a, b, 0, T.rec && !items.some((it) => it.track.id !== T.skipTrack && PJ.audible(P, it.track)));
       }
       T.sched = endB;
     }
     if (!looping() && !T.rec && beatAbs() > L + 0.5) stopAll();
   }
 
-  function clicks(a, b, always) {
-    for (let k = Math.ceil(a - EPS); k < b - EPS; k++) {
+  /* metronome clicks on whole beats of the song positions [lo, hi), played at abs = pos + off */
+  function clicks(lo, hi, off, always) {
+    for (let k = Math.ceil(lo - EPS); k < hi - EPS; k++) {
       const countIn = T.rec && k < T.from + 4;
-      if (P.click || countIn || always) clickAt(actx, T.M.master, timeOf(k), (((k - (T.rec ? T.from + 4 : 0)) % 4) + 4) % 4 === 0, T.M.live);
+      if (P.click || countIn || always) clickAt(actx, T.M.master, timeOf(k + off), ((k % 4) + 4) % 4 === 0, T.M.live);
     }
   }
 
   /* Song (or pattern) position: wrapped into the loop. During a count-in, before the marker. */
   function transportPos() {
     if (!T.on) return null;
-    const b = beatAbs();
-    return looping() && b >= 0 ? b % T.L : b;
+    return songPos(beatAbs());
   }
 
   /* Where the playhead is inside the pattern being edited, or null. */
@@ -310,6 +327,7 @@
       showPos(shown);
       const N = curPat().bars * PJ.STEPS_PER_BAR;
       rack.setPlayhead(eb != null && eb >= 0 && curTrack().type === 'drums' ? Math.floor(eb * 4 + 1e-6) % N : -1);
+      mixer.meter(T.on ? (id) => T.M.level(id) : null);
       roll.draw();
       playlist.draw();
       T.raf = requestAnimationFrame(tickUI);
@@ -340,6 +358,7 @@
     $('playBtn').classList.remove('on');
     $('playLabel').textContent = 'Play';
     rack.setPlayhead(-1);
+    mixer.meter(null);
     showPos(null);
     roll.draw();
     playlist.draw();
@@ -599,7 +618,7 @@
     const tracks = PJ.midiTracks(P, P.mode);
     if (!tracks.length) { say('There is nothing to export in ' + whatPlays() + ' yet.', 'warn'); return; }
     const name = slug() + (P.mode === 'pattern' ? '-' + curPat().name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : '') + '.mid';
-    downloadBlob(new Blob([E.writeMidiTracks(tracks, P.bpm)], { type: 'audio/midi' }), name);
+    downloadBlob(new Blob([E.writeMidiTracks(tracks, P.bpm, P.mode === 'song' ? P.markers : [])], { type: 'audio/midi' }), name);
     say('Saved ' + name + ' with ' + whatPlays() + ': ' + tracks.length + (tracks.length === 1 ? ' track' : ' tracks') + ', drums on channel 10. Set your music program to ' + P.bpm + ' BPM.');
   }
 
@@ -612,7 +631,7 @@
     $('wavBtn').disabled = true;
     try {
       const oac = new Ctx(2, Math.ceil((secs + 2.5) * sr), sr);
-      const M = SND.createMixer(oac, { bpm: P.bpm });
+      const M = SND.createMixer(oac, { bpm: P.bpm, master: P.master });
       M.live = null;
       scheduleEvents(oac, M, items, 0, L, 0, (b) => 0.02 + b * 60 / P.bpm, P.bpm);
       const buf = await oac.startRendering();
@@ -713,7 +732,7 @@
     $('drumCtl').hidden = synth;
     if (synth) {
       $('instrument').value = t.instrument;
-      $('echo').checked = t.echo;
+      $('echo').checked = (t.echoSend || 0) > 0;
     } else {
       $('drumBars').value = pat.bars;
       $('swing').value = Math.round((t.swing || 0) * 100);
@@ -770,7 +789,7 @@
       showPos(null); playlist.draw();
       if (T.on && !T.rec) play();
     },
-    trackChanged: (t) => { if (T.on && T.M) T.M.update(t); },
+    trackChanged: (t) => { if (T.on && T.M) T.M.update(t); mixer.render(); },
     removeTrack: (id) => {
       const t = PJ.track(P, id);
       commit(() => PJ.deleteTrack(P, id));
@@ -781,7 +800,14 @@
   if (curTrack().type === 'synth') lastSynth = curTrack().id;
 
   // handle for debugging and tests (and, later, for an AI helper to read and write the project)
-  window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, transport: T };
+  const mixer = new BDJ.Mixer($('mixer'), {
+    project: () => P,
+    begin, end, changed, select,
+    trackChanged: (t) => { if (T.on && T.M) T.M.update(t); },
+    masterChanged: (v) => { if (T.on && T.M) T.M.setMaster(v); },
+  });
+
+  window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, mixer, transport: T };
 
   /* ---------- wiring ---------- */
   E.NOTE_NAMES.forEach((nm, i) => $('root').add(new Option(nm, i)));
@@ -885,6 +911,21 @@
     say('Added a drum track. Load a pattern or click steps in the editor below.');
   });
   on('plFit', 'click', () => playlist.fit());
+  on('addMarker', 'click', () => playlist.addMarkerAt(songCursor));
+  on('clearLoop', 'click', () => {
+    if (!P.region) { say('Drag along the playlist ruler to make a loop region.'); return; }
+    commit(() => { P.region = null; });
+  });
+
+  // mixer panel: shown or hidden, remembered in this browser
+  const setMixerOpen = (open) => {
+    $('mixerBody').hidden = !open;
+    $('mixerToggle').textContent = open ? 'Hide' : 'Show';
+    $('mixerToggle').setAttribute('aria-expanded', String(open));
+    try { localStorage.setItem('browserdj.ui.mixer', open ? '1' : '0'); } catch (err) { /* storage blocked */ }
+    if (open) mixer.render();
+  };
+  on('mixerToggle', 'click', () => setMixerOpen($('mixerBody').hidden));
 
   // editor: patterns
   on('patSel', 'change', () => select(P.sel.trackId, +$('patSel').value));
@@ -913,7 +954,8 @@
 
   // editor: synth
   on('instrument', 'change', () => { commit(() => { curTrack().instrument = $('instrument').value; }); preview(60); });
-  on('echo', 'change', () => commit(() => { curTrack().echo = $('echo').checked; }));
+  // the mixer sets the exact amount; this checkbox is the quick on/off
+  on('echo', 'change', () => commit(() => { curTrack().echoSend = $('echo').checked ? 1 : 0; }));
   on('snap', 'change', () => commit(() => { P.snap = +$('snap').value; if (takeFresh()) rederive(); }));
   on('bars', 'change', () => {
     const pat = curPat();
@@ -988,6 +1030,9 @@
   syncControls();
   renderEditor();
   playlist.renderHeads();
+  let mixOpen = true;
+  try { mixOpen = localStorage.getItem('browserdj.ui.mixer') !== '0'; } catch (err) { /* storage blocked */ }
+  setMixerOpen(mixOpen);
   refreshInfo();
   updateUndo();
   showPos(null);

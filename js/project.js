@@ -65,9 +65,10 @@ BDJ.Project = (() => {
     const n = p.tracks.filter((t) => t.type === type).length + 1;
     const t = {
       id: p.nextId++, type, name: opts.name || (type === 'drums' ? 'Drums' : 'Synth') + (n > 1 ? ' ' + n : ''),
-      color: opts.color || nextColor(p), volume: 0.8, mute: false, solo: false,
+      color: opts.color || nextColor(p), volume: 0.8, pan: 0, mute: false, solo: false,
+      echoSend: type === 'drums' ? 0 : opts.echo === false ? 0 : 1,
     };
-    if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; } else { t.instrument = opts.instrument || 'pluck'; t.echo = opts.echo !== false; }
+    if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; } else { t.instrument = opts.instrument || 'pluck'; }
     p.tracks.push(t);
     addPattern(p, t.id);
     return t;
@@ -164,6 +165,20 @@ BDJ.Project = (() => {
   }
   const snapBeats = (p) => (p.snap ? 4 / p.snap : 0);
 
+  /* The part that loops: the playlist's loop region in song mode, otherwise everything. */
+  function loopRange(p, mode, length) {
+    const r = p.region;
+    if (mode === 'song' && r && r.end > r.start) return { start: r.start, end: r.end };
+    return { start: 0, end: length };
+  }
+
+  function addMarker(p, beat, name) {
+    const m = { id: p.nextId++, beat: Math.max(0, beat), name: (name || 'Marker').slice(0, 40) };
+    p.markers.push(m);
+    p.markers.sort((a, b) => a.beat - b.beat);
+    return m;
+  }
+
   /* What plays: [{track, pattern, start, len}] in beats, plus the loop length. */
   function playItems(p, mode) {
     if (mode === 'pattern') {
@@ -221,6 +236,7 @@ BDJ.Project = (() => {
     return {
       version: 2, name: 'Untitled', bpm: 120, root: 0, scale: 'major', snap: 16, loop: true, click: false, mode: 'pattern',
       capture: { detail: 0.5, fixTuning: true, playBeat: false },
+      master: 0.85, region: null, markers: [],
       tracks: [], patterns: [], clips: [], sel: { trackId: 0, patternId: 0 }, nextId: 1,
     };
   }
@@ -261,6 +277,9 @@ BDJ.Project = (() => {
     addClip(p, fill, 28, 4);
     addClip(p, bl, 8, 24);
     addClip(p, hook, 16, 16);
+    addMarker(p, 0, 'Intro');
+    addMarker(p, 16, 'Hook');
+    bass.pan = -0.1; lead.pan = 0.15;
     select(p, lead.id, hook.id);
     return p;
   }
@@ -319,6 +338,14 @@ BDJ.Project = (() => {
     p.mode = o.mode === 'song' ? 'song' : 'pattern';
     const c = o.capture || {};
     p.capture = { detail: num(c.detail, 0.5, 0, 1), fixTuning: c.fixTuning !== false, playBeat: !!c.playBeat };
+    p.master = num(o.master, 0.85, 0, 1);
+    if (o.region && isFinite(+o.region.start) && isFinite(+o.region.end) && +o.region.end - +o.region.start >= 0.25) {
+      p.region = { start: num(o.region.start, 0, 0, 100000), end: num(o.region.end, 4, 0.25, 100000) };
+    }
+    p.markers = (Array.isArray(o.markers) ? o.markers : []).slice(0, 200)
+      .filter((m) => m && isFinite(+m.beat))
+      .map((m) => ({ id: p.nextId++, beat: num(m.beat, 0, 0, 100000), name: str(m.name, 'Marker', 40) }))
+      .sort((a, b) => a.beat - b.beat);
 
     // ids are renumbered; keep maps from the old ones
     const tMap = new Map(), pMap = new Map();
@@ -327,7 +354,9 @@ BDJ.Project = (() => {
       const nt = {
         id: p.nextId++, type: t.type, name: str(t.name, t.type === 'drums' ? 'Drums' : 'Synth'),
         color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : nextColor(p),
-        volume: num(t.volume, 0.8, 0, 1), mute: !!t.mute, solo: !!t.solo,
+        volume: num(t.volume, 0.8, 0, 1), pan: num(t.pan, 0, -1, 1), mute: !!t.mute, solo: !!t.solo,
+        // older saves had echo on/off for synths
+        echoSend: t.echoSend != null ? num(t.echoSend, 0, 0, 1) : t.type === 'synth' && t.echo !== false ? 1 : 0,
       };
       if (t.type === 'drums') {
         nt.swing = num(t.swing, 0, 0, 0.6);
@@ -335,7 +364,6 @@ BDJ.Project = (() => {
         nt.kit = kit().map((d) => { const r = k.find((x) => x && x.id === d.id) || {}; return { id: d.id, vol: num(r.vol, 0.8, 0, 1), mute: !!r.mute, solo: !!r.solo }; });
       } else {
         nt.instrument = BDJ.Sound.INSTRUMENTS.some((i) => i.id === t.instrument) ? t.instrument : 'pluck';
-        nt.echo = t.echo !== false;
       }
       tMap.set(t.id, nt);
       p.tracks.push(nt);
@@ -408,9 +436,10 @@ BDJ.Project = (() => {
           : { start: ev.at, len: 0.2, pitch: BDJ.Sound.DRUMS.find((d) => d.id === ev.drum).gm, vel: Math.max(1, Math.round(ev.vel * (0.4 + 0.6 * ev.gain))) });
       });
       if (!notes.length) continue;
-      if (t.type === 'drums') { out.push({ name: t.name, channel: 9, notes }); continue; }
+      const controllers = [{ cc: 7, value: t.volume * 127 }, { cc: 10, value: 64 + (t.pan || 0) * 63 }];
+      if (t.type === 'drums') { out.push({ name: t.name, channel: 9, notes, controllers }); continue; }
       const inst = BDJ.Sound.INSTRUMENTS.find((i) => i.id === t.instrument);
-      out.push({ name: t.name, channel: ch, program: inst ? inst.program : 0, notes });
+      out.push({ name: t.name, channel: ch, program: inst ? inst.program : 0, notes, controllers });
       ch = ch + 1 === 9 ? 10 : (ch + 1) % 16;
     }
     return out;
@@ -433,7 +462,7 @@ BDJ.Project = (() => {
     track, pattern, patternsOf, selTrack, selPattern, select,
     blank, example, normalize, serialize,
     addTrack, addPattern, clonePattern, deletePattern, deleteTrack, addClip, uniqueName,
-    applyPreset, setDrumBars, notesEnd, patternBeats, songBeats, snapBeats, playItems, eventsIn, audible,
+    applyPreset, setDrumBars, notesEnd, patternBeats, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker,
     deriveFromTake, detectKey, midiTracks, History,
   };
 })();

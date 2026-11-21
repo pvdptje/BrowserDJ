@@ -459,7 +459,7 @@ const HumEngine = (() => {
 
   /* ---------- Multi-track standard MIDI file (format 1), timed in beats ----------
      tracks: [{name, channel (0-15), notes:[{start, len, pitch, vel}]}] with start/len in quarter notes. */
-  function writeMidiTracks(tracks, bpm) {
+  function writeMidiTracks(tracks, bpm, markers = []) {
     const PPQ = 480;
     const vlq = (v) => {
       const b = [v & 0x7f];
@@ -476,8 +476,16 @@ const HumEngine = (() => {
       ...text(0x03, 'BrowserDJ'),
       0x00, 0xff, 0x51, 0x03, (usPerQ >> 16) & 0xff, (usPerQ >> 8) & 0xff, usPerQ & 0xff,
       0x00, 0xff, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08,
-      0x00, 0xff, 0x2f, 0x00,
     ];
+    // markers (meta 0x06) so music programs show the song sections
+    let lastM = 0;
+    for (const m of markers.slice().sort((a, b) => a.beat - b.beat)) {
+      const t = Math.max(0, Math.round(m.beat * PPQ));
+      const s = Array.from(new TextEncoder().encode(String(m.name || 'Marker')));
+      conductor.push(...vlq(t - lastM), 0xff, 0x06, ...vlq(s.length), ...s);
+      lastM = t;
+    }
+    conductor.push(0x00, 0xff, 0x2f, 0x00);
     const out = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, tracks.length + 1, (PPQ >> 8) & 0xff, PPQ & 0xff, ...chunk(conductor)];
     for (const tr of tracks) {
       const ch = tr.channel & 0x0f;
@@ -493,6 +501,8 @@ const HumEngine = (() => {
       ev.sort((x, y) => x.t - y.t || x.order - y.order);
       const body = [...text(0x03, tr.name || 'Track')];
       if (tr.program != null && ch !== 9) body.push(0x00, 0xc0 | ch, tr.program & 0x7f);
+      // controllers at the start, e.g. {cc: 7, value} volume and {cc: 10, value} pan
+      for (const c of tr.controllers || []) body.push(0x00, 0xb0 | ch, c.cc & 0x7f, Math.max(0, Math.min(127, Math.round(c.value))));
       let last = 0;
       for (const e of ev) { body.push(...vlq(e.t - last), ...e.data); last = e.t; }
       body.push(0x00, 0xff, 0x2f, 0x00);

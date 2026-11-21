@@ -5,7 +5,8 @@ window.BDJ = window.BDJ || {};
 BDJ.Playlist = (() => {
   'use strict';
   const PJ = () => BDJ.Project;
-  const RULER = 26, ROW = 52, EDGE = 8;
+  const RULER = 38, MARK = 17, ROW = 52, EDGE = 8; // ruler: markers + loop band on top (MARK), bar numbers below
+  const MARKER_COLOR = '#ffe066';
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -138,6 +139,7 @@ BDJ.Playlist = (() => {
       c.addEventListener('pointercancel', (e) => this.up(e));
       c.addEventListener('wheel', (e) => this.wheel(e), { passive: false });
       c.addEventListener('keydown', (e) => this.key(e));
+      c.addEventListener('dblclick', (e) => this.dbl(e));
     }
     pos(e) { const r = this.c.getBoundingClientRect(); return { px: e.clientX - r.left, py: e.clientY - r.top }; }
 
@@ -149,8 +151,7 @@ BDJ.Playlist = (() => {
         e.preventDefault();
         this.drag = { mode: 'pan', px, x0: this.view.x0 };
       } else if (py < RULER) {
-        this.drag = { mode: 'ruler' };
-        this.host.setCursor(this.snapFloor(this.beatAt(px), free));
+        this.rulerDown(e, px, py, free);
       } else if (e.button === 2) {
         this.drag = { mode: 'erase', before: this.host.begin(), changed: false };
         this.erase(px, py);
@@ -184,6 +185,79 @@ BDJ.Playlist = (() => {
       this.draw();
     }
 
+    /* Ruler: markers on top, loop region edges, click to set the marker, drag to draw a loop region. */
+    markerAt(px) { return (this.markerRects || []).find((r) => px >= r.x0 - 3 && px <= r.x1 + 2); }
+    loopEdgeAt(px) {
+      const R = this.p.region;
+      if (!R) return null;
+      if (Math.abs(px - this.x(R.start)) < 6) return 'start';
+      if (Math.abs(px - this.x(R.end)) < 6) return 'end';
+      return null;
+    }
+    rulerDown(e, px, py, free) {
+      const p = this.p, hitM = py < MARK ? this.markerAt(px) : null;
+      const mk = hitM && p.markers.find((m) => m.id === hitM.id);
+      if (e.button === 2) {
+        const before = this.host.begin();
+        const b = this.beatAt(px);
+        if (mk) p.markers = p.markers.filter((m) => m !== mk);
+        else if (p.region && b >= p.region.start && b <= p.region.end) p.region = null;
+        else return;
+        this.host.end(before);
+        this.host.changed('song');
+        return;
+      }
+      if (mk) { this.drag = { mode: 'marker', id: mk.id, b0: this.beatAt(px), beat0: mk.beat, before: this.host.begin(), changed: false }; return; }
+      const edge = this.loopEdgeAt(px);
+      if (edge) { this.drag = { mode: 'loop', edge, before: this.host.begin(), changed: false }; return; }
+      const b = this.snapFloor(this.beatAt(px), free);
+      this.drag = { mode: 'ruler', px0: px, b0: b, before: this.host.begin(), changed: false, creating: false };
+      this.host.setCursor(b);
+    }
+    rulerMove(d, px, free) {
+      const p = this.p, minLen = free ? 1 : 4;
+      if (d.mode === 'marker') {
+        const m = p.markers.find((x) => x.id === d.id);
+        const nb = this.snap(d.beat0 + this.beatAt(px) - d.b0, free);
+        if (m && nb !== m.beat) { m.beat = nb; d.changed = true; }
+      } else if (d.mode === 'loop') {
+        const R = p.region, nb = this.snap(this.beatAt(px), free);
+        if (d.edge === 'start') R.start = clamp(nb, 0, R.end - minLen); else R.end = Math.max(nb, R.start + minLen);
+        d.changed = true;
+      } else {
+        if (!d.creating && Math.abs(px - d.px0) > 6) d.creating = true;
+        if (!d.creating) return;
+        const b1 = this.snap(this.beatAt(px), free);
+        const a = Math.min(d.b0, b1);
+        let z = Math.max(d.b0, b1);
+        if (z - a < minLen) z = a + minLen;
+        p.region = { start: a, end: z };
+        d.changed = true;
+      }
+      this.host.changed('live');
+    }
+    rulerUp(d) {
+      const p = this.p;
+      if (d.mode === 'marker' && !d.changed) {
+        const m = p.markers.find((x) => x.id === d.id);
+        if (m) this.host.setCursor(m.beat);
+        return;
+      }
+      if (!d.changed) return;
+      this.host.end(d.before);
+      this.host.changed('song');
+      if (d.mode === 'ruler' && p.region) this.host.setCursor(p.region.start);
+    }
+    addMarkerAt(beat) {
+      const p = this.p;
+      const name = window.prompt('Name this marker', 'Part ' + (p.markers.length + 1));
+      if (name === null) return;
+      const before = this.host.begin();
+      PJ().addMarker(p, beat, name.trim() || 'Marker');
+      this.host.end(before);
+      this.host.changed('song');
+    }
+
     brush(t) {
       const p = this.p;
       if (p.sel.trackId === t.id) return PJ().selPattern(p);
@@ -197,14 +271,14 @@ BDJ.Playlist = (() => {
       const d = this.drag;
       if (!d) {
         let cur = 'crosshair';
-        if (py < RULER) cur = 'text';
+        if (py < RULER) cur = py < MARK && this.markerAt(px) ? 'grab' : this.loopEdgeAt(px) ? 'ew-resize' : 'text';
         else { const h = this.clipAt(px, py); if (h) cur = h.edge ? 'ew-resize' : 'grab'; else if (!this.p.tracks[this.rowAt(py)]) cur = 'default'; }
         this.c.style.cursor = cur;
         return;
       }
       const free = e.altKey;
       if (d.mode === 'pan') { this.view.x0 = Math.max(0, d.x0 - (px - d.px) / this.view.ppb); }
-      else if (d.mode === 'ruler') this.host.setCursor(this.snapFloor(this.beatAt(px), free));
+      else if (d.mode === 'ruler' || d.mode === 'marker' || d.mode === 'loop') this.rulerMove(d, px, free);
       else if (d.mode === 'erase') this.erase(px, py);
       else {
         const c = this.p.clips.find((x) => x.id === d.clip);
@@ -228,8 +302,14 @@ BDJ.Playlist = (() => {
       if (!d) return;
       this.drag = null;
       try { this.c.releasePointerCapture(e.pointerId); } catch (err) { /* not captured */ }
-      if (d.before != null && d.changed) { this.host.end(d.before); this.host.changed('clips'); }
+      if (d.mode === 'ruler' || d.mode === 'marker' || d.mode === 'loop') this.rulerUp(d);
+      else if (d.before != null && d.changed) { this.host.end(d.before); this.host.changed('clips'); }
       this.draw();
+    }
+
+    dbl(e) {
+      const { px, py } = this.pos(e);
+      if (py < RULER && !(py < MARK && this.markerAt(px))) this.addMarkerAt(this.snapFloor(this.beatAt(px), e.altKey));
     }
 
     erase(px, py) {
@@ -347,20 +427,58 @@ BDJ.Playlist = (() => {
         if (w > 18) { g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + w - 4, y + 19, 1.5, h - 24); }
       }
 
+      // markers: a line through the lanes
+      for (const m of p.markers) {
+        const x = Math.round(this.x(m.beat));
+        if (x < -1 || x > W) continue;
+        g.fillStyle = 'rgba(255,224,102,0.35)';
+        for (let yy = RULER; yy < H; yy += 6) g.fillRect(x, yy, 1, 3);
+      }
+
       // ruler
       g.fillStyle = C.panel; g.fillRect(0, 0, W, RULER);
       g.fillStyle = C.line; g.fillRect(0, RULER - 1, W, 1);
+      g.fillStyle = 'rgba(255,255,255,0.05)'; g.fillRect(0, MARK, W, 1);
+      // loop region: a band on the ruler and a light wash over the lanes
+      const R = p.region;
+      if (R) {
+        const xs = this.x(R.start), xw = (R.end - R.start) * v.ppb, live = p.loop;
+        g.fillStyle = live ? 'rgba(88,214,197,0.07)' : 'rgba(255,255,255,0.03)';
+        g.fillRect(xs, RULER, xw, H - RULER);
+        g.fillStyle = live ? 'rgba(88,214,197,0.22)' : 'rgba(255,255,255,0.08)';
+        g.fillRect(xs, 0, xw, RULER - 1);
+        g.fillStyle = live ? C.trace : C.muted;
+        g.fillRect(xs, 0, xw, 3);
+        g.fillRect(Math.round(xs), 0, 2, H);
+        g.fillRect(Math.round(xs + xw) - 2, 0, 2, H);
+      }
       g.font = '11px ' + this.mono();
+      g.textBaseline = 'middle';
       const label = v.ppb * 4 < 16 ? 4 : v.ppb * 4 < 30 ? 2 : 1;
+      const numY = MARK + (RULER - MARK) / 2;
       for (let bar = Math.floor(v.x0 / 4); bar * 4 <= b1; bar++) {
         const x = Math.round(this.x(bar * 4));
-        g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(x, 12, 1, RULER - 12);
-        if (bar % label === 0) { g.fillStyle = bar * 4 < L ? C.text : C.muted; g.fillText(String(bar + 1), x + 4, RULER / 2); }
+        g.fillStyle = 'rgba(255,255,255,0.22)'; g.fillRect(x, MARK + 4, 1, RULER - MARK - 4);
+        if (bar % label === 0) { g.fillStyle = bar * 4 < L ? C.text : C.muted; g.fillText(String(bar + 1), x + 4, numY); }
+      }
+      // marker flags on the top row
+      this.markerRects = [];
+      g.font = '600 11px ' + this.sans();
+      for (const m of p.markers) {
+        const x = Math.round(this.x(m.beat));
+        const tw = Math.min(140, g.measureText(m.name).width) + 10;
+        if (x + tw < 0 || x > W) continue;
+        g.fillStyle = MARKER_COLOR;
+        this.rr(x, 2, tw, MARK - 3, 3); g.fill();
+        g.fillRect(x, 2, 2, RULER - 2);
+        g.fillStyle = '#2a2306';
+        g.fillText(m.name, x + 5, 2 + (MARK - 3) / 2 + 0.5, tw - 8);
+        this.markerRects.push({ id: m.id, x0: x, x1: x + tw });
       }
       // song cursor
       const cx = this.x(this.host.cursor());
       g.fillStyle = C.trace;
-      g.beginPath(); g.moveTo(cx - 6, 2); g.lineTo(cx + 6, 2); g.lineTo(cx, 11); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(cx - 6, MARK + 1); g.lineTo(cx + 6, MARK + 1); g.lineTo(cx, MARK + 10); g.closePath(); g.fill();
       g.globalAlpha = 0.5; g.fillRect(Math.round(cx), RULER, 1, H - RULER); g.globalAlpha = 1;
       // playhead
       const ph = this.host.playhead();

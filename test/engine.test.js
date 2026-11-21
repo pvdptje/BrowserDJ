@@ -245,13 +245,44 @@ test('normalize round-trips v2 and migrates a v1 project', () => {
   assert.strictEqual(m.bpm, 98);
   eq(m.tracks.map((t) => [t.name, t.type]), [['Melody', 'synth'], ['Drums', 'drums']]);
   assert.strictEqual(m.tracks[0].instrument, 'bell');
-  assert.strictEqual(m.tracks[0].echo, false);
+  assert.strictEqual(m.tracks[0].echoSend, 0); // echo was off in the old save
   assert.strictEqual(m.tracks[1].swing, 0.2);
   assert.strictEqual(m.tracks[1].kit.find((k) => k.id === 'kick').vol, 0.5);
   eq(m.clips.map((c) => [c.start, c.len]), [[0, 16], [0, 16]]);
   assert.strictEqual(PJ.songBeats(m), 16);
   const junk = PJ.normalize({ version: 2, tracks: [{ id: 5, type: 'nope' }], clips: [{ patternId: 77 }] });
   assert.ok(junk.tracks.length >= 1 && junk.clips.length === 0);
+  // a v2 save from before the mixer: echo on/off becomes an amount, pan defaults to centre
+  const pre = PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'synth', echo: true }, { id: 2, type: 'synth', echo: false }, { id: 3, type: 'drums' }] });
+  eq(pre.tracks.map((t) => [t.echoSend, t.pan]), [[1, 0], [0, 0], [0, 0]]);
+  assert.strictEqual(pre.master, 0.85);
+  assert.strictEqual(pre.region, null);
+});
+
+test('loop region, markers and mixer settings round-trip', () => {
+  const p = PJ.example();
+  eq(PJ.loopRange(p, 'song', 32), { start: 0, end: 32 });
+  p.region = { start: 8, end: 16 };
+  eq(PJ.loopRange(p, 'song', 32), { start: 8, end: 16 });
+  eq(PJ.loopRange(p, 'pattern', 8), { start: 0, end: 8 }); // the region only applies to the song
+  PJ.addMarker(p, 24, 'Drop');
+  p.tracks[0].pan = -0.5; p.tracks[0].echoSend = 0.3; p.master = 0.6;
+  const back = PJ.normalize(JSON.parse(PJ.serialize(p)));
+  eq(back.region, { start: 8, end: 16 });
+  eq(back.markers.map((m) => [m.beat, m.name]), [[0, 'Intro'], [16, 'Hook'], [24, 'Drop']]);
+  eq([back.tracks[0].pan, back.tracks[0].echoSend, back.master], [-0.5, 0.3, 0.6]);
+  // a region too short to loop is dropped
+  assert.strictEqual(PJ.normalize({ ...JSON.parse(PJ.serialize(p)), region: { start: 4, end: 4 } }).region, null);
+});
+
+test('MIDI carries markers and per-track volume and pan', () => {
+  const p = PJ.example();
+  p.tracks[1].pan = -1; p.tracks[1].volume = 0.5;
+  const m = parseMidi(E.writeMidiTracks(PJ.midiTracks(p, 'song'), p.bpm, p.markers));
+  const marks = m.tracks[0].filter((e) => e.meta === 0x06).map((e) => [e.tick / 480, String.fromCharCode(...e.data)]);
+  eq(marks, [[0, 'Intro'], [16, 'Hook']]);
+  const cc = m.tracks[2].filter((e) => e.type === 0xb0).map((e) => [e.a, e.b]); // the bass track
+  eq(cc, [[7, 64], [10, 1]]);
 });
 
 test('history undo/redo', () => {

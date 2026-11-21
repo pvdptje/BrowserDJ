@@ -87,6 +87,9 @@
       <h2>Playlist</h2>
       <span id="songInfo" class="summary"></span>
       <span class="spacer"></span>
+      <button id="addMarker" class="btn small" type="button" title="Add a named marker at the song marker (or double-click the ruler)">+ Marker</button>
+      <button id="clearLoop" class="btn small" type="button" title="Remove the loop region (drag along the ruler to make one)">Clear loop</button>
+      <span class="sep"></span>
       <button id="addSynth" class="btn small" type="button">+ Synth track</button>
       <button id="addDrums" class="btn small" type="button">+ Drum track</button>
       <button id="plFit" class="btn small" type="button" title="Zoom to the whole song">Zoom to fit</button>
@@ -158,6 +161,16 @@
     <div id="rack" class="rack" hidden></div>
   </section>
 
+  <section class="panel" aria-label="Mixer">
+    <div class="phead">
+      <h2>Mixer</h2>
+      <span class="muted small">Volume, pan and echo per track. The meters move while playing.</span>
+      <span class="spacer"></span>
+      <button id="mixerToggle" class="btn small" type="button" aria-controls="mixerBody" aria-expanded="true">Hide</button>
+    </div>
+    <div id="mixerBody"><div id="mixer" class="mixer"></div></div>
+  </section>
+
   <details class="help">
     <summary>Mouse and keyboard</summary>
     <div class="helpgrid">
@@ -189,6 +202,8 @@
           <li>Clips snap to bars. Hold <b>Alt</b> to snap to beats</li>
           <li>Clips are links: change the pattern once and every clip of it changes. Use <b>Clone</b> to make a variation</li>
           <li>Click the playlist&rsquo;s <b>ruler</b> to play the song from there, the piano roll&rsquo;s ruler to loop the pattern</li>
+          <li><b>Drag along the ruler</b> to make a loop region; drag its edges to change it, right-click it to remove it</li>
+          <li><b>Double-click the ruler</b> to add a marker. Click a marker to jump there, drag to move it, right-click to delete it</li>
         </ul></div>
       <div><h3>Drums</h3>
         <ul>
@@ -212,6 +227,7 @@
 <script src="js/pianoroll.js"></script>
 <script src="js/drums.js"></script>
 <script src="js/playlist.js"></script>
+<script src="js/mixer.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
