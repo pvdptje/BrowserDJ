@@ -18,12 +18,16 @@
       <button id="newBtn" class="btn small" type="button">New</button>
       <button id="openBtn" class="btn small" type="button">Open</button>
       <button id="saveBtn" class="btn small" type="button" title="Save the project as a file">Save</button>
-      <button id="wavBtn" class="btn small" type="button" title="Render the song to a WAV file">Export WAV</button>
-      <button id="midiBtn" class="btn primary" type="button" title="Melody and drums as a MIDI file">Download MIDI</button>
+      <button id="wavBtn" class="btn small" type="button" title="Render what Play plays (song or pattern) to a WAV file">Export WAV</button>
+      <button id="midiBtn" class="btn primary" type="button" title="What Play plays (song or pattern) as a MIDI file, one track per instrument">Download MIDI</button>
     </div>
   </header>
 
   <section class="transport" aria-label="Transport">
+    <div class="seg" role="group" aria-label="What Play plays">
+      <button id="modePat" type="button" title="Loop the pattern you are editing">Pattern</button>
+      <button id="modeSong" type="button" title="Play the whole song from the playlist">Song</button>
+    </div>
     <div class="tgroup">
       <button id="playBtn" class="btn play" type="button" title="Play from the marker (Space)"><span class="ico" aria-hidden="true">&#9654;</span><span id="playLabel">Play</span></button>
       <button id="stopBtn" class="btn" type="button" title="Stop and move the marker back to the start">&#9632;<span class="sr">Stop</span></button>
@@ -78,19 +82,57 @@
   </section>
   <p id="status" role="status" aria-live="polite"></p>
 
-  <section class="panel" aria-label="Melody">
+  <section class="panel" aria-label="Playlist">
     <div class="phead">
-      <h2>Melody</h2>
-      <span id="takeChip" class="chip" hidden></span>
-      <span id="summary" class="summary"></span>
+      <h2>Playlist</h2>
+      <span id="songInfo" class="summary"></span>
       <span class="spacer"></span>
-      <label for="instrument" class="lab">Sound</label>
-      <select id="instrument"></select>
-      <label class="check" for="echo"><input id="echo" type="checkbox" checked> Echo</label>
-      <input id="melVol" type="range" min="0" max="100" value="80" class="vol" aria-label="Melody volume" title="Melody volume">
-      <button id="melMute" class="tog" type="button" aria-pressed="false" title="Mute melody">M</button>
+      <button id="addSynth" class="btn small" type="button">+ Synth track</button>
+      <button id="addDrums" class="btn small" type="button">+ Drum track</button>
+      <button id="plFit" class="btn small" type="button" title="Zoom to the whole song">Zoom to fit</button>
     </div>
-    <div class="ptools">
+    <div class="plgrid">
+      <div id="plHeads" class="plheads"></div>
+      <div class="pllanes"><canvas id="plCanvas" tabindex="0" aria-label="Playlist. Click a lane to place the track's pattern, drag clips to move them, drag a clip's right edge to repeat it, right-click to delete."></canvas></div>
+    </div>
+  </section>
+
+  <section class="panel editor" id="editor" aria-label="Pattern editor">
+    <div class="phead">
+      <span id="edSwatch" class="swatch" aria-hidden="true"></span>
+      <h2 id="edTrack">Track</h2>
+      <label for="patSel" class="sr">Pattern</label>
+      <select id="patSel" title="Patterns on this track"></select>
+      <button id="newPat" class="btn small" type="button" title="A new empty pattern on this track">+ New</button>
+      <button id="clonePat" class="btn small" type="button" title="Copy this pattern so you can make a variation">Clone</button>
+      <button id="renamePat" class="btn small" type="button">Rename</button>
+      <button id="delPat" class="btn small" type="button">Delete</button>
+      <span id="takeChip" class="chip" hidden></span>
+      <span id="patInfo" class="summary"></span>
+      <span id="patUses" class="muted small"></span>
+      <span class="spacer"></span>
+      <span id="synthCtl" class="ctl">
+        <label for="instrument" class="lab">Sound</label>
+        <select id="instrument"></select>
+        <label class="check" for="echo"><input id="echo" type="checkbox" checked> Echo</label>
+      </span>
+      <span id="drumCtl" class="ctl" hidden>
+        <label for="preset" class="sr">Load a drum pattern</label>
+        <select id="preset"><option value="">Load a beat…</option></select>
+        <label for="drumBars" class="lab">Length</label>
+        <select id="drumBars">
+          <option value="1">1 bar</option>
+          <option value="2">2 bars</option>
+          <option value="4">4 bars</option>
+          <option value="8">8 bars</option>
+        </select>
+        <label for="swing" class="lab">Swing</label>
+        <input id="swing" type="range" min="0" max="60" value="0" class="vol">
+        <button id="drumClear" class="btn small" type="button">Clear</button>
+      </span>
+    </div>
+    <p id="notInSong" class="edhint" hidden>This pattern is not in the song yet. Click its lane in the playlist to place it, or <button id="addToSong" class="linkbtn" type="button">add it after the last clip</button>.</p>
+    <div class="ptools" id="rollTools">
       <label for="snap" class="lab">Snap</label>
       <select id="snap">
         <option value="0">Off</option>
@@ -100,7 +142,7 @@
         <option value="32">1/32</option>
       </select>
       <label for="bars" class="lab">Bars</label>
-      <input id="bars" type="number" min="1" max="128" step="1" value="4">
+      <input id="bars" type="number" min="1" max="128" step="1" value="2">
       <span class="lab">Octave</span>
       <button id="octDown" class="btn small" type="button" title="Down an octave">&minus;</button>
       <button id="octUp" class="btn small" type="button" title="Up an octave">+</button>
@@ -109,31 +151,11 @@
       <button id="keyBtn" class="btn small" type="button" title="Move notes into the key">Fit to key</button>
       <button id="legatoBtn" class="btn small" type="button" title="Stretch each note up to the next one">Legato</button>
       <button id="clearMelBtn" class="btn small" type="button">Clear</button>
-      <button id="fitBtn" class="btn small" type="button" title="Zoom to the whole song">Zoom to fit</button>
+      <button id="fitBtn" class="btn small" type="button" title="Zoom to the whole pattern">Zoom to fit</button>
       <span class="hint">Edits apply to the selected notes, or all notes if none are selected.</span>
     </div>
     <div id="rollWrap"><canvas id="roll" tabindex="0" aria-label="Piano roll. Click to add notes, drag to move, drag the right edge to resize, right-click to delete."></canvas></div>
-  </section>
-
-  <section class="panel" aria-label="Drums">
-    <div class="phead">
-      <h2>Drums</h2>
-      <label for="preset" class="lab">Pattern</label>
-      <select id="preset"><option value="">Load a pattern…</option></select>
-      <label for="drumBars" class="lab">Length</label>
-      <select id="drumBars">
-        <option value="1">1 bar</option>
-        <option value="2">2 bars</option>
-        <option value="4">4 bars</option>
-      </select>
-      <label for="swing" class="lab">Swing</label>
-      <input id="swing" type="range" min="0" max="60" value="0" class="vol">
-      <span class="spacer"></span>
-      <button id="drumClear" class="btn small" type="button">Clear</button>
-      <input id="drumVol" type="range" min="0" max="100" value="85" class="vol" aria-label="Drums volume" title="Drums volume">
-      <button id="drumMute" class="tog" type="button" aria-pressed="false" title="Mute drums">M</button>
-    </div>
-    <div id="rack" class="rack"></div>
+    <div id="rack" class="rack" hidden></div>
   </section>
 
   <details class="help">
@@ -159,6 +181,15 @@
           <li><b>Q</b> quantize</li>
           <li><b>Wheel</b> scroll &nbsp; <b>Shift+wheel</b> scroll sideways &nbsp; <b>Ctrl+wheel</b> zoom &nbsp; <b>Alt+wheel</b> row height &nbsp; <b>Middle-drag</b> pan</li>
         </ul></div>
+      <div><h3>Playlist</h3>
+        <ul>
+          <li><b>Click</b> a lane to place that track&rsquo;s current pattern. <b>Click a clip</b> to edit its pattern below</li>
+          <li><b>Drag</b> a clip to move it, drag its <b>right edge</b> to repeat the pattern</li>
+          <li><b>Shift+drag</b> copies a clip. <b>Right-click</b> deletes it. <b>Delete</b> and <b>Ctrl+D</b> work on the selected clip</li>
+          <li>Clips snap to bars. Hold <b>Alt</b> to snap to beats</li>
+          <li>Clips are links: change the pattern once and every clip of it changes. Use <b>Clone</b> to make a variation</li>
+          <li>Click the playlist&rsquo;s <b>ruler</b> to play the song from there, the piano roll&rsquo;s ruler to loop the pattern</li>
+        </ul></div>
       <div><h3>Drums</h3>
         <ul>
           <li><b>Click</b> or drag across steps to turn them on or off</li>
@@ -180,6 +211,7 @@
 <script src="js/project.js"></script>
 <script src="js/pianoroll.js"></script>
 <script src="js/drums.js"></script>
+<script src="js/playlist.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

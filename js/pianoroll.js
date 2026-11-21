@@ -1,4 +1,4 @@
-/* BrowserDJ piano roll: a canvas editor for the melody.
+/* BrowserDJ piano roll: a canvas editor for the selected synth pattern.
    Click to add, drag to move, drag the right edge to resize, right-click to delete,
    Ctrl+drag to box-select, wheel to scroll, Ctrl+wheel to zoom. Times are in beats. */
 window.BDJ = window.BDJ || {};
@@ -8,9 +8,11 @@ BDJ.PianoRoll = (() => {
   const RULER = 24, KEYS = 54, VEL = 66, EDGE = 7;
   const BLACK = [1, 3, 6, 8, 10];
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  /* selected notes: the track colour mixed toward white */
+  const lighten = (hex) => { const n = parseInt(hex.slice(1), 16); const m = (c) => Math.round(c + (255 - c) * 0.6); return 'rgb(' + m(n >> 16) + ',' + m((n >> 8) & 255) + ',' + m(n & 255) + ')'; };
 
   class PianoRoll {
-    /* host: { project(), begin(), end(before), changed(kind), preview(pitch), playhead(), cursor(), setCursor(b), trace() } */
+    /* host: { project(), pattern(), length(), color(), begin(), end(before), changed(kind), preview(pitch), playhead(), cursor(), setCursor(b), trace() } */
     constructor(canvas, host) {
       this.c = canvas;
       this.g = canvas.getContext('2d');
@@ -35,7 +37,8 @@ BDJ.PianoRoll = (() => {
     }
 
     get p() { return this.host.project(); }
-    get notes() { return this.p.melody.notes; }
+    get notes() { return this.host.pattern().notes || []; }
+    set notes(v) { this.host.pattern().notes = v; }
 
     /* ---------- geometry ---------- */
     size() {
@@ -70,7 +73,7 @@ BDJ.PianoRoll = (() => {
     fit() {
       const { W, H } = this.size();
       const v = this.view;
-      const L = BDJ.Project.songBeats(this.p);
+      const L = this.host.length();
       v.ppb = clamp((W - KEYS - 16) / L, 14, 240);
       v.x0 = 0;
       const ns = this.notes;
@@ -116,7 +119,7 @@ BDJ.PianoRoll = (() => {
     addNote(start, pitch, len, vel = 100) {
       const p = this.p;
       const n = { id: p.nextId++, start: Math.max(0, start), len, pitch: clamp(pitch, 0, 127), vel };
-      p.melody.notes.push(n);
+      this.notes.push(n);
       return n;
     }
     sortNotes() { this.notes.sort((a, b) => a.start - b.start || a.pitch - b.pitch); }
@@ -133,7 +136,7 @@ BDJ.PianoRoll = (() => {
 
     deleteSel() {
       if (!this.sel.size) return;
-      this.edit(() => { this.p.melody.notes = this.notes.filter((n) => !this.sel.has(n.id)); this.sel.clear(); });
+      this.edit(() => { this.notes = this.notes.filter((n) => !this.sel.has(n.id)); this.sel.clear(); });
     }
     selectAll() { this.sel = new Set(this.notes.map((n) => n.id)); this.draw(); }
     targets() { return this.sel.size ? this.selected() : this.notes; }
@@ -368,7 +371,7 @@ BDJ.PianoRoll = (() => {
     erase(px, py) {
       const h = this.hit(px, py);
       if (!h) return;
-      this.p.melody.notes = this.notes.filter((n) => n !== h.note);
+      this.notes = this.notes.filter((n) => n !== h.note);
       this.sel.delete(h.note.id);
       this.drag.changed = true;
       this.host.changed('live');
@@ -433,6 +436,7 @@ BDJ.PianoRoll = (() => {
     }
 
     paint() {
+      if (!this.c.offsetParent || !this.host.pattern().notes) return; // hidden, or a drum pattern is selected
       const { W, H } = this.size();
       const c = this.c, g = this.g, dpr = window.devicePixelRatio || 1;
       if (c.width !== Math.round(W * dpr) || c.height !== Math.round(H * dpr)) {
@@ -443,7 +447,8 @@ BDJ.PianoRoll = (() => {
       this.clampView();
       const p = this.p, v = this.view, C = this.col;
       const GB = H - VEL;
-      const L = BDJ.Project.songBeats(p);
+      const L = this.host.length();
+      const NOTE = this.host.color();
       const steps = E.SCALES[p.scale].steps, keyed = p.scale !== 'chromatic';
       const pHi = Math.ceil(v.top), pLo = Math.max(0, Math.floor(this.pitchAt(GB)));
 
@@ -479,7 +484,7 @@ BDJ.PianoRoll = (() => {
       }
       // outside the song
       const xe = this.x(L);
-      if (xe < W) { g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(xe, RULER, W - xe, GB - RULER); g.fillStyle = C.note; g.fillRect(Math.round(xe), RULER, 1, GB - RULER); }
+      if (xe < W) { g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(xe, RULER, W - xe, GB - RULER); g.fillStyle = NOTE; g.fillRect(Math.round(xe), RULER, 1, GB - RULER); }
 
       // what the microphone heard
       const tr = this.host.trace();
@@ -508,7 +513,7 @@ BDJ.PianoRoll = (() => {
         if (y > GB || y + h < RULER) continue;
         const on = this.sel.has(n.id);
         g.globalAlpha = 0.5 + 0.5 * (n.vel / 127);
-        g.fillStyle = on ? C.select : C.note;
+        g.fillStyle = on ? lighten(NOTE) : NOTE;
         this.rr(x, y, w, h, 3);
         g.fill();
         g.globalAlpha = 1;
@@ -537,7 +542,7 @@ BDJ.PianoRoll = (() => {
         const x = this.x(n.start);
         if (x < KEYS - 6 || x > W) continue;
         const h = (vb - vt) * (n.vel / 127);
-        g.fillStyle = this.sel.has(n.id) ? C.select : C.note;
+        g.fillStyle = this.sel.has(n.id) ? lighten(NOTE) : NOTE;
         g.globalAlpha = 0.85;
         g.fillRect(Math.round(x), vb - h, 2, h);
         g.beginPath(); g.arc(Math.round(x) + 1, vb - h, 3, 0, Math.PI * 2); g.fill();

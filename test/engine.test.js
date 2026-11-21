@@ -84,7 +84,8 @@ test('deriveFromTake returns notes in beats', () => {
   const seg = E.segment(analyze(sig), 0.5);
   const p = PJ.blank();
   p.bpm = 120;
-  const d = PJ.deriveFromTake(p, { raw: seg.notes, tuning: seg.tuning, anchor: null });
+  const pat = PJ.selPattern(p);
+  const d = PJ.deriveFromTake(p, pat, { raw: seg.notes, tuning: seg.tuning, anchor: null });
   eq(d.notes.map((n) => [n.start, n.pitch]), [[0, 60], [1, 62], [2, 64], [3, 67], [5, 64]]);
   assert.ok(d.notes.every((n) => n.len > 0.5));
 });
@@ -125,51 +126,132 @@ function parseMidi(b) {
   return { format, ppq, tracks };
 }
 
-test('writeMidiTracks writes a valid format-1 file with melody and drums', () => {
+test('example song: tracks, patterns and clips', () => {
   const p = PJ.example();
-  const bytes = E.writeMidiTracks(PJ.midiTracks(p), p.bpm);
-  const m = parseMidi(bytes);
+  eq(p.tracks.map((t) => [t.name, t.type]), [['Drums', 'drums'], ['Bass', 'synth'], ['Lead', 'synth']]);
+  assert.strictEqual(PJ.songBeats(p), 32);
+  assert.strictEqual(PJ.selPattern(p).name, 'Hook');
+  assert.strictEqual(PJ.playItems(p, 'pattern').length, 8);
+  assert.strictEqual(PJ.playItems(p, 'song').items.length, 4);
+});
+
+test('eventsIn repeats patterns inside clips and stops at the clip end', () => {
+  const p = PJ.blank();
+  const t = p.tracks[0], pat = PJ.selPattern(p);
+  pat.bars = 1;
+  pat.notes = [{ id: 1, start: 0, len: 1, pitch: 60, vel: 100 }, { id: 2, start: 3.5, len: 2, pitch: 62, vel: 100 }];
+  // the second note runs past the bar, so the pattern loops every 2 bars; a 6-beat clip plays it once, cut short
+  PJ.addClip(p, pat, 8, 6);
+  const got = [];
+  const { items } = PJ.playItems(p, 'song');
+  // uneven windows, like the scheduler uses, must not double or drop anything
+  const cuts = [0, 3.3, 8, 8.07, 11.5, 12, 13.99, 20];
+  for (let i = 0; i < cuts.length - 1; i++) PJ.eventsIn(p, items, cuts[i], cuts[i + 1], (ev) => got.push([ev.at, ev.pitch, ev.len]));
+  eq(got, [[8, 60, 1], [11.5, 62, 2]]);
+  pat.notes[1].len = 0.5; // now it is a 1-bar pattern: plays 1.5 times, the last note cut at the clip end
+  got.length = 0;
+  PJ.addClip(p, pat, 20, 6);
+  const it2 = PJ.playItems(p, 'song').items;
+  for (let i = 0; i < 40; i++) PJ.eventsIn(p, it2, 20 + i * 0.17, 20 + (i + 1) * 0.17, (ev) => got.push([ev.at, ev.pitch, ev.len]));
+  eq(got, [[20, 60, 1], [23.5, 62, 0.5], [24, 60, 1]]);
+  t.mute = true;
+  let n = 0;
+  PJ.eventsIn(p, it2, 0, 40, () => n++);
+  assert.strictEqual(n, 0);
+});
+
+test('drum events: windows, swing, solo inside the kit', () => {
+  const p = PJ.blank();
+  const dt = p.tracks.find((t) => t.type === 'drums'), pat = PJ.patternsOf(p, dt.id)[0];
+  PJ.applyPreset(p, pat, 'house');
+  PJ.addClip(p, pat, 0, 4);
+  const { items } = PJ.playItems(p, 'song');
+  const hats = [];
+  for (let a = 0; a < 4 - 1e-9; a += 0.33) PJ.eventsIn(p, items, a, Math.min(4, a + 0.33), (ev) => { if (ev.drum === 'chat') hats.push(+ev.at.toFixed(3)); });
+  eq(hats, [0.5, 1.5, 2.5, 3.5]); // on even 16th steps, so swing does not move them
+  pat.steps.rim = new Array(16).fill(0); pat.steps.rim[3] = 100;
+  dt.swing = 0.4;
+  const rim = [];
+  PJ.eventsIn(p, items, 0, 4, (ev) => { if (ev.drum === 'rim') rim.push(+ev.at.toFixed(3)); });
+  eq(rim, [0.75 + 0.05]); // odd step pushed late by swing
+  dt.kit.find((k) => k.id === 'kick').solo = true;
+  const ids = new Set();
+  PJ.eventsIn(p, items, 0, 4, (ev) => ids.add(ev.drum));
+  eq([...ids], ['kick']);
+});
+
+test('writeMidiTracks writes a valid format-1 file, one track per instrument', () => {
+  const p = PJ.example();
+  const m = parseMidi(E.writeMidiTracks(PJ.midiTracks(p, 'song'), p.bpm));
   assert.strictEqual(m.format, 1);
   assert.strictEqual(m.ppq, 480);
-  assert.strictEqual(m.tracks.length, 3);
+  assert.strictEqual(m.tracks.length, 4); // tempo + drums + bass + lead
   const tempo = m.tracks[0].find((e) => e.meta === 0x51).data;
   assert.strictEqual(Math.round(60000000 / ((tempo[0] << 16) | (tempo[1] << 8) | tempo[2])), 124);
-  const mel = m.tracks[1].filter((e) => e.type === 0x90);
-  assert.strictEqual(mel.length, p.melody.notes.length);
-  assert.ok(mel.every((e) => e.ch === 0));
-  assert.strictEqual(mel[3].tick, 1.5 * 480);
-  const dr = m.tracks[2].filter((e) => e.type === 0x90);
+  const dr = m.tracks[1].filter((e) => e.type === 0x90);
   assert.ok(dr.every((e) => e.ch === 9));
-  // four on the floor over 2 bars: 8 kicks on every beat
-  const kicks = dr.filter((e) => e.a === 36).map((e) => e.tick);
-  eq(kicks, [0, 1, 2, 3, 4, 5, 6, 7].map((b) => b * 480));
+  const kicks = dr.filter((e) => e.a === 36).map((e) => e.tick / 480);
+  eq(kicks.slice(0, 4), [0, 1, 2, 3]);
+  assert.strictEqual(kicks.length, 28 + 1); // house over 7 bars, plus the fill's single kick
+  const bass = m.tracks[2].filter((e) => e.type === 0x90);
+  assert.ok(bass.every((e) => e.ch === 0));
+  assert.strictEqual(bass[0].tick, 8 * 480);
+  assert.strictEqual(bass.length, 12 * 3); // a 2-bar bassline over 6 bars
+  const lead = m.tracks[3].filter((e) => e.type === 0x90);
+  assert.ok(lead.every((e) => e.ch === 1));
+  assert.strictEqual(lead[0].tick, 16 * 480);
+  assert.strictEqual(lead.length, 24);
+  // pattern mode exports only the selected pattern, from 0
+  const pm = parseMidi(E.writeMidiTracks(PJ.midiTracks(p, 'pattern'), p.bpm));
+  assert.strictEqual(pm.tracks.length, 2);
+  assert.strictEqual(pm.tracks[1].filter((e) => e.type === 0x90)[0].tick, 0);
 });
 
-test('presets, drum length changes and normalize round-trip', () => {
-  const p = PJ.blank();
-  PJ.applyPreset(p, 'boombap');
-  assert.strictEqual(p.drums.rows.find((r) => r.id === 'snare').steps[4], 127);
-  PJ.setDrumBars(p, 2);
-  const kick = p.drums.rows.find((r) => r.id === 'kick').steps;
-  assert.strictEqual(kick.length, 32);
-  eq(kick.slice(16), kick.slice(0, 16));
+test('patterns: clone, delete removes its clips, tracks keep one pattern', () => {
+  const p = PJ.example();
+  const lead = p.tracks.find((t) => t.name === 'Lead');
+  const hook = PJ.selPattern(p);
+  const copy = PJ.clonePattern(p, hook);
+  assert.strictEqual(copy.name, 'Hook 2');
+  copy.notes[0].pitch = 99;
+  assert.notStrictEqual(hook.notes[0].pitch, 99);
+  PJ.addClip(p, copy, 32);
+  assert.ok(PJ.deletePattern(p, copy.id));
+  assert.ok(!p.clips.some((c) => c.patternId === copy.id));
+  assert.ok(!PJ.deletePattern(p, hook.id)); // the last pattern on a track stays
+  assert.ok(PJ.deleteTrack(p, lead.id));
+  assert.ok(!p.clips.some((c) => c.trackId === lead.id));
+  assert.notStrictEqual(PJ.selTrack(p).id, lead.id);
+});
+
+test('normalize round-trips v2 and migrates a v1 project', () => {
+  const p = PJ.example();
   const back = PJ.normalize(JSON.parse(PJ.serialize(p)));
-  eq(back.drums.rows.map((r) => r.steps), p.drums.rows.map((r) => r.steps));
-  assert.strictEqual(back.drums.swing, p.drums.swing);
-  const junk = PJ.normalize({ bpm: 'x', melody: { notes: [{ start: -5, len: 0, pitch: 300, vel: 0 }] }, drums: { bars: 99 } });
-  assert.strictEqual(junk.bpm, 120);
-  eq(junk.melody.notes.map((n) => [n.start, n.pitch, n.vel]), [[0, 127, 1]]);
-  assert.strictEqual(junk.drums.bars, 8);
-});
+  eq(back.tracks.map((t) => t.name), p.tracks.map((t) => t.name));
+  eq(back.clips.map((c) => [c.start, c.len]), p.clips.map((c) => [c.start, c.len]));
+  const shape = (q) => q.patterns.map((x) => (x.notes ? x.notes.map((n) => n.pitch) : x.steps.kick));
+  eq(shape(back), shape(p));
+  assert.strictEqual(PJ.selPattern(back).name, 'Hook');
+  for (const c of back.clips) { assert.ok(PJ.pattern(back, c.patternId)); assert.strictEqual(PJ.pattern(back, c.patternId).trackId, c.trackId); }
 
-test('song length grows to fit notes and drums', () => {
-  const p = PJ.blank();
-  p.bars = 1;
-  assert.strictEqual(PJ.songBeats(p), 4);
-  p.melody.notes.push({ id: 1, start: 9, len: 1, pitch: 60, vel: 100 });
-  assert.strictEqual(PJ.songBeats(p), 12);
-  PJ.setDrumBars(p, 4);
-  assert.strictEqual(PJ.songBeats(p), 16);
+  const v1 = {
+    version: 1, name: 'Old', bpm: 98, root: 2, scale: 'dorian', bars: 4, snap: 8,
+    melody: { instrument: 'bell', echo: false, volume: 0.5, notes: [{ start: 0, len: 1, pitch: 62, vel: 90 }, { start: 13, len: 2, pitch: 65, vel: 90 }] },
+    drums: { bars: 1, swing: 0.2, rows: [{ id: 'kick', vol: 0.5, steps: [100, 0, 0, 0, 100, 0, 0, 0, 100, 0, 0, 0, 100, 0, 0, 0] }] },
+  };
+  const m = PJ.normalize(v1);
+  assert.strictEqual(m.version, 2);
+  assert.strictEqual(m.mode, 'song');
+  assert.strictEqual(m.bpm, 98);
+  eq(m.tracks.map((t) => [t.name, t.type]), [['Melody', 'synth'], ['Drums', 'drums']]);
+  assert.strictEqual(m.tracks[0].instrument, 'bell');
+  assert.strictEqual(m.tracks[0].echo, false);
+  assert.strictEqual(m.tracks[1].swing, 0.2);
+  assert.strictEqual(m.tracks[1].kit.find((k) => k.id === 'kick').vol, 0.5);
+  eq(m.clips.map((c) => [c.start, c.len]), [[0, 16], [0, 16]]);
+  assert.strictEqual(PJ.songBeats(m), 16);
+  const junk = PJ.normalize({ version: 2, tracks: [{ id: 5, type: 'nope' }], clips: [{ patternId: 77 }] });
+  assert.ok(junk.tracks.length >= 1 && junk.clips.length === 0);
 });
 
 test('history undo/redo', () => {

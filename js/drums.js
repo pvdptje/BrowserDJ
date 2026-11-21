@@ -6,7 +6,7 @@ BDJ.DrumRack = (() => {
   const ACCENTS = [100, 127, 60];
 
   class DrumRack {
-    /* host: { project(), begin(), end(before), changed(kind), previewDrum(id), loadSample(id, file), clearSample(id), sampleName(id) } */
+    /* host: { project(), track(), pattern(), begin(), end(before), changed(kind), previewDrum(id), loadSample(id, file), clearSample(id), sampleName(id) } */
     constructor(el, host) {
       this.el = el;
       this.host = host;
@@ -34,12 +34,16 @@ BDJ.DrumRack = (() => {
     }
 
     get p() { return this.host.project(); }
+    get kit() { return this.host.track().kit; }
+    steps(id) { const pat = this.host.pattern(); return pat.steps[id] || (pat.steps[id] = new Array(pat.bars * BDJ.Project.STEPS_PER_BAR).fill(0)); }
 
     render() {
-      const p = this.p, n = p.drums.bars * BDJ.Project.STEPS_PER_BAR;
-      const anySolo = p.drums.rows.some((r) => r.solo);
+      if (!this.host.track().kit) { this.el.innerHTML = ''; return; } // a synth track is selected
+      const n = this.host.pattern().bars * BDJ.Project.STEPS_PER_BAR;
+      const anySolo = this.kit.some((r) => r.solo);
       const html = [];
-      for (const row of p.drums.rows) {
+      for (const row of this.kit) {
+        const steps = this.steps(row.id);
         const def = BDJ.Sound.DRUMS.find((d) => d.id === row.id);
         const sample = this.host.sampleName(row.id);
         const silent = row.mute || (anySolo && !row.solo);
@@ -52,7 +56,7 @@ BDJ.DrumRack = (() => {
         html.push(`<button type="button" class="tog small" data-act="${sample ? 'unsample' : 'sample'}" title="${sample ? 'Go back to the built-in sound' : 'Use your own sound file'}">${sample ? '&times;' : '&#8613;'}</button>`);
         html.push(`</div><div class="steps">`);
         for (let i = 0; i < n; i++) {
-          const v = row.steps[i] || 0;
+          const v = steps[i] || 0;
           const cls = 'step' + (v ? ' on' : '') + (v >= 127 ? ' acc' : v && v < 80 ? ' ghost' : '') + (Math.floor(i / 4) % 2 ? ' alt' : '') + (i === this.cur ? ' now' : '');
           html.push(`<button type="button" class="${cls}" data-i="${i}" aria-label="${esc(def.name)} step ${i + 1}" aria-pressed="${!!v}"></button>`);
         }
@@ -70,7 +74,7 @@ BDJ.DrumRack = (() => {
       for (const b of this.el.querySelectorAll(`.step[data-i="${i}"]`)) b.classList.add('now');
     }
 
-    rowOf(el) { const r = el.closest('.drow'); return r && this.p.drums.rows.find((x) => x.id === r.dataset.id); }
+    rowOf(el) { const r = el.closest('.drow'); return r && this.kit.find((x) => x.id === r.dataset.id); }
 
     down(e) {
       const st = e.target.closest('.step');
@@ -79,14 +83,14 @@ BDJ.DrumRack = (() => {
       const row = this.rowOf(st), i = +st.dataset.i;
       const before = this.host.begin();
       if (e.button === 2 || e.altKey) {
-        const v = row.steps[i];
-        row.steps[i] = v ? ACCENTS[(ACCENTS.indexOf(v) + 1) % ACCENTS.length] || 100 : 127;
+        const st = this.steps(row.id), v = st[i];
+        st[i] = v ? ACCENTS[(ACCENTS.indexOf(v) + 1) % ACCENTS.length] || 100 : 127;
         this.host.end(before);
         this.host.changed('drums');
         this.render();
         return;
       }
-      const val = row.steps[i] ? 0 : 100;
+      const val = this.steps(row.id)[i] ? 0 : 100;
       this.paint = { val, before, touched: new Set() };
       this.apply(st);
       if (val) this.host.previewDrum(row.id, val);
@@ -104,7 +108,7 @@ BDJ.DrumRack = (() => {
       if (this.paint.touched.has(key)) return;
       this.paint.touched.add(key);
       const row = this.rowOf(st), i = +st.dataset.i;
-      row.steps[i] = this.paint.val;
+      this.steps(row.id)[i] = this.paint.val;
       st.classList.toggle('on', !!this.paint.val);
       st.classList.remove('acc', 'ghost');
       st.setAttribute('aria-pressed', String(!!this.paint.val));

@@ -1,6 +1,6 @@
 # BrowserDJ
 
-A small music studio that runs in the browser: hum a melody, edit it in a piano roll, add a beat, and export MIDI or WAV. No build step and no server needed. Open `index.html`.
+A small music studio that runs in the browser: hum a melody, edit it in a piano roll, build beats, arrange everything in a playlist, and export MIDI or WAV. No build step and no server needed. Open `index.html`.
 
 `hum-to-midi.html` is the original single-file Hum to MIDI tool this grew out of, kept as is.
 
@@ -10,12 +10,19 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 | --- | --- |
 | `js/engine.js` | Pitch tracking (YIN), note segmentation, key/tempo guessing, MIDI writing. Also loads in Node. |
 | `js/sound.js` | Melody voices, synthesized drum kit, mixer, WAV encoding. Works with live and offline audio contexts. |
-| `js/project.js` | The project model (plain JSON, times in beats), drum presets, take → notes, undo history, MIDI track building. |
+| `js/project.js` | The project model (plain JSON, times in beats): tracks, patterns and clips; what plays when; drum presets; take → notes; undo history; MIDI track building. Migrates version 1 projects. |
 | `js/pianoroll.js` | Canvas piano roll editor. |
 | `js/drums.js` | Step sequencer UI. |
+| `js/playlist.js` | Song timeline: track headers and clips. |
 | `js/app.js` | Transport (look-ahead scheduler), recording, export, controls. |
 
 `window.BrowserDJ.project` is the live project, the natural hook for an AI helper later.
+
+## Model
+
+- **Tracks** are instruments: a synth (piano roll) or a drum kit (step sequencer).
+- **Patterns** belong to a track. Clips in the playlist are links to a pattern, so editing it changes every clip.
+- **Pattern / Song** in the transport picks what Play (and export) plays.
 
 ## Tests
 

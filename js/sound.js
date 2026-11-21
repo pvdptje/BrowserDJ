@@ -13,6 +13,7 @@ BDJ.Sound = (() => {
     { id: 'chip', name: 'Chiptune', program: 80 },
     { id: 'bass', name: 'Bass', program: 38 },
     { id: 'bell', name: 'Bell', program: 14 },
+    { id: 'pad', name: 'Pad', program: 89 },
   ];
 
   const DRUMS = [
@@ -49,34 +50,48 @@ BDJ.Sound = (() => {
   }
 
   /* ---------- mixer ---------- */
+  /* One channel per track (volume + echo send), a shared echo, and a gentle compressor on the master. */
   function createMixer(ac, opts = {}) {
     const dest = opts.destination || ac.destination;
     const master = ac.createGain();
-    master.gain.value = opts.master == null ? 0.9 : opts.master;
+    master.gain.value = opts.master == null ? 0.85 : opts.master;
     const comp = ac.createDynamicsCompressor();
     comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 4; comp.attack.value = 0.004; comp.release.value = 0.15;
     master.connect(comp);
     comp.connect(dest);
 
-    const melody = ac.createGain();
-    melody.gain.value = opts.melodyVol == null ? 0.8 : opts.melodyVol;
-    melody.connect(master);
-    const echoSend = ac.createGain();
-    echoSend.gain.value = opts.echo === false ? 0 : 1;
-    melody.connect(echoSend);
+    const echoIn = ac.createGain();
     const dl = ac.createDelay(2), fb = ac.createGain(), lp = ac.createBiquadFilter(), wet = ac.createGain();
     dl.delayTime.value = Math.min(1.9, (60 / (opts.bpm || 120)) * 0.75);
     fb.gain.value = 0.35; lp.type = 'lowpass'; lp.frequency.value = 2600; wet.gain.value = 0.28;
-    echoSend.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(wet); wet.connect(master);
+    echoIn.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(wet); wet.connect(master);
 
-    const drums = ac.createGain();
-    drums.gain.value = opts.drumVol == null ? 0.85 : opts.drumVol;
-    drums.connect(master);
+    const channels = new Map();
+    /* track: {id, volume, echo} -> the node to play into */
+    function channel(track) {
+      let ch = channels.get(track.id);
+      if (!ch) {
+        const gain = ac.createGain(), send = ac.createGain();
+        gain.gain.value = track.volume;
+        send.gain.value = track.echo ? 1 : 0;
+        gain.connect(master);
+        gain.connect(send);
+        send.connect(echoIn);
+        ch = { gain, send };
+        channels.set(track.id, ch);
+      }
+      return ch.gain;
+    }
 
     const live = new Set();
     return {
-      ac, master, melody, drums, live,
-      setEcho(on) { echoSend.gain.setTargetAtTime(on ? 1 : 0, ac.currentTime, 0.02); },
+      ac, master, live, channel,
+      update(track) {
+        const ch = channels.get(track.id);
+        if (!ch) return;
+        ch.gain.gain.setTargetAtTime(track.volume, ac.currentTime, 0.02);
+        ch.send.gain.setTargetAtTime(track.echo ? 1 : 0, ac.currentTime, 0.02);
+      },
       setBpm(bpm) { dl.delayTime.setTargetAtTime(Math.min(1.9, (60 / bpm) * 0.75), ac.currentTime, 0.05); },
       stop() {
         const now = ac.currentTime;
@@ -125,6 +140,10 @@ BDJ.Sound = (() => {
       filt.frequency.setValueAtTime(Math.min(4000, f * 6), a);
       filt.frequency.exponentialRampToValueAtTime(Math.max(120, f * 1.5), a + 0.3);
       att = 0.005; rel = 0.08; peak = v * 1.1;
+    } else if (preset === 'pad') {
+      osc('sawtooth', -12, 0.45); osc('sawtooth', 12, 0.45); osc('triangle', 0, 0.4, -1);
+      filt.Q.value = 0.7; filt.frequency.value = Math.min(5000, f * 3.5);
+      att = 0.28; rel = 0.6; peak = v * 0.8;
     } else if (preset === 'bell') {
       const car = osc('sine', 0, 1);
       const mod = ac.createOscillator(), mg = ac.createGain();

@@ -9,20 +9,26 @@
 
   /* ---------- state ---------- */
   let P = null;                 // the project (plain JSON)
-  let take = null;              // the last hum: {frames, raw, track, tuning, audio, anchor, aligned, shift, bpm}
-  const samples = new Map();    // drum row id -> {buffer, name}
+  let take = null;              // the last hum: {frames, raw, track, tuning, audio, anchor, aligned, shift, bpm, patternId}
+  const samples = new Map();    // 'trackId:drumId' -> {buffer, name}
   const H = new PJ.History();
-  let cursor = 0;               // where playback starts, in beats
+  let patCursor = 0;            // where pattern playback starts, in beats
+  let songCursor = 0;           // where song playback starts, in beats
   let restored = false;
+  let lastSynth = 0;            // the synth track used most recently: where a hum goes when drums are selected
 
   try {
     const saved = localStorage.getItem(STORE);
     if (saved) { P = PJ.normalize(JSON.parse(saved)); restored = true; }
   } catch (err) { /* storage unavailable or corrupt */ }
   if (!P) P = PJ.example();
-  for (const r of P.drums.rows) delete r.sampleName; // sample audio is not stored, so start from the built-in kit
 
-  const takeLive = () => !!take && P.melody.fromTake;
+  const curTrack = () => PJ.selTrack(P);
+  const curPat = () => PJ.selPattern(P);
+  const takePattern = () => (take ? PJ.pattern(P, take.patternId) : null);
+  const takeFresh = () => { const tp = takePattern(); return !!tp && tp.fromTake; };
+  const cursor = () => (P.mode === 'song' ? songCursor : patCursor);
+  const otherMusic = (exceptId) => P.patterns.some((x) => x.id !== exceptId && (x.notes ? x.notes.length : Object.values(x.steps).some((s) => s.some((v) => v))));
 
   /* ---------- status ---------- */
   function say(text, kind) {
@@ -57,55 +63,90 @@
     saveTimer = setTimeout(() => { try { localStorage.setItem(STORE, snap()); } catch (err) { /* full or blocked */ } }, 400);
   }
 
-  /* kind: 'live' (mid-drag), 'notes' (a finished melody edit), 'drums', 'all' */
+  /* kind: 'live' (mid-drag), 'notes', 'drums', 'clips', 'tracks', 'quiet', 'all' */
   function changed(kind) {
-    if (kind === 'live') { return; }
+    if (kind === 'live') { playlist.draw(); return; }
     if (kind === 'notes') {
-      P.melody.fromTake = false;
-      const fit = Math.ceil(PJ.melodyEnd(P) / 4 - 1e-6);
-      if (fit > P.bars) P.bars = fit;
+      const pat = curPat();
+      pat.fromTake = false;
+      const fit = Math.ceil(PJ.notesEnd(pat) / 4 - 1e-6);
+      if (fit > pat.bars) pat.bars = fit;
     }
-    if (kind === 'all') { syncControls(); rack.render(); }
+    if (kind === 'all') { syncControls(); renderEditor(); playlist.renderHeads(); }
+    if (curTrack().type === 'synth') lastSynth = curTrack().id;
     if (kind === 'drums') rack.render();
+    if (kind === 'tracks') { playlist.renderHeads(); renderEditorHead(); rack.render(); updateMixer(); }
+    if (kind !== 'quiet') { refreshInfo(); roll.draw(); playlist.draw(); }
+    autosave();
+  }
+
+  function select(trackId, patternId) {
+    if (trackId === P.sel.trackId && (patternId == null || patternId === P.sel.patternId)) return;
+    PJ.select(P, trackId, patternId);
+    playlist.remember(P.sel.trackId, P.sel.patternId);
+    if (curTrack().type === 'synth') lastSynth = curTrack().id;
+    roll.sel.clear();
+    renderEditor();
+    playlist.markSelected();
+    playlist.draw();
     refreshInfo();
-    roll.draw();
     autosave();
   }
 
   /* ---------- take -> notes ---------- */
   function rederive() {
-    if (!take) return;
-    const d = PJ.deriveFromTake(P, take);
-    P.melody.notes = d.notes;
-    P.nextId = d.notes.length + 1;
-    P.melody.fromTake = true;
+    const pat = takePattern();
+    if (!take || !pat) return;
+    const d = PJ.deriveFromTake(P, pat, take);
+    pat.notes = d.notes;
+    pat.fromTake = true;
     take.shift = d.shift;
     take.bpm = P.bpm;
-    P.bars = Math.max(1, Math.ceil(PJ.melodyEnd(P) / 4 - 1e-6));
+    pat.bars = Math.max(1, Math.ceil(PJ.notesEnd(pat) / 4 - 1e-6));
     roll.sel.clear();
   }
 
-  function ingest(F, buf, anchor) {
+  /* The synth pattern a new take goes into: the selected one, or a fresh pattern on a synth track. */
+  function takeTarget() {
+    if (curTrack().type === 'synth') return curPat();
+    const last = PJ.track(P, lastSynth);
+    let t = last && last.type === 'synth' ? last : P.tracks.find((x) => x.type === 'synth');
+    if (!t) t = PJ.addTrack(P, 'synth', { name: 'Vocal idea' });
+    const pat = PJ.addPattern(P, t.id, PJ.uniqueName(P, t.id, 'Take'));
+    PJ.select(P, t.id, pat.id);
+    return pat;
+  }
+
+  function ingest(F, buf, anchor, targetId) {
     const seg = E.segment(F, P.capture.detail);
     if (!seg.notes.length) {
       say('No notes found. Hum louder or closer to the microphone, then record again.', 'warn');
       return false;
     }
     const aligned = anchor != null;
+    let kept = false;
     commit(() => {
-      take = { frames: F, raw: seg.notes, track: seg.track, tuning: seg.tuning, audio: buf, anchor: aligned ? anchor : null, aligned, shift: 0, bpm: P.bpm };
-      const key = E.detectKey(seg.notes, P.capture.fixTuning ? seg.tuning : 0);
-      P.root = key.root; P.scale = key.scale;
-      if (!aligned) P.bpm = E.guessTempo(seg.notes).bpm;
-      P.melody.takeOctave = 0;
+      const pat = PJ.pattern(P, targetId) || takeTarget();
+      take = { frames: F, raw: seg.notes, track: seg.track, tuning: seg.tuning, audio: buf, anchor: aligned ? anchor : null, aligned, shift: 0, bpm: P.bpm, patternId: pat.id };
+      // a first idea sets key and tempo; once there is other music, the hum fits into it instead
+      kept = otherMusic(pat.id);
+      if (!kept) {
+        const key = E.detectKey(seg.notes, P.capture.fixTuning ? seg.tuning : 0);
+        P.root = key.root; P.scale = key.scale;
+        if (!aligned) P.bpm = E.guessTempo(seg.notes).bpm;
+      }
+      pat.takeOctave = 0;
       rederive();
+      PJ.select(P, pat.trackId, pat.id);
+      const at = aligned ? songCursor : (P.clips.some((c) => c.patternId === pat.id) ? null : songCursor);
+      if (at != null && !P.clips.some((c) => c.patternId === pat.id && c.start === at)) PJ.addClip(P, pat, at);
     });
-    cursor = 0;
+    patCursor = 0;
     roll.fit();
-    const n = P.melody.notes.length;
-    say('Found ' + n + (n === 1 ? ' note' : ' notes') + '. ' + (aligned
-      ? 'They sit where you sang them against the beat. The key is my best guess.'
-      : 'Key and tempo are my best guess, change them above if they sound off.') + ' Edit anything in the piano roll.');
+    const n = curPat().notes.length;
+    say('Found ' + n + (n === 1 ? ' note' : ' notes') + ' in "' + curPat().name + '". ' + (aligned
+      ? 'They sit where you sang them against the beat.'
+      : kept ? 'I kept your song’s key and tempo so the hum fits in.' : 'Key and tempo are my best guess, change them above if they sound off.') + ' Edit anything in the piano roll.');
     return true;
   }
 
@@ -125,16 +166,16 @@
   function preview(pitch) {
     if (T.on) return;
     try {
-      const ac = audio();
-      SND.melodyNote(ac, previewOut(ac), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, P.melody.instrument, null);
+      const ac = audio(), t = curTrack();
+      SND.melodyNote(ac, previewOut(ac), { pitch: clamp(pitch, 0, 127), vel: 100 }, ac.currentTime + 0.01, 0.18, t.instrument || 'pluck', null);
     } catch (err) { /* sound is optional */ }
   }
   function previewDrum(id, vel) {
     try {
-      const ac = audio();
-      const row = P.drums.rows.find((r) => r.id === id);
-      const s = samples.get(id);
-      SND.drumHit(ac, previewOut(ac), id, ac.currentTime + 0.01, vel || 110, s && s.buffer, null, row ? row.vol : 0.8);
+      const ac = audio(), t = curTrack();
+      const k = (t.kit || []).find((r) => r.id === id);
+      const s = samples.get(t.id + ':' + id);
+      SND.drumHit(ac, previewOut(ac), id, ac.currentTime + 0.01, vel || 110, s && s.buffer, null, k ? k.vol : 0.8);
     } catch (err) { /* sound is optional */ }
   }
 
@@ -151,33 +192,17 @@
     if (live) { live.add(o); o.onended = () => live.delete(o); }
   }
 
-  /* Schedules everything whose start is in [lo, hi) of the song (local beats), offset by `off` beats. */
-  function scheduleWindow(ac, M, lo, hi, off, timeOf, opt = {}) {
-    const bps = 60 / opt.bpm;
-    if (!opt.noMelody && !P.melody.mute) {
-      for (const n of P.melody.notes) {
-        if (n.start >= lo - EPS && n.start < hi - EPS) SND.melodyNote(ac, M.melody, n, timeOf(n.start + off), n.len * bps, P.melody.instrument, M.live);
+  /* Plays every note and hit of `items` that starts in [lo, hi) (local beats), shifted by `off` beats. */
+  function scheduleEvents(ac, M, items, lo, hi, off, timeOf, bpm, skipTrack) {
+    const bps = 60 / bpm;
+    PJ.eventsIn(P, items, lo, hi, (ev) => {
+      const out = M.channel(ev.track), when = timeOf(ev.at + off);
+      if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live);
+      else {
+        const smp = samples.get(ev.track.id + ':' + ev.drum);
+        SND.drumHit(ac, out, ev.drum, when, ev.vel, smp && smp.buffer, M.live, ev.gain);
       }
-    }
-    const D = P.drums, N = D.bars * PJ.STEPS_PER_BAR;
-    const drumsOn = !D.mute && D.rows.some((r) => r.steps.some((v) => v));
-    if (drumsOn) {
-      const anySolo = D.rows.some((r) => r.solo);
-      for (let s = Math.ceil(lo * 4 - EPS); s < hi * 4 - EPS; s++) {
-        const local = ((s % N) + N) % N;
-        const when = timeOf(s / 4 + off + (s % 2 ? D.swing * 0.125 : 0));
-        for (const row of D.rows) {
-          const v = row.steps[local];
-          if (!v || row.mute || (anySolo && !row.solo)) continue;
-          const smp = samples.get(row.id);
-          SND.drumHit(ac, M.drums, row.id, when, v, smp && smp.buffer, M.live, row.vol);
-        }
-      }
-    }
-    for (let b = Math.ceil(lo - EPS); b < hi - EPS; b++) {
-      const countIn = b + off < 0;
-      if (P.click || countIn || (opt.rec && !drumsOn)) clickAt(ac, M.master, timeOf(b + off), b % 4 === 0, M.live);
-    }
+    }, { skipTrack });
   }
 
   /* ---------- transport ---------- */
@@ -187,16 +212,19 @@
   const spb = () => 60 / T.bpm;
   const beatAbs = () => T.beat0 + (actx.currentTime - T.t0) / spb();
   const timeOf = (b) => T.t0 + (b - T.beat0) * spb();
+  const looping = () => P.loop && !T.rec;
 
-  function play(from = cursor, opts = {}) {
+  function play(from = cursor(), opts = {}) {
     stopAll();
     let ac;
     try { ac = audio(); } catch (err) { say('This browser cannot play sound here.', 'warn'); return false; }
+    const mode = opts.rec ? 'song' : P.mode;
     Object.assign(T, {
-      on: true, rec: !!opts.rec, bpm: P.bpm, L: PJ.songBeats(P),
-      t0: ac.currentTime + 0.08, beat0: from, sched: from,
-      M: SND.createMixer(ac, { bpm: P.bpm, echo: P.melody.echo, melodyVol: P.melody.volume, drumVol: P.drums.volume }),
+      on: true, rec: !!opts.rec, mode, bpm: P.bpm, L: PJ.playItems(P, mode).length,
+      t0: ac.currentTime + 0.08, beat0: from, sched: from, from, skipTrack: opts.skipTrack || null,
+      M: SND.createMixer(ac, { bpm: P.bpm }),
     });
+    for (const t of P.tracks) T.M.channel(t);
     T.timer = setInterval(pump, 25);
     pump();
     frame();
@@ -207,12 +235,14 @@
 
   function pump() {
     if (!T.on) return;
-    const now = actx.currentTime, L = PJ.songBeats(P);
+    const now = actx.currentTime;
+    const { items, length: L } = PJ.playItems(P, T.mode);
     if (P.bpm !== T.bpm || L !== T.L) {
-      // tempo or song length changed while playing: re-anchor at the current position
+      // tempo or loop length changed while playing: re-anchor at the current position
       let b = beatAbs();
       const ahead = T.sched - b;
-      if (b >= 0 && (P.loop || T.rec)) b = ((b % T.L) + T.L) % T.L;
+      if (b >= 0 && looping()) b = ((b % T.L) + T.L) % T.L;
+      if (b >= 0 && looping() && b >= L) b = b % L;
       T.beat0 = b; T.t0 = now; T.sched = b + ahead * (T.bpm / P.bpm);
       T.bpm = P.bpm; T.L = L;
       T.M.setBpm(P.bpm);
@@ -220,49 +250,77 @@
     const endB = T.beat0 + (now + 0.15 - T.t0) / spb();
     if (endB > T.sched) {
       const a = T.sched, b = endB;
-      if (P.loop || T.rec) {
+      if (looping()) {
         for (let k = Math.floor(a / L); k * L < b; k++) {
           const lo = Math.max(a, k * L), hi = Math.min(b, (k + 1) * L);
-          if (hi > lo) scheduleWindow(actx, T.M, lo - k * L, hi - k * L, k * L, timeOf, { bpm: T.bpm, noMelody: T.rec, rec: T.rec });
+          if (hi > lo) {
+            scheduleEvents(actx, T.M, items, lo - k * L, hi - k * L, k * L, timeOf, T.bpm);
+            clicks(lo, hi, false);
+          }
         }
-      } else if (a < L) {
-        scheduleWindow(actx, T.M, a, Math.min(b, L), 0, timeOf, { bpm: T.bpm });
+      } else {
+        // a recording count-in starts before the marker: only clicks there
+        const lo = Math.max(a, T.rec ? T.from + 4 : 0);
+        if (lo < b && a < L) scheduleEvents(actx, T.M, items, lo, Math.min(b, L), 0, timeOf, T.bpm, T.skipTrack);
+        clicks(a, b, T.rec && !items.some((it) => it.track.id !== T.skipTrack && PJ.audible(P, it.track)));
       }
       T.sched = endB;
     }
-    if (!P.loop && !T.rec && beatAbs() > L + 0.5) stopAll();
+    if (!looping() && !T.rec && beatAbs() > L + 0.5) stopAll();
   }
 
-  /* Song position for display: wrapped into the loop, negative during a count-in. */
-  function songPos() {
+  function clicks(a, b, always) {
+    for (let k = Math.ceil(a - EPS); k < b - EPS; k++) {
+      const countIn = T.rec && k < T.from + 4;
+      if (P.click || countIn || always) clickAt(actx, T.M.master, timeOf(k), (((k - (T.rec ? T.from + 4 : 0)) % 4) + 4) % 4 === 0, T.M.live);
+    }
+  }
+
+  /* Song (or pattern) position: wrapped into the loop. During a count-in, before the marker. */
+  function transportPos() {
     if (!T.on) return null;
     const b = beatAbs();
-    if (b < 0) return b;
-    return P.loop || T.rec ? b % T.L : b;
+    return looping() && b >= 0 ? b % T.L : b;
+  }
+
+  /* Where the playhead is inside the pattern being edited, or null. */
+  function editorPlayhead() {
+    if (R) return R.liveBeat;
+    if (TK && take && take.patternId === P.sel.patternId) return (actx.currentTime - TK.t0 - take.shift) * take.bpm / 60;
+    const b = transportPos();
+    if (b == null) return null;
+    if (T.mode === 'pattern') return b;
+    const pat = curPat(), PL = PJ.patternBeats(pat);
+    const c = P.clips.find((x) => x.patternId === pat.id && b >= x.start && b < x.start + x.len);
+    return c ? (b - c.start) % PL : null;
+  }
+  function songPlayhead() {
+    if (!T.on || T.mode !== 'song') return null;
+    return transportPos();
   }
 
   function frame() {
     cancelAnimationFrame(T.raf);
     const tickUI = () => {
       if (!T.on && !TK && !R) return;
-      const b = hostPlayhead();
-      if (b != null) {
-        if (b >= 0) roll.follow(b);
-        showPos(b);
-        if (T.on && b >= 0) {
-          const N = P.drums.bars * PJ.STEPS_PER_BAR;
-          rack.setPlayhead(Math.floor(b * 4 + 1e-6) % N);
-        }
-      }
+      const eb = editorPlayhead(), sb = songPlayhead();
+      if (eb != null && eb >= 0) roll.follow(eb);
+      if (sb != null && sb >= 0) playlist.follow(sb);
+      const shown = T.on ? transportPos() : eb;
+      showPos(shown);
+      const N = curPat().bars * PJ.STEPS_PER_BAR;
+      rack.setPlayhead(eb != null && eb >= 0 && curTrack().type === 'drums' ? Math.floor(eb * 4 + 1e-6) % N : -1);
       roll.draw();
+      playlist.draw();
       T.raf = requestAnimationFrame(tickUI);
     };
     T.raf = requestAnimationFrame(tickUI);
   }
 
   function showPos(b) {
-    if (b == null) b = cursor;
-    if (b < 0) { $('pos').textContent = 'count ' + Math.ceil(-b); return; }
+    if (b == null) b = cursor();
+    if (T.on && T.rec && b < T.from + 4) { $('pos').textContent = 'count ' + Math.ceil(T.from + 4 - b); return; }
+    if (b < 0) b = 0;
     const bar = Math.floor(b / 4) + 1, beat = Math.floor(b % 4) + 1, six = Math.floor((b % 1) * 4 + 1e-6) + 1;
     $('pos').textContent = bar + '.' + beat + '.' + six;
   }
@@ -284,12 +342,30 @@
     rack.setPlayhead(-1);
     showPos(null);
     roll.draw();
+    playlist.draw();
   }
 
   function togglePlay() {
     if (R) { stopRec(); return; }
-    if (T.on) stopAll(); else play(cursor);
+    if (T.on) stopAll(); else play();
   }
+
+  function setMode(mode, restart = true) {
+    if (P.mode === mode) return;
+    P.mode = mode;
+    syncMode();
+    autosave();
+    if (restart && T.on && !T.rec) play();
+  }
+  function syncMode() {
+    $('modePat').classList.toggle('on', P.mode === 'pattern');
+    $('modeSong').classList.toggle('on', P.mode === 'song');
+    $('modePat').setAttribute('aria-pressed', String(P.mode === 'pattern'));
+    $('modeSong').setAttribute('aria-pressed', String(P.mode === 'song'));
+    showPos(null);
+  }
+
+  function updateMixer() { if (T.on && T.M) for (const t of P.tracks) T.M.update(t); }
 
   function playTake() {
     if (!take || !take.audio) return;
@@ -307,19 +383,13 @@
     frame();
   }
 
-  function hostPlayhead() {
-    if (R) return R.liveBeat == null ? null : R.liveBeat;
-    if (T.on) return songPos();
-    if (TK && take) return (actx.currentTime - TK.t0 - take.shift) * take.bpm / 60;
-    return null;
-  }
-
   /* ---------- trace (what the microphone heard) ---------- */
   let traceCache = null;
   function hostTrace() {
-    if (R) return liveTrace();
-    if (!take || !take.track) return null;
-    const tun = P.capture.fixTuning ? take.tuning : 0, oct = 12 * P.melody.takeOctave;
+    if (R) return R.targetId === P.sel.patternId ? liveTrace() : null;
+    if (!take || !take.track || take.patternId !== P.sel.patternId) return null;
+    const pat = takePattern();
+    const tun = P.capture.fixTuning ? take.tuning : 0, oct = 12 * (pat.takeOctave || 0);
     const key = take.shift + '|' + take.bpm + '|' + tun + '|' + oct + '|' + take.track.length;
     if (traceCache && traceCache.key === key && traceCache.take === take) return traceCache;
     const F = take.frames, n = take.track.length, k = take.bpm / 60;
@@ -378,6 +448,9 @@
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
     } catch (err) { say(micHelp(err), 'warn'); return; } finally { starting = false; }
+    // make sure a synth pattern is selected so the live pitch shows where the notes will land
+    if (curTrack().type !== 'synth') { commit(() => takeTarget()); }
+    const target = curPat();
     const an = new E.Analyzer(ac.sampleRate), chunks = [];
     const onChunk = (c) => { chunks.push(c); an.push(c); };
     const src = ac.createMediaStreamSource(stream);
@@ -396,14 +469,14 @@
     src.connect(node);
     node.connect(mute);
     const ctxStart = ac.currentTime;
-    R = { stream, src, node, mute, an, chunks, started: performance.now(), timer: setInterval(recTick, 50), anchor: null, liveBeat: null };
+    R = { stream, src, node, mute, an, chunks, started: performance.now(), timer: setInterval(recTick, 50), anchor: null, liveBeat: null, targetId: target.id };
     if (P.capture.playBeat) {
-      // one bar of count-in, then the song; beat 0 lands this many seconds into the recording
-      play(-4, { rec: true });
+      // one bar of count-in before the song marker, then the rest of the song plays along (minus this track)
+      play(songCursor - 4, { rec: true, skipTrack: target.trackId });
       let inLat = 0.01;
       try { const st = stream.getAudioTracks()[0].getSettings(); if (st && isFinite(st.latency)) inLat = st.latency; } catch (err) { /* unknown */ }
-      R.anchor = T.t0 + 4 * spb() - ctxStart + (ac.outputLatency || 0) + (ac.baseLatency || 0) + inLat;
-      say('Count-in: one bar of clicks, then hum along with the beat. Press Stop (or Space) when you are done.');
+      R.anchor = timeOf(songCursor) - ctxStart + (ac.outputLatency || 0) + (ac.baseLatency || 0) + inLat;
+      say('Count-in: one bar of clicks, then hum along with the song from bar ' + (Math.floor(songCursor / 4) + 1) + '. Press Stop (or Space) when you are done.');
     } else {
       say('Listening. Hum your tune, then press Stop.');
       frame();
@@ -424,7 +497,7 @@
       $('liveNote').textContent = heard ? E.noteName(Math.round(R.an.midi[n - 1])) : '--';
       $('liveNote').classList.toggle('idle', !heard);
     }
-    R.liveBeat = T.on && T.rec ? beatAbs() : (n * R.an.dt) * P.bpm / 60;
+    R.liveBeat = T.on && T.rec ? beatAbs() - songCursor : (n * R.an.dt) * P.bpm / 60;
     if (el > 180) stopRec();
   }
 
@@ -455,7 +528,7 @@
     const buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
     let o = 0;
     for (const c of r.chunks) { ch.set(c, o); o += c.length; }
-    ingest(r.an.frames(), buf, r.anchor);
+    ingest(r.an.frames(), buf, r.anchor, r.targetId);
     refreshInfo(); roll.draw();
   }
 
@@ -487,7 +560,7 @@
         await new Promise((r) => setTimeout(r));
       }
     }
-    ingest(an.frames(), buf, null);
+    ingest(an.frames(), buf, null, curTrack().type === 'synth' ? P.sel.patternId : null);
   }
 
   /* ---------- drum samples ---------- */
@@ -498,20 +571,18 @@
       say('"' + file.name + '" does not look like an audio file.', 'warn');
       return;
     }
+    const t = curTrack();
     try {
       const buffer = await audio().decodeAudioData(await file.arrayBuffer());
-      samples.set(id, { buffer, name: file.name });
-      commit(() => { P.drums.rows.find((r) => r.id === id).sampleName = file.name; });
+      samples.set(t.id + ':' + id, { buffer, name: file.name });
+      rack.render();
       previewDrum(id, 110);
-      say('The ' + SND.DRUMS.find((d) => d.id === id).name.toLowerCase() + ' row now plays ' + file.name + '. Your own sounds are not saved with the project yet, so load them again next time.');
+      say('The ' + SND.DRUMS.find((d) => d.id === id).name.toLowerCase() + ' in ' + t.name + ' now plays ' + file.name + '. Your own sounds are not saved with the project yet, so load them again next time.');
     } catch (err) {
       say('Could not read "' + file.name + '" as audio.', 'warn');
     }
   }
-  function clearSample(id) {
-    samples.delete(id);
-    commit(() => { delete P.drums.rows.find((r) => r.id === id).sampleName; });
-  }
+  function clearSample(id) { samples.delete(curTrack().id + ':' + id); rack.render(); }
 
   /* ---------- project files and export ---------- */
   const slug = () => (P.name || 'song').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'song';
@@ -522,32 +593,31 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
   }
+  const whatPlays = () => (P.mode === 'song' ? 'the song' : 'the pattern "' + curPat().name + '"');
 
   function exportMidi() {
-    const tracks = PJ.midiTracks(P);
-    if (!tracks[0].notes.length && tracks.length < 2) { say('There is nothing to export yet. Add some notes or drums first.', 'warn'); return; }
-    downloadBlob(new Blob([E.writeMidiTracks(tracks, P.bpm)], { type: 'audio/midi' }), slug() + '.mid');
-    say('Saved ' + slug() + '.mid with the melody on channel 1' + (tracks.length > 1 ? ' and the drums on channel 10' : '') + '. Set your music program to ' + P.bpm + ' BPM.');
+    const tracks = PJ.midiTracks(P, P.mode);
+    if (!tracks.length) { say('There is nothing to export in ' + whatPlays() + ' yet.', 'warn'); return; }
+    const name = slug() + (P.mode === 'pattern' ? '-' + curPat().name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : '') + '.mid';
+    downloadBlob(new Blob([E.writeMidiTracks(tracks, P.bpm)], { type: 'audio/midi' }), name);
+    say('Saved ' + name + ' with ' + whatPlays() + ': ' + tracks.length + (tracks.length === 1 ? ' track' : ' tracks') + ', drums on channel 10. Set your music program to ' + P.bpm + ' BPM.');
   }
 
   async function exportWav() {
     stopAll();
-    const sr = 44100, L = PJ.songBeats(P), secs = L * 60 / P.bpm;
+    const sr = 44100, { items, length: L } = PJ.playItems(P, P.mode), secs = L * 60 / P.bpm;
     const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!Ctx) { say('This browser cannot render audio files.', 'warn'); return; }
-    say('Rendering…');
+    say('Rendering ' + whatPlays() + '…');
     $('wavBtn').disabled = true;
     try {
       const oac = new Ctx(2, Math.ceil((secs + 2.5) * sr), sr);
-      const M = SND.createMixer(oac, { bpm: P.bpm, echo: P.melody.echo, melodyVol: P.melody.volume, drumVol: P.drums.volume });
+      const M = SND.createMixer(oac, { bpm: P.bpm });
       M.live = null;
-      const savedClick = P.click;
-      P.click = false;
-      scheduleWindow(oac, M, 0, L, 0, (b) => 0.02 + b * 60 / P.bpm, { bpm: P.bpm });
-      P.click = savedClick;
+      scheduleEvents(oac, M, items, 0, L, 0, (b) => 0.02 + b * 60 / P.bpm, P.bpm);
       const buf = await oac.startRendering();
       downloadBlob(SND.encodeWav(buf), slug() + '.wav');
-      say('Saved ' + slug() + '.wav (' + secs.toFixed(1) + ' s at ' + P.bpm + ' BPM).');
+      say('Saved ' + slug() + '.wav with ' + whatPlays() + ' (' + secs.toFixed(1) + ' s at ' + P.bpm + ' BPM).');
     } catch (err) {
       say('Rendering failed: ' + (err && err.message ? err.message : err), 'warn');
     } finally {
@@ -568,10 +638,10 @@
       const obj = JSON.parse(await file.text());
       stopAll();
       commit(() => { P = PJ.normalize(obj); take = null; });
-      for (const r of P.drums.rows) if (r.sampleName && !samples.has(r.id)) delete r.sampleName;
-      cursor = 0;
+      patCursor = songCursor = 0;
       roll.sel.clear();
       roll.fit();
+      playlist.fit();
       say('Opened ' + file.name + '.');
     } catch (err) {
       say('Could not open "' + file.name + '" as a BrowserDJ project.', 'warn');
@@ -582,20 +652,37 @@
   const keyLabel = () => (P.scale === 'chromatic' ? 'no key' : E.NOTE_NAMES[P.root] + ' ' + E.SCALES[P.scale].name.toLowerCase());
 
   function refreshInfo() {
-    const n = P.melody.notes.length, bars = PJ.songBeats(P) / 4;
-    $('summary').textContent = n + (n === 1 ? ' note' : ' notes') + ' · ' + bars + (bars === 1 ? ' bar' : ' bars') + ' · ' + keyLabel() + ' · ' + P.bpm + ' BPM';
+    const L = PJ.songBeats(P), bars = L / 4;
+    $('songInfo').textContent = P.clips.length
+      ? bars + (bars === 1 ? ' bar' : ' bars') + ' · ' + fmtTime(L * 60 / P.bpm) + ' · ' + keyLabel() + ' · ' + P.bpm + ' BPM'
+      : 'Empty song · ' + keyLabel() + ' · ' + P.bpm + ' BPM';
+    const t = curTrack(), pat = curPat();
+    const pb = PJ.patternBeats(pat) / 4;
+    if (t.type === 'synth') {
+      const n = pat.notes.length;
+      $('patInfo').textContent = n + (n === 1 ? ' note' : ' notes') + ' · ' + pb + (pb === 1 ? ' bar' : ' bars');
+    } else {
+      const hits = Object.values(pat.steps).reduce((a, s) => a + s.filter((v) => v).length, 0);
+      $('patInfo').textContent = hits + (hits === 1 ? ' hit' : ' hits') + ' · ' + pb + (pb === 1 ? ' bar' : ' bars');
+    }
+    const uses = P.clips.filter((c) => c.patternId === pat.id).length;
+    $('notInSong').hidden = uses > 0;
+    $('patUses').textContent = uses ? 'used ' + uses + '× in the song' : '';
     const chip = $('takeChip');
-    chip.hidden = !take;
-    chip.textContent = takeLive() ? 'From your take' : 'Edited';
-    chip.classList.toggle('edited', !takeLive());
-    chip.title = takeLive() ? 'Key, snap, tempo and note detail rebuild these notes from your recording.' : 'You edited the notes, so the settings above no longer rebuild them. "Rebuild notes" starts over from the recording.';
+    const mine = take && take.patternId === pat.id;
+    chip.hidden = !mine;
+    chip.textContent = mine && pat.fromTake ? 'From your take' : 'Edited';
+    chip.classList.toggle('edited', !(mine && pat.fromTake));
+    chip.title = mine && pat.fromTake ? 'Key, snap, tempo and note detail rebuild these notes from your recording.' : 'You edited the notes, so the settings no longer rebuild them. "Rebuild notes" starts over from the recording.';
     $('takeRow').classList.toggle('off', !take);
     $('guessTempo').disabled = !take || take.aligned;
     $('playTakeBtn').disabled = !take || !take.audio || !!R;
     const cents = take ? Math.round(take.tuning * 100) : 0;
     $('tuningInfo').textContent = take && Math.abs(cents) >= 5 ? '(you were ' + Math.abs(cents) + ' cents ' + (cents > 0 ? 'sharp' : 'flat') + ')' : '';
-    $('bars').value = P.bars;
-    $('bars').min = Math.max(1, Math.ceil(PJ.melodyEnd(P) / 4 - 1e-6));
+    if (t.type === 'synth') {
+      $('bars').value = pat.bars;
+      $('bars').min = Math.max(1, Math.ceil(PJ.notesEnd(pat) / 4 - 1e-6));
+    }
   }
 
   function syncControls() {
@@ -605,45 +692,96 @@
     $('snap').value = P.snap;
     $('loop').checked = P.loop;
     $('click').checked = P.click;
-    $('instrument').value = P.melody.instrument;
-    $('echo').checked = P.melody.echo;
-    $('melVol').value = Math.round(P.melody.volume * 100);
-    setTog($('melMute'), P.melody.mute);
-    $('drumBars').value = P.drums.bars;
-    $('swing').value = Math.round(P.drums.swing * 100);
-    $('drumVol').value = Math.round(P.drums.volume * 100);
-    setTog($('drumMute'), P.drums.mute);
     $('detail').value = Math.round(P.capture.detail * 100);
     $('fixTuning').checked = P.capture.fixTuning;
     $('playBeat').checked = P.capture.playBeat;
-    if (T.on && T.M) {
-      T.M.melody.gain.setTargetAtTime(P.melody.volume, actx.currentTime, 0.02);
-      T.M.drums.gain.setTargetAtTime(P.drums.volume, actx.currentTime, 0.02);
-      T.M.setEcho(P.melody.echo);
-    }
+    syncMode();
+    updateMixer();
   }
-  function setTog(el, on) { el.classList.toggle('on', on); el.setAttribute('aria-pressed', String(on)); }
+
+  function renderEditorHead() {
+    const t = curTrack(), pat = curPat();
+    $('edSwatch').style.background = t.color;
+    $('edTrack').textContent = t.name;
+    const sel = $('patSel');
+    sel.innerHTML = '';
+    for (const x of PJ.patternsOf(P, t.id)) sel.add(new Option(x.name, x.id));
+    sel.value = pat.id;
+    $('delPat').disabled = PJ.patternsOf(P, t.id).length < 2;
+    const synth = t.type === 'synth';
+    $('synthCtl').hidden = !synth;
+    $('drumCtl').hidden = synth;
+    if (synth) {
+      $('instrument').value = t.instrument;
+      $('echo').checked = t.echo;
+    } else {
+      $('drumBars').value = pat.bars;
+      $('swing').value = Math.round((t.swing || 0) * 100);
+    }
+    document.getElementById('editor').style.setProperty('--tc', t.color);
+  }
+
+  function renderEditor() {
+    const synth = curTrack().type === 'synth';
+    renderEditorHead();
+    $('rollTools').hidden = !synth;
+    $('rollWrap').hidden = !synth;
+    $('rack').hidden = synth;
+    if (synth) roll.draw(); else rack.render();
+  }
 
   /* ---------- components ---------- */
   const roll = new BDJ.PianoRoll($('roll'), {
     project: () => P,
+    pattern: curPat,
+    length: () => PJ.patternBeats(curPat()),
+    color: () => curTrack().color,
     begin, end, changed, preview,
-    playhead: hostPlayhead,
-    cursor: () => cursor,
-    setCursor: (b) => { cursor = Math.max(0, b); showPos(null); roll.draw(); if (T.on && !T.rec) play(cursor); },
+    playhead: editorPlayhead,
+    cursor: () => patCursor,
+    setCursor: (b) => {
+      patCursor = Math.max(0, b);
+      setMode('pattern', false);
+      showPos(null); roll.draw();
+      if (T.on && !T.rec) play();
+    },
     trace: hostTrace,
   });
 
   const rack = new BDJ.DrumRack($('rack'), {
     project: () => P,
+    track: curTrack,
+    pattern: curPat,
     begin, end, changed, previewDrum,
     loadSample, clearSample,
     pickSample: (id) => { sampleTarget = id; $('sampleInput').click(); },
-    sampleName: (id) => (samples.get(id) || {}).name,
+    sampleName: (id) => (samples.get(curTrack().id + ':' + id) || {}).name,
   });
 
+  const playlist = new BDJ.Playlist($('plHeads'), $('plCanvas'), {
+    project: () => P,
+    begin, end, changed,
+    select,
+    playhead: songPlayhead,
+    cursor: () => songCursor,
+    setCursor: (b) => {
+      songCursor = Math.max(0, b);
+      setMode('song', false);
+      showPos(null); playlist.draw();
+      if (T.on && !T.rec) play();
+    },
+    trackChanged: (t) => { if (T.on && T.M) T.M.update(t); },
+    removeTrack: (id) => {
+      const t = PJ.track(P, id);
+      commit(() => PJ.deleteTrack(P, id));
+      say('Deleted the track "' + t.name + '". Undo brings it back.');
+    },
+  });
+  playlist.remember(P.sel.trackId, P.sel.patternId);
+  if (curTrack().type === 'synth') lastSynth = curTrack().id;
+
   // handle for debugging and tests (and, later, for an AI helper to read and write the project)
-  window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, transport: T };
+  window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, transport: T };
 
   /* ---------- wiring ---------- */
   E.NOTE_NAMES.forEach((nm, i) => $('root').add(new Option(nm, i)));
@@ -655,12 +793,19 @@
 
   // transport
   on('playBtn', 'click', togglePlay);
-  on('stopBtn', 'click', () => { if (R) stopRec(); else { stopAll(); cursor = 0; showPos(null); roll.draw(); } });
+  on('stopBtn', 'click', () => {
+    if (R) { stopRec(); return; }
+    stopAll();
+    if (P.mode === 'song') songCursor = 0; else patCursor = 0;
+    showPos(null); roll.draw(); playlist.draw();
+  });
+  on('modePat', 'click', () => setMode('pattern'));
+  on('modeSong', 'click', () => setMode('song'));
   on('loop', 'change', () => { P.loop = $('loop').checked; autosave(); });
   on('click', 'change', () => { P.click = $('click').checked; autosave(); });
   on('bpm', 'change', () => {
     const v = clamp(Math.round(+$('bpm').value) || 120, 40, 240);
-    commit(() => { P.bpm = v; if (takeLive() && !take.aligned) rederive(); });
+    commit(() => { P.bpm = v; if (takeFresh() && !take.aligned) rederive(); });
   });
   let taps = [];
   on('tapBtn', 'click', () => {
@@ -675,11 +820,11 @@
       say('Tempo set to ' + v + ' BPM from your taps.');
     } else say('Keep tapping along to the beat…');
   });
-  on('root', 'change', () => commit(() => { P.root = +$('root').value; if (takeLive()) rederive(); }));
-  on('scale', 'change', () => commit(() => { P.scale = $('scale').value; if (takeLive()) rederive(); }));
+  on('root', 'change', () => commit(() => { P.root = +$('root').value; if (takeFresh()) rederive(); }));
+  on('scale', 'change', () => commit(() => { P.scale = $('scale').value; if (takeFresh()) rederive(); }));
   on('detectKey', 'click', () => {
-    if (!P.melody.notes.length && !take) { say('Add some notes first, then I can guess the key.', 'warn'); return; }
-    commit(() => { const k = PJ.detectKey(P, take); P.root = k.root; P.scale = k.scale; if (takeLive()) rederive(); });
+    if (!P.patterns.some((x) => x.notes && x.notes.length) && !take) { say('Add some notes first, then I can guess the key.', 'warn'); return; }
+    commit(() => { const k = PJ.detectKey(P, take); P.root = k.root; P.scale = k.scale; if (takeFresh()) rederive(); });
     say('This sounds like ' + keyLabel() + '.');
   });
   on('undoBtn', 'click', undo);
@@ -687,8 +832,8 @@
   on('newBtn', 'click', () => {
     stopAll();
     commit(() => { P = PJ.blank(); take = null; });
-    samples.clear(); cursor = 0; roll.sel.clear(); roll.fit(); rack.render();
-    say('A fresh project. Hum something, draw notes, or load a drum pattern. Undo brings the old one back.');
+    samples.clear(); patCursor = songCursor = 0; roll.sel.clear(); roll.fit(); playlist.fit();
+    say('A fresh project with a melody track and a drum track. Hum something, draw notes, or load a drum pattern. Undo brings the old one back.');
   });
   on('openBtn', 'click', () => $('projectInput').click());
   on('projectInput', 'change', (e) => { if (e.target.files[0]) openProject(e.target.files[0]); e.target.value = ''; });
@@ -703,48 +848,83 @@
   on('playBeat', 'change', () => { P.capture.playBeat = $('playBeat').checked; autosave(); });
   let detailBefore = null;
   on('detail', 'input', () => {
-    if (!take) return;
+    if (!take || !takePattern()) return;
     if (detailBefore == null) detailBefore = begin();
     P.capture.detail = +$('detail').value / 100;
     const seg = E.segment(take.frames, P.capture.detail);
     take.raw = seg.notes; take.track = seg.track; take.tuning = seg.tuning;
     rederive();
-    refreshInfo(); roll.draw();
+    refreshInfo(); roll.draw(); playlist.draw();
   });
   on('detail', 'change', () => {
     if (detailBefore == null) return;
     end(detailBefore); detailBefore = null; changed('all');
   });
-  on('fixTuning', 'change', () => commit(() => { P.capture.fixTuning = $('fixTuning').checked; if (take) rederive(); }));
+  on('fixTuning', 'change', () => commit(() => { P.capture.fixTuning = $('fixTuning').checked; if (takePattern()) rederive(); }));
   on('guessTempo', 'click', () => {
     if (!take) return;
-    commit(() => { P.bpm = E.guessTempo(take.raw).bpm; if (takeLive()) rederive(); });
+    commit(() => { P.bpm = E.guessTempo(take.raw).bpm; if (takeFresh()) rederive(); });
     say('Tempo guessed at ' + P.bpm + ' BPM.');
   });
-  on('rereadBtn', 'click', () => { commit(rederive); roll.fit(); say('Notes rebuilt from your recording. Undo brings your edits back.'); });
+  on('rereadBtn', 'click', () => {
+    const pat = takePattern();
+    if (!pat) { say('The pattern your take went into is gone. Record again.', 'warn'); return; }
+    commit(() => { rederive(); PJ.select(P, pat.trackId, pat.id); });
+    roll.fit();
+    say('Notes in "' + pat.name + '" rebuilt from your recording. Undo brings your edits back.');
+  });
   on('playTakeBtn', 'click', playTake);
 
-  // melody
-  on('instrument', 'change', () => { commit(() => { P.melody.instrument = $('instrument').value; }); preview(60); });
-  on('echo', 'change', () => commit(() => { P.melody.echo = $('echo').checked; }));
-  let volBefore = null;
-  const liveVol = (id, set) => {
-    on(id, 'input', () => { if (volBefore == null) volBefore = begin(); set(+$(id).value / 100); syncControls(); });
-    on(id, 'change', () => { if (volBefore != null) { end(volBefore); volBefore = null; autosave(); } });
-  };
-  liveVol('melVol', (v) => { P.melody.volume = v; });
-  liveVol('drumVol', (v) => { P.drums.volume = v; });
-  liveVol('swing', (v) => { P.drums.swing = v; });
-  on('melMute', 'click', () => commit(() => { P.melody.mute = !P.melody.mute; }));
-  on('snap', 'change', () => commit(() => { P.snap = +$('snap').value; if (takeLive()) rederive(); }));
+  // playlist
+  on('addSynth', 'click', () => {
+    commit(() => { const t = PJ.addTrack(P, 'synth'); PJ.select(P, t.id); });
+    say('Added a synth track. Pick its sound in the editor below, then draw or hum a pattern.');
+  });
+  on('addDrums', 'click', () => {
+    commit(() => { const t = PJ.addTrack(P, 'drums'); PJ.select(P, t.id); });
+    say('Added a drum track. Load a pattern or click steps in the editor below.');
+  });
+  on('plFit', 'click', () => playlist.fit());
+
+  // editor: patterns
+  on('patSel', 'change', () => select(P.sel.trackId, +$('patSel').value));
+  on('newPat', 'click', () => {
+    commit(() => { const pat = PJ.addPattern(P, P.sel.trackId); PJ.select(P, pat.trackId, pat.id); });
+    patCursor = 0; roll.fit();
+  });
+  on('clonePat', 'click', () => {
+    commit(() => { const pat = PJ.clonePattern(P, curPat()); PJ.select(P, pat.trackId, pat.id); });
+    say('Made a copy called "' + curPat().name + '". Changes to it leave the original alone.');
+  });
+  on('renamePat', 'click', () => {
+    const name = prompt('Rename this pattern', curPat().name);
+    if (name && name.trim()) commit(() => { curPat().name = name.trim().slice(0, 40); });
+  });
+  on('delPat', 'click', () => {
+    const pat = curPat();
+    commit(() => PJ.deletePattern(P, pat.id));
+    say('Deleted "' + pat.name + '" and its clips. Undo brings it back.');
+  });
+  on('addToSong', 'click', () => {
+    const pat = curPat();
+    const endOfTrack = P.clips.filter((c) => c.trackId === pat.trackId).reduce((a, c) => Math.max(a, c.start + c.len), 0);
+    commit(() => PJ.addClip(P, pat, Math.ceil(endOfTrack / 4) * 4));
+  });
+
+  // editor: synth
+  on('instrument', 'change', () => { commit(() => { curTrack().instrument = $('instrument').value; }); preview(60); });
+  on('echo', 'change', () => commit(() => { curTrack().echo = $('echo').checked; }));
+  on('snap', 'change', () => commit(() => { P.snap = +$('snap').value; if (takeFresh()) rederive(); }));
   on('bars', 'change', () => {
-    const min = Math.max(1, Math.ceil(PJ.melodyEnd(P) / 4 - 1e-6));
+    const pat = curPat();
+    const min = Math.max(1, Math.ceil(PJ.notesEnd(pat) / 4 - 1e-6));
     const v = clamp(Math.round(+$('bars').value) || min, 1, 128);
-    if (v < min) say('Your notes reach bar ' + min + '. Delete the later notes to make the song shorter.', 'warn');
-    commit(() => { P.bars = Math.max(v, min); });
+    if (v < min) say('The notes reach bar ' + min + '. Delete the later notes to make the pattern shorter.', 'warn');
+    commit(() => { pat.bars = Math.max(v, min); });
   });
   const octave = (d) => {
-    if (takeLive() && !roll.sel.size) commit(() => { P.melody.takeOctave = clamp(P.melody.takeOctave + d, -4, 4); rederive(); });
+    const pat = curPat();
+    if (take && take.patternId === pat.id && pat.fromTake && !roll.sel.size) commit(() => { pat.takeOctave = clamp((pat.takeOctave || 0) + d, -4, 4); rederive(); });
     else roll.transpose(12 * d);
   };
   on('octUp', 'click', () => octave(1));
@@ -753,25 +933,28 @@
   on('keyBtn', 'click', () => { if (P.scale === 'chromatic') say('Pick a key first. Chromatic has no wrong notes to fix.', 'warn'); else roll.fitToKey(); });
   on('legatoBtn', 'click', () => roll.legato());
   on('clearMelBtn', 'click', () => {
-    if (!P.melody.notes.length) return;
-    commit(() => { P.melody.notes = []; P.melody.fromTake = false; });
+    const pat = curPat();
+    if (!pat.notes.length) return;
+    commit(() => { pat.notes = []; pat.fromTake = false; });
     roll.sel.clear();
-    say('Melody cleared. Undo brings it back.');
+    say('Pattern cleared. Undo brings the notes back.');
   });
   on('fitBtn', 'click', () => roll.fit());
 
-  // drums
+  // editor: drums
   on('preset', 'change', () => {
     const k = $('preset').value;
     if (!k) return;
-    commit(() => PJ.applyPreset(P, k));
+    commit(() => PJ.applyPreset(P, curPat(), k));
     $('preset').value = '';
     const pre = PJ.PRESETS[k];
-    say(pre.name + ' loaded.' + (pre.bpm && Math.abs(pre.bpm - P.bpm) > 12 ? ' It usually sits around ' + pre.bpm + ' BPM.' : ''));
+    say(pre.name + ' loaded into "' + curPat().name + '".' + (pre.bpm && Math.abs(pre.bpm - P.bpm) > 12 ? ' It usually sits around ' + pre.bpm + ' BPM.' : ''));
   });
-  on('drumBars', 'change', () => commit(() => PJ.setDrumBars(P, +$('drumBars').value)));
-  on('drumClear', 'click', () => commit(() => PJ.applyPreset(P, 'empty')));
-  on('drumMute', 'click', () => commit(() => { P.drums.mute = !P.drums.mute; }));
+  on('drumBars', 'change', () => commit(() => PJ.setDrumBars(curPat(), +$('drumBars').value)));
+  on('drumClear', 'click', () => commit(() => PJ.applyPreset(P, curPat(), 'empty')));
+  let swingBefore = null;
+  on('swing', 'input', () => { if (swingBefore == null) swingBefore = begin(); curTrack().swing = +$('swing').value / 100; });
+  on('swing', 'change', () => { if (swingBefore != null) { end(swingBefore); swingBefore = null; autosave(); } });
   on('sampleInput', 'change', (e) => { if (e.target.files[0] && sampleTarget) loadSample(sampleTarget, e.target.files[0]); e.target.value = ''; });
 
   // keys
@@ -803,13 +986,15 @@
 
   /* ---------- start ---------- */
   syncControls();
-  rack.render();
+  renderEditor();
+  playlist.renderHeads();
   refreshInfo();
   updateUndo();
   showPos(null);
   roll.fit();
-  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => roll.draw());
+  playlist.fit();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { roll.draw(); playlist.draw(); });
   say(restored
     ? 'Welcome back, your last project is loaded. Press Space to play.'
-    : 'This is an example. Press Space to hear it, then press Record and hum, like "da da daa", or click in the piano roll to draw notes.');
+    : 'This is an example song. Press Space to hear it. Click a clip in the playlist to edit its pattern below, or press Record and hum a new idea.');
 })();
