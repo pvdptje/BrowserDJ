@@ -1679,7 +1679,7 @@
     await p.userChoice.catch(() => null);
   });
 
-  window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, mixer, live, transport: T };
+  window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, mixer, live, transport: T, get tour() { return tour; } };
 
   /* ---------- wiring ---------- */
   E.NOTE_NAMES.forEach((nm, i) => $('root').add(new Option(nm, i)));
@@ -1785,6 +1785,51 @@
   on('wPlay', 'click', () => { closeWelcome(); if (!T.on) togglePlay(); });
   on('wExamples', 'click', (e) => { e.stopPropagation(); closeWelcome(); toggleExamples(); });
   on('wNew', 'click', () => { closeWelcome(); $('newBtn').click(); });
+
+  /* ---------- the tour: six steps, each pointing at the real thing; doing it moves on ---------- */
+  let tourKey = null;
+  const patKey = () => { const pat = curPat(); return pat.id + ':' + JSON.stringify(pat.notes || pat.steps || pat.audio); };
+  const tour = new BDJ.Tour([
+    {
+      target: () => $('playBtn'), title: 'Press Play',
+      text: (TOUCH ? 'Tap <b>Play</b>' : 'Press <b>Play</b> (or Space)') + ' to hear the song. Every sound in it is made right here, in your browser: no samples, no server.',
+      done: () => T.on,
+    },
+    {
+      target: () => $('plCanvas').closest('section'), title: 'The playlist is your song',
+      text: 'One row per track; each block is a pattern, placed where it plays. ' + (TOUCH ? '<b>Tap a block</b>' : '<b>Click a block</b>') + ' to open it in the editor below. Drag blocks to move them, drag a right edge to repeat one.',
+      enter: () => { tourKey = P.sel.patternId; }, done: () => P.sel.patternId !== tourKey,
+    },
+    {
+      // the editing surface itself (the whole editor is taller than a phone screen)
+      target: () => $({ drums: 'rack', audio: 'audioWrap' }[curTrack().type] || 'rollWrap'), title: 'The editor: change anything',
+      text: () => (curTrack().type === 'drums'
+        ? (TOUCH ? 'Tap' : 'Click') + ' steps to switch drum hits on or off; right-click one for an accent. Try one while it plays.'
+        : curTrack().type === 'audio' ? 'A recording: drag the edges of the waveform to trim it.'
+          : (TOUCH ? 'Tap' : 'Click') + ' the grid to add a note and drag to move it' + (TOUCH ? '' : ', right-click to delete') + '. The keys on the left play the sound. Try adding a note.'),
+      enter: () => { tourKey = patKey(); }, done: () => patKey() !== tourKey,
+    },
+    {
+      target: () => document.querySelector('.capture'), title: 'Hum it, or beatbox it',
+      text: 'Press <b>Record</b> and hum a tune: it becomes notes, in the song’s key. Switch to <b>Drums</b> and beatbox ("boots", "ka", "ts") to get a beat. Headphones help when you record over the song.',
+    },
+    {
+      target: () => $('mixerBody').closest('section'), title: 'The mixer',
+      text: 'Every track gets a strip: volume, a DJ filter, pan, drive, echo and reverb. <b>Pump</b> ducks a track on every kick, for that breathing dance-music feel.',
+      enter: () => setMixerOpen(true),
+    },
+    {
+      target: () => document.querySelector('.hactions'), title: 'Take it with you',
+      text: '<b>Share</b> makes a link with the whole song inside it. <b>Export WAV</b> gives you audio; <b>Download MIDI</b> takes the notes into FL Studio, Ableton or anything else. <b>My songs</b> keeps everything you make in this browser.',
+      last: true,
+    },
+  ], {
+    onEnd: (finished) => say(finished
+      ? 'That’s the tour. Make something: Undo is always there, and My songs keeps every song you work on.'
+      : 'Tour closed. "Take the one-minute tour" in Mouse and keyboard, at the bottom of the page, brings it back.'),
+  });
+  on('wTour', 'click', () => { closeWelcome(); tour.start(); });
+  on('helpTour', 'click', () => tour.start());
 
   on('newBtn', 'click', () => {
     stopAll();

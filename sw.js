@@ -3,7 +3,7 @@
    comes back is kept. Offline, the kept copy is used. The app files are fetched once at install, so the whole
    studio (examples included) works offline after the first visit. Fonts come from Google and are kept the same way.
    SHELL must list every file index.html loads: test/engine.test.js checks that. */
-const CACHE = 'browserdj-v1';
+const CACHE = 'browserdj-v2';
 const SHELL = [
   './',
   'index.html',
@@ -28,6 +28,7 @@ const SHELL = [
   'js/beatbox.js',
   'js/midiimport.js',
   'js/share.js',
+  'js/tour.js',
   'js/app.js',
 ];
 
