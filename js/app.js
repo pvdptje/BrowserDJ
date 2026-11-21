@@ -91,6 +91,7 @@
   /* kind: 'live' (mid-drag), 'notes', 'drums', 'clips', 'tracks', 'quiet', 'all' */
   function changed(kind) {
     if (kind === 'live') { playlist.draw(); return; }
+    PJ.syncAudio(P);
     if (kind === 'notes') {
       const pat = curPat();
       pat.fromTake = false;
@@ -104,7 +105,7 @@
     if (kind === 'mix') { playlist.renderHeads(); updateMixer(); }
     if (kind === 'view') { playlist.renderHeads(); playlist.draw(); autosave(); return; }
     if (kind === 'auto') { playlist.renderHeads(); mixer.render(); }
-    if (kind !== 'quiet') { refreshInfo(); roll.draw(); playlist.draw(); }
+    if (kind !== 'quiet') { refreshInfo(); roll.draw(); playlist.draw(); drawAudio(); }
     autosave();
   }
 
@@ -303,7 +304,9 @@
   function noteOn(pitch, vel, source) {
     let ac;
     try { ac = audio(); } catch (err) { return; }
-    const t = curTrack(), out = liveMixer().channel(t), now = ac.currentTime + 0.003;
+    const t = curTrack();
+    if (t.type === 'audio') return;
+    const out = liveMixer().channel(t), now = ac.currentTime + 0.003;
     if (t.type === 'drums') {
       const id = drumFor(pitch, source), k = t.kit.find((r) => r.id === id);
       SND.drumHit(ac, out, id, now, vel, sampleBuf(t, id), null, k ? k.vol : 0.8);
@@ -362,17 +365,22 @@
   }
 
   /* Plays every note and hit of `items` that starts in [lo, hi) (local beats), shifted by `off` beats. */
-  function scheduleEvents(ac, M, items, lo, hi, off, timeOf, bpm, skipTrack) {
+  /* catchUp: also start recordings already under way at lo. cut: a song beat where recordings stop (the loop end). */
+  function scheduleEvents(ac, M, items, lo, hi, off, timeOf, bpm, skipTrack, catchUp, cut) {
     const bps = 60 / bpm;
     PJ.eventsIn(P, items, lo, hi, (ev) => {
       const out = M.channel(ev.track), when = timeOf(ev.at + off);
-      if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, voiceShape(ev.track), samplerFor(ev.track));
+      if (ev.kind === 'audio') {
+        const au = ev.pattern.audio, buf = decoded.get(au.hash);
+        const len = cut != null ? Math.min(ev.len, cut - ev.at) : ev.len;
+        if (buf && len > 0) SND.audioClip(ac, out, buf, when, au.start + ev.offset * bps, len * bps, au.gain, M.live);
+      } else if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, voiceShape(ev.track), samplerFor(ev.track));
       else {
         SND.drumHit(ac, out, ev.drum, when, ev.vel, sampleBuf(ev.track, ev.drum), M.live, ev.gain);
         // every kick pumps the tracks that have Pump turned up
         if (ev.drum === 'kick' || ev.drum === 'hkick') M.pumpAt(when, ev.track.id);
       }
-    }, { skipTrack });
+    }, { skipTrack, catchUp });
   }
 
   /* Song automation for song beats [lo, hi): hold the value at lo, ramp through any points, arrive at hi. */
@@ -413,7 +421,7 @@
     if (!opts.rec && P.loop && (from < lr.start || from >= lr.end)) from = lr.start;
     Object.assign(T, {
       on: true, rec: !!opts.rec, mode, bpm: P.bpm, L, S: lr.start, E: lr.end,
-      t0: ac.currentTime + 0.08, beat0: from, sched: from, from, skipTrack: opts.skipTrack || null,
+      t0: ac.currentTime + 0.08, beat0: from, sched: from, from, skipTrack: opts.skipTrack || null, catchUp: true,
       // LFOs count their cycles from the moment beat 0 of what plays would have sounded
       M: SND.createMixer(ac, { bpm: P.bpm, master: P.master, loud: P.loud, lfoZero: ac.currentTime + 0.08 - (from * 60) / P.bpm }),
     });
@@ -452,7 +460,10 @@
           const pos = songPos(a), off = a - pos;
           const wrapAt = a < T.E ? T.E : T.E + (Math.floor((a - T.E) / span) + 1) * span;
           const b = Math.min(endB, wrapAt);
-          scheduleEvents(actx, T.M, items, pos, pos + (b - a), off, timeOf, T.bpm);
+          // at the start and at every jump back to the loop start, recordings already under way join in
+          const fresh = T.catchUp || (a > T.from && Math.abs(pos - T.S) < 1e-9);
+          T.catchUp = false;
+          scheduleEvents(actx, T.M, items, pos, pos + (b - a), off, timeOf, T.bpm, null, fresh, T.E);
           if (T.mode === 'song') scheduleAuto(T.M, pos, pos + (b - a), off, timeOf);
           clicks(pos, pos + (b - a), off, false);
           a = b;
@@ -461,7 +472,7 @@
         const a = T.sched, b = endB;
         // a recording count-in starts before the marker: only clicks there
         const lo = Math.max(a, T.rec ? T.from + 4 : 0);
-        if (lo < b && a < L) scheduleEvents(actx, T.M, items, lo, Math.min(b, L), 0, timeOf, T.bpm, T.skipTrack);
+        if (lo < b && a < L) { scheduleEvents(actx, T.M, items, lo, Math.min(b, L), 0, timeOf, T.bpm, T.skipTrack, T.catchUp); T.catchUp = false; }
         if (T.mode === 'song') scheduleAuto(T.M, a, b, 0, timeOf);
         clicks(a, b, 0, T.rec && !items.some((it) => it.track.id !== T.skipTrack && PJ.audible(P, it.track)));
       }
@@ -513,6 +524,7 @@
       rack.setPlayhead(eb != null && eb >= 0 && curTrack().type === 'drums' ? Math.floor(eb * 4 + 1e-6) % N : -1);
       mixer.meter(T.on ? (id) => T.M.level(id) : null);
       roll.draw();
+      drawAudio();
       playlist.draw();
       T.raf = requestAnimationFrame(tickUI);
     };
@@ -656,10 +668,11 @@
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 } });
     } catch (err) { say(micHelp(err), 'warn'); return; } finally { starting = false; }
-    const drumsMode = P.capture.mode === 'drums';
+    const audioMode = curTrack().type === 'audio';
+    const drumsMode = !audioMode && P.capture.mode === 'drums';
     // melody: a synth pattern, so the live pitch shows where the notes will land; drums: a drum pattern
-    if (drumsMode && curTrack().type !== 'drums') commit(() => beatTarget());
-    if (!drumsMode && curTrack().type !== 'synth') commit(() => takeTarget());
+    if (!audioMode && drumsMode && curTrack().type !== 'drums') commit(() => beatTarget());
+    if (!audioMode && !drumsMode && curTrack().type !== 'synth') commit(() => takeTarget());
     const target = curPat();
     const an = new E.Analyzer(ac.sampleRate), chunks = [];
     const onChunk = (c) => { chunks.push(c); an.push(c); };
@@ -679,19 +692,20 @@
     src.connect(node);
     node.connect(mute);
     const ctxStart = ac.currentTime;
-    R = { stream, src, node, mute, an, chunks, started: performance.now(), timer: setInterval(recTick, 50), anchor: null, liveBeat: null, targetId: target.id, drums: drumsMode };
-    if (P.capture.playBeat) {
+    R = { stream, src, node, mute, an, chunks, started: performance.now(), timer: setInterval(recTick, 50), anchor: null, liveBeat: null, targetId: target.id, drums: drumsMode, audio: audioMode, trackId: target.trackId };
+    if (P.capture.playBeat || audioMode) {
       // one bar of count-in before the song marker, then the rest of the song plays along (minus this track)
       play(songCursor - 4, { rec: true, skipTrack: target.trackId });
       let inLat = 0.01;
       try { const st = stream.getAudioTracks()[0].getSettings(); if (st && isFinite(st.latency)) inLat = st.latency; } catch (err) { /* unknown */ }
       R.anchor = timeOf(songCursor) - ctxStart + (ac.outputLatency || 0) + (ac.baseLatency || 0) + inLat;
-      say('Count-in: one bar of clicks, then ' + (drumsMode ? 'beatbox' : 'hum') + ' along with the song from bar ' + (Math.floor(songCursor / 4) + 1) + '. Press Stop (or Space) when you are done.');
+      say('Count-in: one bar of clicks, then ' + (audioMode ? 'sing or play' : drumsMode ? 'beatbox' : 'hum') + ' along with the song from bar ' + (Math.floor(songCursor / 4) + 1) + '. Press Stop (or Space) when you are done.' + (audioMode ? ' Use headphones, so the microphone only hears you.' : ''));
     } else {
       say(drumsMode ? 'Listening. Beatbox: "boots" for a kick, "ka" for a snare, "ts" for a hi-hat. Then press Stop.' : 'Listening. Hum your tune, then press Stop.');
       frame();
     }
     $('recBtn').classList.add('on');
+    $('audRec').classList.add('on');
     $('recLabel').textContent = 'Stop';
     for (const id of ['midiBtn', 'wavBtn', 'fileBtn', 'playTakeBtn']) $(id).disabled = true;
   }
@@ -709,7 +723,7 @@
       $('liveNote').classList.toggle('idle', !heard || R.drums);
     }
     R.liveBeat = T.on && T.rec ? beatAbs() - songCursor : (n * R.an.dt) * P.bpm / 60;
-    if (el > 180) stopRec();
+    if (el > (R.audio ? 600 : 180)) stopRec();
   }
 
   function stopRec() {
@@ -722,6 +736,7 @@
     R = null;
     stopAll();
     $('recBtn').classList.remove('on');
+    $('audRec').classList.remove('on');
     $('recLabel').textContent = 'Record';
     $('level').style.width = '0';
     $('liveNote').textContent = '--';
@@ -732,14 +747,15 @@
     let len = 0;
     for (const c of r.chunks) len += c.length;
     if (len < actx.sampleRate * 0.4) {
-      say(r.drums ? 'That was too short to find a beat. Press Record and beatbox for a few seconds.' : 'That was too short to find a tune. Press Record and hum for a few seconds.', 'warn');
+      say(r.audio ? 'That was too short. Press Record, wait for the count-in, and keep going for a bit.' : r.drums ? 'That was too short to find a beat. Press Record and beatbox for a few seconds.' : 'That was too short to find a tune. Press Record and hum for a few seconds.', 'warn');
       refreshInfo(); roll.draw();
       return;
     }
     const buf = actx.createBuffer(1, len, actx.sampleRate), ch = buf.getChannelData(0);
     let o = 0;
     for (const c of r.chunks) { ch.set(c, o); o += c.length; }
-    if (r.drums) beatIngest(ch, actx.sampleRate, r.anchor, r.targetId);
+    if (r.audio) audioIngest(ch, actx.sampleRate, r.anchor, r.trackId);
+    else if (r.drums) beatIngest(ch, actx.sampleRate, r.anchor, r.targetId);
     else ingest(r.an.frames(), buf, r.anchor, r.targetId);
     refreshInfo(); roll.draw();
   }
@@ -751,11 +767,18 @@
     if (/\.(mid|midi|smf)$/i.test(file.name) || file.type === 'audio/midi' || file.type === 'audio/x-midi') { importMidi(file); return; }
     stopAll();
     say('Reading ' + file.name + '…');
-    let buf;
+    const audioT = curTrack().type === 'audio' ? curTrack() : null;
+    let buf, bytes;
     try {
-      buf = await audio().decodeAudioData(await file.arrayBuffer());
+      bytes = await file.arrayBuffer();
+      buf = await audio().decodeAudioData(bytes.slice(0));
     } catch (err) {
       say('Could not read "' + file.name + '" as audio. Try a WAV, MP3, M4A or OGG file.', 'warn');
+      return;
+    }
+    if (audioT) {
+      if (buf.duration > 900) { say('"' + file.name + '" is longer than 15 minutes: too long to keep in the browser.', 'warn'); return; }
+      addTake(bytes, file.name, file.type || 'audio/wav', buf, audioT.id, songCursor, 'Loaded');
       return;
     }
     const n = Math.min(buf.length, Math.round(buf.sampleRate * 300));
@@ -794,6 +817,7 @@
       for (const k of t.kit || []) if (k.sample) out.push(k.sample);
       if (t.sampler) out.push(t.sampler);
     }
+    for (const x of P.patterns) if (x.audio) out.push(x.audio);
     return out;
   }
   /* what the Sampler instrument of track t plays: {buffer, root, gain}, or null while it has no sound */
@@ -824,6 +848,8 @@
     if (!jobs.length) return;
     await Promise.all(jobs);
     rack.render();
+    playlist.draw();
+    drawAudio();
     if (curTrack().type === 'synth') syncSampler();
     if (missing.length) say('This browser does not have ' + [...new Set(missing)].join(', ') + '. Load the sound again, or open a saved project file that contains it.', 'warn');
   }
@@ -1286,6 +1312,9 @@
     if (t.type === 'synth') {
       const n = pat.notes.length;
       $('patInfo').textContent = n + (n === 1 ? ' note' : ' notes') + ' · ' + pb + (pb === 1 ? ' bar' : ' bars');
+    } else if (t.type === 'audio') {
+      const au = pat.audio;
+      $('patInfo').textContent = au ? (au.end - au.start).toFixed(1) + ' s · ' + (Math.round(pb * 10) / 10) + ' bars' : 'empty take';
     } else {
       const hits = Object.values(pat.steps).reduce((a, s) => a + s.filter((v) => v).length, 0);
       $('patInfo').textContent = hits + (hits === 1 ? ' hit' : ' hits') + ' · ' + pb + (pb === 1 ? ' bar' : ' bars');
@@ -1342,11 +1371,14 @@
     for (const x of PJ.patternsOf(P, t.id)) sel.add(new Option(x.name, x.id));
     sel.value = pat.id;
     $('delPat').disabled = PJ.patternsOf(P, t.id).length < 2;
-    const synth = t.type === 'synth';
+    const synth = t.type === 'synth', audioT = t.type === 'audio';
     $('synthCtl').hidden = !synth;
-    $('drumCtl').hidden = synth;
+    $('drumCtl').hidden = t.type !== 'drums';
     $('shapeBar').hidden = !synth;
-    if (synth) {
+    $('audioBar').hidden = !audioT;
+    document.querySelector('.keysbar').hidden = audioT;
+    if (audioT) syncAudioBar();
+    else if (synth) {
       $('instrument').value = t.instrument;
       $('echo').checked = (t.echoSend || 0) > 0;
       syncShape();
@@ -1381,13 +1413,177 @@
   }
 
   function renderEditor() {
-    const synth = curTrack().type === 'synth';
+    const type = curTrack().type, synth = type === 'synth';
     renderEditorHead();
     $('rollTools').hidden = !synth;
     $('rollWrap').hidden = !synth;
-    $('rack').hidden = synth;
-    if (synth) roll.draw(); else rack.render();
+    $('rack').hidden = type !== 'drums';
+    $('audioWrap').hidden = type !== 'audio';
+    if (synth) roll.draw(); else if (type === 'audio') drawAudio(); else rack.render();
   }
+
+  /* ---------- audio tracks ----------
+     A take is a pattern whose audio is a recording in the sample store: pat.audio = {hash, name, secs, start, end,
+     gain}. Its clip plays it once, from start to end (seconds into the file). Trimming keeps the sound where it is
+     in the song: the clips move with the trimmed start. */
+  var peakCache = new Map(); // (var: drawing can be asked for during start-up, before this line runs) hash -> {rate, data}: loudest sample per 1/200 s, for drawing
+  function peaksFor(hash) {
+    if (peakCache.has(hash)) return peakCache.get(hash);
+    const buf = decoded.get(hash);
+    if (!buf) return null;
+    const rate = 200, blk = buf.sampleRate / rate, data = new Float32Array(Math.ceil(buf.length / blk));
+    for (let c = 0; c < buf.numberOfChannels; c++) {
+      const d = buf.getChannelData(c);
+      for (let i = 0; i < d.length; i++) { const k = (i / blk) | 0, v = Math.abs(d[i]); if (v > data[k]) data[k] = v; }
+    }
+    const pk = { rate, data };
+    peakCache.set(hash, pk);
+    return pk;
+  }
+  function dbOf(g) { return g > 0 ? 20 * Math.log10(g) : -60; }
+  function syncAudioBar() {
+    const au = curPat().audio;
+    const db = au ? Math.round(dbOf(au.gain) * 2) / 2 : 0;
+    $('audGain').value = clamp(db, -24, 18);
+    $('audGainOut').textContent = (db > 0 ? '+' : '') + db.toFixed(1) + ' dB';
+    $('audGain').disabled = $('audTrim').disabled = !au;
+  }
+
+  /* Keeps a recording (bytes + decoded buffer) as a take on trackId, with a clip at beat `at`. */
+  async function addTake(bytes, name, type, buffer, trackId, at, how) {
+    let ref;
+    try { ref = await BDJ.Samples.put(name, type, bytes); } catch (err) { say('Could not keep "' + name + '": ' + err.message + '.', 'warn'); return false; }
+    decoded.set(ref.hash, buffer);
+    // a comfortable level to start from: quiet recordings come up, loud files stay put
+    const gain = clamp(0.8 / Math.max(0.01, peakOf(buffer)), 0.1, 8);
+    let pat;
+    commit(() => {
+      const empty = PJ.patternsOf(P, trackId).find((x) => !x.audio && x.id === P.sel.patternId) || PJ.patternsOf(P, trackId).find((x) => !x.audio && !P.clips.some((c) => c.patternId === x.id));
+      pat = empty || PJ.addPattern(P, trackId);
+      pat.audio = { hash: ref.hash, name, secs: buffer.duration, start: 0, end: buffer.duration, gain };
+      PJ.syncAudio(P);
+      PJ.addClip(P, pat, at);
+      PJ.select(P, trackId, pat.id);
+    });
+    playlist.remember(P.sel.trackId, P.sel.patternId);
+    say(how + ' ' + buffer.duration.toFixed(1) + ' s into "' + pat.name + '" at bar ' + (Math.floor(at / 4) + 1) + '. Drag its edges below to trim, move the clip in the playlist, and set its level in the mixer.');
+    return true;
+  }
+
+  /* A recording made over the song: from `anchor` (seconds into the capture) it lines up with the song marker. */
+  async function audioIngest(ch, sr, anchor, trackId) {
+    const from = Math.max(0, Math.round((anchor || 0) * sr)), n = ch.length - from;
+    if (n < sr * 0.3) { say('That was too short: the recording starts after the count-in. Press Record and keep going for a bit.', 'warn'); return; }
+    const buf = new AudioBuffer({ length: n, numberOfChannels: 1, sampleRate: sr });
+    buf.getChannelData(0).set(ch.subarray(from));
+    if (peakOf(buf) < 0.002) { say('I did not hear anything. Check that the right microphone is picked, then record again.', 'warn'); return; }
+    const name = 'Recording ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '.wav';
+    const bytes = await SND.encodeWav(buf).arrayBuffer();
+    await addTake(bytes, name, 'audio/wav', buf, trackId, songCursor, 'Recorded');
+  }
+
+  /* Moves the trim points of take `pat`, keeping the sound in place: clips shift with the start; clips that held
+     the whole take keep holding all of it. o: the take and its clips as they were when the edit began. */
+  function trimTake(pat, o, start, end) {
+    const au = pat.audio;
+    au.start = clamp(start, 0, au.secs - 0.05);
+    au.end = clamp(end, au.start + 0.05, au.secs);
+    PJ.syncAudio(P);
+    const db = ((au.start - o.start) * P.bpm) / 60;
+    for (const x of o.clips) {
+      x.c.start = Math.max(0, x.start + db);
+      x.c.len = x.full ? au.beats : Math.max(0.25, x.len - db);
+    }
+  }
+  function trimState(pat) {
+    const au = pat.audio;
+    return { start: au.start, end: au.end, clips: P.clips.filter((c) => c.patternId === pat.id).map((c) => ({ c, start: c.start, len: c.len, full: c.len >= au.beats - 1e-6 })) };
+  }
+
+  var aview = $('audioView'), ag = aview.getContext('2d'), audDrag = null;
+  var APAD = 14;
+  function audX(au, W, t) { return APAD + (t / au.secs) * (W - 2 * APAD); }
+  function audT(au, W, x) { return ((x - APAD) / (W - 2 * APAD)) * au.secs; }
+  function drawAudio() {
+    if (!ag || $('audioWrap').hidden || curTrack().type !== 'audio') return;
+    const dpr = window.devicePixelRatio || 1, W = Math.max(200, aview.clientWidth), H = aview.clientHeight || 220;
+    if (aview.width !== Math.round(W * dpr) || aview.height !== Math.round(H * dpr)) { aview.width = Math.round(W * dpr); aview.height = Math.round(H * dpr); }
+    ag.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ag.clearRect(0, 0, W, H);
+    const au = curPat().audio;
+    $('audioEmpty').hidden = !!au;
+    if (!au) return;
+    const pk = peaksFor(au.hash), color = curTrack().color, spb = 60 / P.bpm, mid = (H - 18) / 2;
+    // beats, counted from where the take starts (where its clip starts in the song)
+    ag.fillStyle = 'rgba(255,255,255,0.06)';
+    for (let k = -Math.floor(au.start / spb); au.start + k * spb <= au.secs; k++) {
+      const x = Math.round(audX(au, W, au.start + k * spb));
+      ag.fillStyle = k % 4 === 0 ? 'rgba(255,255,255,0.13)' : 'rgba(255,255,255,0.05)';
+      ag.fillRect(x, 0, 1, H - 18);
+    }
+    if (!pk) {
+      ag.fillStyle = 'rgba(255,255,255,0.5)'; ag.font = '13px ' + getComputedStyle(document.body).fontFamily;
+      ag.fillText('"' + au.name + '" is not in this browser. Load it again, or open a saved project file that contains it.', APAD, mid);
+      return;
+    }
+    for (let x = APAD; x < W - APAD; x++) {
+      const a = audT(au, W, x), z = audT(au, W, x + 1);
+      let m = 0;
+      for (let i = Math.floor(a * pk.rate), e = Math.min(pk.data.length, Math.ceil(z * pk.rate)); i < e; i++) m = Math.max(m, pk.data[i]);
+      const inside = (a + z) / 2 >= au.start && (a + z) / 2 <= au.end;
+      const hh = Math.max(0.5, Math.min(1, m * au.gain) * (mid - 6));
+      ag.fillStyle = inside ? color : 'rgba(255,255,255,0.18)';
+      ag.fillRect(x, mid - hh, 1, hh * 2);
+    }
+    // trimmed-off parts are shaded, the edges have handles
+    ag.fillStyle = 'rgba(10,9,16,0.55)';
+    const xs = audX(au, W, au.start), xe = audX(au, W, au.end);
+    ag.fillRect(0, 0, xs, H - 18); ag.fillRect(xe, 0, W - xe, H - 18);
+    for (const x of [xs, xe]) {
+      ag.fillStyle = '#fff'; ag.fillRect(Math.round(x) - 1, 0, 2, H - 18);
+      ag.fillRect(Math.round(x) - 5, mid - 14, 10, 28);
+    }
+    // seconds along the bottom
+    ag.fillStyle = 'rgba(255,255,255,0.45)'; ag.font = '11px ' + getComputedStyle(document.body).fontFamily;
+    const step = au.secs > 120 ? 30 : au.secs > 40 ? 10 : au.secs > 12 ? 5 : 1;
+    for (let t = 0; t <= au.secs + 1e-6; t += step) { const x = audX(au, W, t) + 3; if (x < W - 34) ag.fillText(fmtTime(t), x, H - 5); }
+    // playhead
+    const eb = editorPlayhead();
+    if (eb != null && eb >= 0 && (T.on || TK)) {
+      const t = au.start + eb * spb;
+      if (t <= au.end) { ag.fillStyle = '#fff'; ag.fillRect(Math.round(audX(au, W, t)), 0, 2, H - 18); }
+    }
+  }
+  function audEdgeAt(x) {
+    const au = curPat().audio, W = aview.clientWidth;
+    if (!au) return null;
+    const ds = Math.abs(x - audX(au, W, au.start)), de = Math.abs(x - audX(au, W, au.end));
+    if (Math.min(ds, de) > (TOUCH ? 22 : 12)) return null; // fingers get a wider handle
+    return ds <= de ? 'start' : 'end';
+  }
+  aview.addEventListener('pointerdown', (e) => {
+    const x = e.offsetX, edge = audEdgeAt(x), pat = curPat();
+    if (!edge || !pat.audio) return;
+    e.preventDefault();
+    aview.setPointerCapture(e.pointerId);
+    audDrag = { edge, pat, before: begin(), o: trimState(pat) };
+  });
+  aview.addEventListener('pointermove', (e) => {
+    if (!audDrag) { aview.style.cursor = audEdgeAt(e.offsetX) ? 'ew-resize' : 'default'; return; }
+    const { pat, o, edge } = audDrag, t = audT(pat.audio, aview.clientWidth, e.offsetX);
+    trimTake(pat, o, edge === 'start' ? t : o.start, edge === 'end' ? t : o.end);
+    refreshInfo(); drawAudio(); playlist.draw();
+  });
+  const audUp = () => {
+    if (!audDrag) return;
+    const d = audDrag;
+    audDrag = null;
+    end(d.before);
+    changed('clips');
+  };
+  aview.addEventListener('pointerup', audUp);
+  aview.addEventListener('pointercancel', audUp);
+  window.addEventListener('resize', () => drawAudio());
 
   /* ---------- components ---------- */
   const roll = new BDJ.PianoRoll($('roll'), {
@@ -1432,6 +1628,7 @@
       if (T.on && !T.rec) play();
     },
     trackChanged: (t) => { if (T.on && T.M) T.M.update(t); if (liveM) liveM.update(t); mixer.render(); },
+    peaks: peaksFor,
     status: say,
     removeTrack: (id) => {
       const t = PJ.track(P, id);
@@ -1651,6 +1848,37 @@
   on('addDrums', 'click', () => {
     commit(() => { const t = PJ.addTrack(P, 'drums'); PJ.select(P, t.id); });
     say('Added a drum track. Load a pattern or click steps in the editor below.');
+  });
+  on('addAudio', 'click', () => {
+    commit(() => { const t = PJ.addTrack(P, 'audio'); PJ.select(P, t.id); });
+    say('Added an audio track. Put the song marker where you want to start, then Record over the song (headphones on), or load an audio file.');
+  });
+  on('audRec', 'click', () => (R ? stopRec() : startRec()));
+  on('audLoad', 'click', () => $('fileInput').click());
+  let gainBefore = null;
+  on('audGain', 'input', () => {
+    const au = curPat().audio;
+    if (!au) return;
+    if (gainBefore == null) gainBefore = begin();
+    au.gain = Math.pow(10, +$('audGain').value / 20);
+    syncAudioBar(); drawAudio(); playlist.draw();
+  });
+  on('audGain', 'change', () => { if (gainBefore != null) { end(gainBefore); gainBefore = null; autosave(); } });
+  on('audTrim', 'click', () => {
+    const pat = curPat(), au = pat.audio, buf = au && decoded.get(au.hash);
+    if (!buf) return;
+    const d = buf.getChannelData(0), sr = buf.sampleRate;
+    let pk = 0;
+    for (let i = Math.floor(au.start * sr); i < au.end * sr; i++) pk = Math.max(pk, Math.abs(d[i]));
+    const th = pk * 0.04;
+    let a = Math.floor(au.start * sr), z = Math.min(d.length, Math.ceil(au.end * sr)) - 1;
+    while (a < z && Math.abs(d[a]) < th) a++;
+    while (z > a && Math.abs(d[z]) < th) z--;
+    const ns = Math.max(au.start, a / sr - 0.01), ne = Math.min(au.end, z / sr + 0.08);
+    if (ne - ns < 0.05 || (ns - au.start < 0.005 && au.end - ne < 0.005)) { say('Nothing to trim: this take has no quiet start or end.'); return; }
+    const cut = (ns - au.start) + (au.end - ne);
+    commit(() => trimTake(pat, trimState(pat), ns, ne));
+    say('Trimmed ' + cut.toFixed(2) + ' s of quiet from "' + pat.name + '". The sound stays where it was in the song.');
   });
   on('plFit', 'click', () => playlist.fit());
   on('makeUnique', 'click', () => playlist.makeUnique());

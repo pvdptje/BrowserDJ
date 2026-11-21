@@ -137,18 +137,30 @@ BDJ.Sound = (() => {
     return b;
   }
 
-  /* Master ceiling: straight up to 0.78, then a soft knee that levels off near 0.92 (safely under full scale). */
+  /* Master ceiling: straight up to 0.78, then a soft knee that levels off near 0.94. */
   let ceilCurve = null;
   function ceiling() {
     if (!ceilCurve) {
       ceilCurve = new Float32Array(4096);
       for (let i = 0; i < ceilCurve.length; i++) {
         const x = (i / (ceilCurve.length - 1)) * 2 - 1, a = Math.abs(x);
-        // tops out near 0.92 so oversampling overshoot still stays well under full scale
         ceilCurve[i] = a <= 0.78 ? x : Math.sign(x) * (0.78 + 0.16 * Math.tanh((a - 0.78) / 0.16));
       }
     }
     return ceilCurve;
+  }
+  /* The last stage: the ceiling's oversampling filter can ring a few percent past it on sharp, noisy hits. This one
+     (no oversampling, so nothing after it can overshoot) leaves everything up to 0.93 alone and stops at 0.96. */
+  let guardCurve = null;
+  function guard() {
+    if (!guardCurve) {
+      guardCurve = new Float32Array(4096);
+      for (let i = 0; i < guardCurve.length; i++) {
+        const x = (i / (guardCurve.length - 1)) * 2 - 1, a = Math.abs(x);
+        guardCurve[i] = a <= 0.93 ? x : Math.sign(x) * (0.93 + 0.03 * Math.tanh((a - 0.93) / 0.03));
+      }
+    }
+    return guardCurve;
   }
   /* Loud 0..1 -> up to +12 dB pushed into the compressor and limiter */
   const pushGain = (loud) => Math.pow(10, (12 * Math.max(0, Math.min(1, loud || 0))) / 20);
@@ -165,7 +177,7 @@ BDJ.Sound = (() => {
     const dest = opts.destination || ac.destination;
     const master = ac.createGain();
     master.gain.value = opts.master == null ? 0.85 : opts.master;
-    // master: fader -> push (Loud) -> glue compressor -> limiter -> soft-clip ceiling -> out
+    // master: fader -> push (Loud) -> glue compressor -> limiter -> soft-clip ceiling -> safety stop -> out
     const push = ac.createGain();
     push.gain.value = pushGain(opts.loud);
     const comp = ac.createDynamicsCompressor();
@@ -174,7 +186,9 @@ BDJ.Sound = (() => {
     limiter.threshold.value = -2; limiter.knee.value = 0; limiter.ratio.value = 20; limiter.attack.value = 0.001; limiter.release.value = 0.08;
     const clip = ac.createWaveShaper();
     clip.curve = ceiling(); clip.oversample = '2x';
-    master.connect(push); push.connect(comp); comp.connect(limiter); limiter.connect(clip); clip.connect(dest);
+    const safe = ac.createWaveShaper();
+    safe.curve = guard(); safe.oversample = 'none';
+    master.connect(push); push.connect(comp); comp.connect(limiter); limiter.connect(clip); clip.connect(safe); safe.connect(dest);
     // stems: with opts.only set, every other track plays into a silent sink (its kicks still drive the pump)
     const sink = ac.createGain();
     sink.gain.value = 0;
@@ -348,7 +362,7 @@ BDJ.Sound = (() => {
         for (const n of live) { try { n.stop(now + 0.1); } catch (err) { /* already stopped */ } }
         live.clear();
         for (const ch of channels.values()) if (ch.lfo) { try { ch.lfo.osc.stop(now + 0.1); } catch (err) { /* gone */ } }
-        setTimeout(() => { try { master.disconnect(); clip.disconnect(); conv.disconnect(); } catch (err) { /* gone */ } }, 500);
+        setTimeout(() => { try { master.disconnect(); clip.disconnect(); safe.disconnect(); conv.disconnect(); } catch (err) { /* gone */ } }, 500);
       },
     };
   }
@@ -604,6 +618,27 @@ BDJ.Sound = (() => {
   }
 
   /* ---------- WAV ---------- */
+  /* A recording (audio clip): plays dur seconds of buffer from offset seconds, at when, with tiny fades so a cut
+     never clicks. A start in the past (catching up with a clip already under way) begins now, further in. */
+  function audioClip(ac, out, buffer, when, offset, dur, gain, live) {
+    const now = ac.currentTime;
+    if (when < now) { const late = now - when; offset += late; dur -= late; when = now; }
+    offset = Math.max(0, offset);
+    dur = Math.min(dur, buffer.duration - offset);
+    if (dur <= 0.005) return null;
+    const src = ac.createBufferSource(), g = ac.createGain();
+    src.buffer = buffer;
+    const lvl = gain == null ? 1 : gain, f = Math.min(0.004, dur / 4);
+    g.gain.setValueAtTime(0, when);
+    g.gain.linearRampToValueAtTime(lvl, when + f);
+    g.gain.setValueAtTime(lvl, when + dur - f);
+    g.gain.linearRampToValueAtTime(0, when + dur);
+    src.connect(g); g.connect(out);
+    src.start(when, offset, dur);
+    if (live) { live.add(src); src.onended = () => live.delete(src); }
+    return src;
+  }
+
   function encodeWav(buf) {
     const ch = buf.numberOfChannels, n = buf.length, sr = buf.sampleRate;
     const data = new DataView(new ArrayBuffer(44 + n * ch * 2));
@@ -625,5 +660,5 @@ BDJ.Sound = (() => {
     return new Blob([data], { type: 'audio/wav' });
   }
 
-  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, PARAMS, SHAPE, attackTime, releaseTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, encodeWav, midiToHz };
+  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, PARAMS, SHAPE, attackTime, releaseTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, audioClip, encodeWav, midiToHz };
 })();

@@ -341,6 +341,50 @@ test('synth shape: defaults, round trip, clamping; new instruments are known', (
   eq(old.tracks[0].shape, { attack: 0, release: 0, tone: 0.5 });
 });
 
+test('audio tracks: takes follow the tempo, play once, catch up mid-clip, survive a round trip', () => {
+  const p = PJ.blank();
+  p.bpm = 120;
+  const t = PJ.addTrack(p, 'audio');
+  assert.strictEqual(t.name, 'Audio');
+  assert.strictEqual(t.echoSend, 0);
+  const pat = PJ.patternsOf(p, t.id)[0];
+  assert.strictEqual(pat.name, 'Take 1');
+  assert.strictEqual(pat.audio, null);
+  assert.strictEqual(PJ.patternBeats(pat), 4); // an empty take still has a size in the playlist
+  pat.audio = { hash: 'ab'.repeat(16), name: 'vox.wav', secs: 10, start: 1, end: 7, gain: 2 };
+  PJ.syncAudio(p);
+  assert.strictEqual(PJ.patternBeats(pat), 12); // 6 s at 120 BPM
+  p.bpm = 90; PJ.syncAudio(p);
+  assert.strictEqual(PJ.patternBeats(pat), 9); // not stretched: fewer beats at a slower tempo
+  p.bpm = 120; PJ.syncAudio(p);
+  p.clips = [];
+  const c = PJ.addClip(p, pat, 8);
+  assert.strictEqual(c.len, 12);
+  c.len = 20; // a longer clip does not repeat the take
+  p.mode = 'song';
+  const { items } = PJ.playItems(p, 'song');
+  const got = [];
+  PJ.eventsIn(p, items, 0, 40, (ev) => got.push(ev));
+  eq(got.map((e) => [e.kind, e.at, e.len, e.offset]), [['audio', 8, 12, 0]]);
+  // starting in the middle: only with catchUp, from there on
+  const mid = [];
+  PJ.eventsIn(p, items, 11, 12, (ev) => mid.push(ev));
+  assert.strictEqual(mid.length, 0);
+  PJ.eventsIn(p, items, 11, 12, (ev) => mid.push(ev), { catchUp: true });
+  eq(mid.map((e) => [e.at, e.len, e.offset]), [[11, 9, 3]]);
+  // no MIDI for recordings
+  assert.ok(!PJ.midiTracks(p, 'song').some((m) => m.name === 'Audio'));
+  // round trip, with bad values cleaned up
+  const back = PJ.normalize(JSON.parse(PJ.serialize(p)));
+  const bt = back.tracks.find((x) => x.type === 'audio'), bp = PJ.patternsOf(back, bt.id)[0];
+  eq(bp.audio, { hash: 'ab'.repeat(16), name: 'vox.wav', secs: 10, start: 1, end: 7, gain: 2, beats: 12 });
+  assert.strictEqual(back.clips.filter((x) => x.trackId === bt.id).length, 1);
+  const junk = PJ.normalize({ version: 2, bpm: 120, tracks: [{ id: 1, type: 'audio' }], patterns: [{ id: 2, trackId: 1, audio: { hash: 'nope' } }, { id: 3, trackId: 1, audio: { hash: 'cd'.repeat(8), secs: 4, start: 9, end: -1, gain: 99 } }] });
+  const jp = PJ.patternsOf(junk, junk.tracks[0].id);
+  assert.strictEqual(jp[0].audio, null);
+  eq([jp[1].audio.start, jp[1].audio.end, jp[1].audio.gain], [3.99, 4, 8]);
+});
+
 test('movement (LFO): off by default, round trip, bad values cleaned up', () => {
   const p = PJ.blank();
   const syn = p.tracks.find((t) => t.type === 'synth'), drums = p.tracks.find((t) => t.type === 'drums');

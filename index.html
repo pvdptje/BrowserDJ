@@ -141,6 +141,7 @@
       <span class="sep"></span>
       <button id="addSynth" class="btn small" type="button">+ Synth track</button>
       <button id="addDrums" class="btn small" type="button">+ Drum track</button>
+      <button id="addAudio" class="btn small" type="button" title="Record your voice or an instrument over the song, or bring in an audio file">+ Audio track</button>
       <button id="delClipsBtn" class="btn small" type="button" title="Delete the selected clips (Delete key, or right-click a clip)">Delete</button>
       <button id="makeUnique" class="btn small" type="button" title="Give the selected clip(s) their own copy of the pattern, so you can change it in just that spot (U)">Make unique</button>
       <button id="plFit" class="btn small" type="button" title="Zoom to the whole song">Zoom to fit</button>
@@ -230,6 +231,13 @@
         <span class="hint">BrowserDJ finds the note it was played at, so every key plays it in tune.</span>
       </div>
     </div>
+    <div class="audiobar" id="audioBar" hidden>
+      <button id="audRec" class="btn small tgl rec" type="button" title="One bar of count-in, then the song plays and you record over it (use headphones)">&#9679; Record over the song</button>
+      <button id="audLoad" class="btn small" type="button" title="A vocal, a loop, an instrument recording: WAV, MP3, M4A, OGG or FLAC">Load audio file</button>
+      <label class="shp" title="How loud this take plays. A new take starts at a comfortable level"><span>Level</span><input id="audGain" type="range" min="-24" max="18" step="0.5" value="0"><output id="audGainOut">0 dB</output></label>
+      <button id="audTrim" class="btn small" type="button" title="Cut the quiet bits at the start and end of this take">Trim silence</button>
+      <span class="hint">Records from the song marker. Drag the edges of the waveform to trim; a take plays once from where its clip starts.</span>
+    </div>
     <p id="notInSong" class="edhint" hidden>This pattern is not in the song yet. Click its lane in the playlist to place it, or <button id="addToSong" class="linkbtn" type="button">add it after the last clip</button>.</p>
     <div class="ptools" id="rollTools">
       <label for="snap" class="lab">Snap</label>
@@ -274,6 +282,7 @@
     </div>
     <div id="rollWrap"><canvas id="roll" tabindex="0" aria-label="Piano roll. Click to add notes, drag to move, drag the right edge to resize, right-click to delete."></canvas></div>
     <div id="rack" class="rack" hidden></div>
+    <div id="audioWrap" class="audiowrap" hidden><canvas id="audioView" aria-label="The take's waveform. Drag its left or right edge to trim."></canvas><p id="audioEmpty" class="audioempty">No recording in this take yet. Press <b>Record over the song</b> or <b>Load audio file</b>.</p></div>
   </section>
 
   <section class="panel" aria-label="Mixer">
@@ -341,6 +350,13 @@
           <li><b>Right-click</b> a step to make it an accent or a soft ghost hit</li>
           <li><b>Click a name</b> to hear the sound. <b>Drop an audio file</b> on a row (or use its &#8613; button) to use your own; &times; goes back to the built-in sound</li>
           <li>Your own sounds are kept in this browser, and <b>Save</b> puts them inside the project file so it opens complete anywhere</li>
+        </ul></div>
+      <div><h3>Audio tracks</h3>
+        <ul>
+          <li><b>+ Audio track</b> holds real recordings: your voice, a guitar, a loop</li>
+          <li>Put the song marker where you want to start and press <b>Record over the song</b>: one bar of clicks, then the song plays and you sing or play along. Wear <b>headphones</b> so the microphone only hears you</li>
+          <li><b>Load audio file</b> (or drop one while the audio track is selected) brings in a WAV, MP3, M4A, OGG or FLAC</li>
+          <li>Each recording is a <b>take</b>; its clip plays it once. Drag the edges of the waveform to trim (the sound stays where it is in the song), and set the level and effects in the mixer</li>
         </ul></div>
       <div><h3>Songs and files</h3>
         <ul>

@@ -274,6 +274,13 @@ button.sname:hover { background: rgba(255,255,255,0.06); }
 .shp input { width: 110px; min-width: 0; accent-color: var(--tc, var(--note)); }
 .shp output { font: 12px var(--font-mono); color: var(--text); min-width: 7.5ch; }
 
+/* audio tracks */
+.audiobar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.audiobar .hint { margin-left: auto; color: var(--muted); font-size: 12px; }
+.audiowrap { position: relative; background: var(--roll); }
+#audioView { display: block; height: 220px; width: 100%; touch-action: none; }
+.audioempty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; margin: 0; padding: 16px; text-align: center; color: var(--muted); pointer-events: none; }
+
 /* example picker */
 .exwrap { position: relative; }
 .btn.exbtn { border-color: var(--trace); color: var(--trace); }

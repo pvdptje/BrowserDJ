@@ -64,12 +64,13 @@ BDJ.Project = (() => {
   function addTrack(p, type, opts = {}) {
     const n = p.tracks.filter((t) => t.type === type).length + 1;
     const t = {
-      id: p.nextId++, type, name: opts.name || (type === 'drums' ? 'Drums' : 'Synth') + (n > 1 ? ' ' + n : ''),
+      id: p.nextId++, type, name: opts.name || ({ drums: 'Drums', audio: 'Audio' }[type] || 'Synth') + (n > 1 ? ' ' + n : ''),
       color: opts.color || nextColor(p), volume: 0.8, pan: 0, drive: 0, filter: 0.5, reverb: 0, pump: 0, mute: false, solo: false,
       auto: {}, autoOpen: false, autoParam: 'volume',
-      echoSend: type === 'drums' ? 0 : opts.echo === false ? 0 : 1,
+      echoSend: type !== 'synth' || opts.echo === false ? 0 : 1,
     };
     if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; }
+    else if (type === 'audio') { /* recordings: everything lives in its patterns (takes) */ }
     else { t.instrument = opts.instrument || 'pluck'; t.shape = { ...BDJ.Sound.SHAPE, ...(opts.shape || {}) }; t.lfo = { target: 'off', rate: '1/8', depth: 0.6 }; }
     p.tracks.push(t);
     addPattern(p, t.id);
@@ -79,8 +80,9 @@ BDJ.Project = (() => {
   function addPattern(p, trackId, name) {
     const t = track(p, trackId);
     const n = patternsOf(p, trackId).length + 1;
-    const pat = { id: p.nextId++, trackId, name: name || 'Pattern ' + n };
-    if (t.type === 'drums') { pat.bars = 1; pat.steps = emptySteps(1); } else { pat.bars = 2; pat.notes = []; pat.fromTake = false; pat.takeOctave = 0; }
+    const pat = { id: p.nextId++, trackId, name: name || (t.type === 'audio' ? 'Take ' : 'Pattern ') + n };
+    if (t.type === 'audio') pat.audio = null;
+    else if (t.type === 'drums') { pat.bars = 1; pat.steps = emptySteps(1); } else { pat.bars = 2; pat.notes = []; pat.fromTake = false; pat.takeOctave = 0; }
     p.patterns.push(pat);
     return pat;
   }
@@ -158,6 +160,7 @@ BDJ.Project = (() => {
   /* A pattern's loop length in beats: its bar count, grown to fit its notes. */
   function patternBeats(pat) {
     if (!pat) return 4;
+    if ('audio' in pat) return pat.audio ? Math.max(0.25, pat.audio.beats || 0) : 4;
     return Math.max(pat.bars, Math.ceil(notesEnd(pat) / 4 - 1e-6)) * 4;
   }
   /* Song length in beats: up to the end of the last clip, whole bars. */
@@ -165,6 +168,11 @@ BDJ.Project = (() => {
     const end = p.clips.reduce((a, c) => Math.max(a, c.start + c.len), 0);
     return Math.max(4, Math.ceil(end / 4 - 1e-6) * 4);
   }
+  /* A take's length in beats follows the tempo (audio is not stretched): call after the tempo or a trim changes. */
+  function syncAudio(p) {
+    for (const x of p.patterns) if (x.audio) x.audio.beats = Math.round(((x.audio.end - x.audio.start) * p.bpm) / 60 * 10000) / 10000;
+  }
+  const isAudio = (pat) => !!pat && 'audio' in pat;
   const snapBeats = (p) => (p.snap ? 4 / p.snap : 0);
 
   /* The part that loops: the playlist's loop region in song mode, otherwise everything. */
@@ -223,7 +231,13 @@ BDJ.Project = (() => {
       const a = Math.max(lo, it.start), b = Math.min(hi, it.start + it.len);
       if (b <= a + EPS) continue;
       const L = patternBeats(pat), clipEnd = it.start + it.len;
-      if (t.type === 'drums') {
+      if (t.type === 'audio') {
+        // a take plays once from the clip start; the clip can cut it short. catchUp: also one already under way at lo
+        if (!pat.audio) continue;
+        const end = it.start + Math.min(it.len, L);
+        if (it.start >= lo - EPS && it.start < hi - EPS) fn({ track: t, pattern: pat, item: it, kind: 'audio', at: it.start, len: end - it.start, offset: 0 });
+        else if (opt.catchUp && it.start < lo - EPS && end > lo + 0.01) fn({ track: t, pattern: pat, item: it, kind: 'audio', at: lo, len: end - lo, offset: lo - it.start });
+      } else if (t.type === 'drums') {
         const N = pat.bars * STEPS_PER_BAR;
         const anySolo = t.kit.some((k) => k.solo);
         // same window rule as notes: include at >= a - EPS, exclude at >= b - EPS, so windows never overlap or leave gaps
@@ -384,9 +398,9 @@ BDJ.Project = (() => {
     // ids are renumbered; keep maps from the old ones
     const tMap = new Map(), pMap = new Map();
     for (const t of (Array.isArray(o.tracks) ? o.tracks : []).slice(0, 32)) {
-      if (!t || (t.type !== 'synth' && t.type !== 'drums')) continue;
+      if (!t || (t.type !== 'synth' && t.type !== 'drums' && t.type !== 'audio')) continue;
       const nt = {
-        id: p.nextId++, type: t.type, name: str(t.name, t.type === 'drums' ? 'Drums' : 'Synth'),
+        id: p.nextId++, type: t.type, name: str(t.name, { drums: 'Drums', audio: 'Audio' }[t.type] || 'Synth'),
         color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : nextColor(p),
         volume: num(t.volume, 0.8, 0, 1), pan: num(t.pan, 0, -1, 1), drive: num(t.drive, 0, 0, 1), filter: num(t.filter, 0.5, 0, 1),
         reverb: num(t.reverb, 0, 0, 1), pump: num(t.pump, 0, 0, 1),
@@ -406,7 +420,7 @@ BDJ.Project = (() => {
           if (r.sample && /^[0-9a-f]{8,64}$/.test(r.sample.hash)) row.sample = { hash: r.sample.hash, name: str(r.sample.name, 'sample', 120) };
           return row;
         });
-      } else {
+      } else if (t.type === 'synth') {
         nt.instrument = BDJ.Sound.INSTRUMENTS.some((i) => i.id === t.instrument) ? t.instrument : 'pluck';
         const sh = t.shape || {};
         nt.shape = { attack: num(sh.attack, 0, 0, 1), release: num(sh.release, 0, 0, 1), tone: num(sh.tone, 0.5, 0, 1) };
@@ -423,8 +437,15 @@ BDJ.Project = (() => {
     for (const x of (Array.isArray(o.patterns) ? o.patterns : []).slice(0, 512)) {
       const t = x && tMap.get(x.trackId);
       if (!t) continue;
-      const np = { id: p.nextId++, trackId: t.id, name: str(x.name, 'Pattern') };
-      if (t.type === 'drums') {
+      const np = { id: p.nextId++, trackId: t.id, name: str(x.name, t.type === 'audio' ? 'Take' : 'Pattern') };
+      if (t.type === 'audio') {
+        // a recording: a reference into the browser's sample store, the part that plays (seconds) and a level fix
+        const au = x.audio;
+        if (au && /^[0-9a-f]{8,64}$/.test(au.hash)) {
+          const secs = num(au.secs, 1, 0.01, 3600), start = num(au.start, 0, 0, secs - 0.01);
+          np.audio = { hash: au.hash, name: str(au.name, 'recording', 120), secs, start, end: num(au.end, secs, start + 0.01, secs), gain: num(au.gain, 1, 0, 8) };
+        } else np.audio = null;
+      } else if (t.type === 'drums') {
         np.bars = num(x.bars, 1, 1, 8) | 0;
         const n = np.bars * STEPS_PER_BAR, st = x.steps && typeof x.steps === 'object' ? x.steps : {};
         np.steps = Object.fromEntries(BDJ.Sound.DRUMS.map((d) => [d.id, Array.from({ length: n }, (_, i) => num((st[d.id] || [])[i], 0, 0, 127) | 0)]));
@@ -444,6 +465,7 @@ BDJ.Project = (() => {
       if (!pat) continue;
       p.clips.push({ id: p.nextId++, trackId: pat.trackId, patternId: pat.id, start: num(c.start, 0, 0, 100000), len: num(c.len, 4, 0.25, 100000) });
     }
+    syncAudio(p);
     const sel = o.sel || {};
     const st = tMap.get(sel.trackId) || p.tracks[0], sp = pMap.get(sel.patternId);
     select(p, st.id, sp && sp.trackId === st.id ? sp.id : undefined);
@@ -481,6 +503,7 @@ BDJ.Project = (() => {
     const out = [];
     let ch = 0;
     for (const t of p.tracks) {
+      if (t.type === 'audio') continue; // recordings are not notes
       const notes = [];
       eventsIn(p, items.filter((it) => it.track === t), 0, length, (ev) => {
         notes.push(ev.kind === 'note'
@@ -528,7 +551,7 @@ BDJ.Project = (() => {
     track, pattern, patternsOf, selTrack, selPattern, select,
     blank, example, normalize, serialize,
     addTrack, addPattern, clonePattern, deletePattern, deleteTrack, addClip, uniqueName,
-    applyPreset, setDrumBars, notesEnd, patternBeats, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, autoValue, autoParams, sortAuto,
+    applyPreset, setDrumBars, notesEnd, patternBeats, syncAudio, isAudio, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, autoValue, autoParams, sortAuto,
     deriveFromTake, detectKey, midiTracks, History,
   };
 })();

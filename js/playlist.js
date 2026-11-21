@@ -109,7 +109,7 @@ BDJ.Playlist = (() => {
         const on = t.id === p.sel.trackId;
         html.push(`<div class="plhead${on ? ' on' : ''}${t.mute ? ' muted' : ''}" data-id="${t.id}" style="--tc:${t.color}">`);
         html.push(`<span class="swatch" aria-hidden="true"></span>`);
-        html.push(`<div class="plname"><input type="text" value="${esc(t.name)}" maxlength="40" aria-label="Track name" spellcheck="false"><span class="pltype">${t.type === 'drums' ? 'Drum kit' : esc((BDJ.Sound.INSTRUMENTS.find((i) => i.id === t.instrument) || {}).name || 'Synth')}</span></div>`);
+        html.push(`<div class="plname"><input type="text" value="${esc(t.name)}" maxlength="40" aria-label="Track name" spellcheck="false"><span class="pltype">${t.type === 'drums' ? 'Drum kit' : t.type === 'audio' ? 'Audio' : esc((BDJ.Sound.INSTRUMENTS.find((i) => i.id === t.instrument) || {}).name || 'Synth')}</span></div>`);
         const hasAuto = PJ().autoParams(t).length > 0;
         html.push(`<button type="button" class="tog auto${t.autoOpen ? ' on' : ''}${hasAuto ? ' has' : ''}" data-act="auto" aria-pressed="${t.autoOpen}" title="Automation lane${hasAuto ? ' (this track has automation)' : ''}">A</button>`);
         html.push(`<button type="button" class="tog${t.mute ? ' on' : ''}" data-act="mute" aria-pressed="${t.mute}" title="Mute">M</button>`);
@@ -758,7 +758,20 @@ BDJ.Playlist = (() => {
     preview(t, pat, cl, x, y, h) {
       const g = this.g, v = this.view, PL = PJ().patternBeats(pat);
       g.fillStyle = 'rgba(255,255,255,0.75)';
-      if (t.type === 'drums') {
+      if (t.type === 'audio') {
+        // the recording's waveform, once from the clip start (a take does not repeat)
+        const au = pat.audio, pk = au && this.host.peaks && this.host.peaks(au.hash);
+        if (!pk) return;
+        const spb = 60 / this.p.bpm, w = Math.min(cl.len, PL) * v.ppb, mid = y + h / 2;
+        const cw = this.c.width / (window.devicePixelRatio || 1), x0 = Math.max(0, -x), x1 = Math.min(w, cw - x);
+        for (let px = Math.floor(x0); px < x1; px++) {
+          const a = au.start + (px / v.ppb) * spb, z = au.start + ((px + 1) / v.ppb) * spb;
+          let m = 0;
+          for (let i = Math.floor(a * pk.rate), e = Math.min(pk.data.length, Math.ceil(z * pk.rate)); i < e; i++) m = Math.max(m, pk.data[i]);
+          const hh = Math.max(0.5, Math.min(1, m * (au.gain || 1)) * h / 2);
+          g.fillRect(x + px, mid - hh, 1, hh * 2);
+        }
+      } else if (t.type === 'drums') {
         const ids = BDJ.Sound.DRUMS.map((d) => d.id).filter((id) => (pat.steps[id] || []).some((s) => s));
         if (!ids.length) return;
         const rh = Math.min(5, h / ids.length), N = pat.bars * 16;
