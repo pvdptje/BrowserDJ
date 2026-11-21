@@ -65,7 +65,7 @@ BDJ.Project = (() => {
     const n = p.tracks.filter((t) => t.type === type).length + 1;
     const t = {
       id: p.nextId++, type, name: opts.name || (type === 'drums' ? 'Drums' : 'Synth') + (n > 1 ? ' ' + n : ''),
-      color: opts.color || nextColor(p), volume: 0.8, pan: 0, drive: 0, filter: 0.5, mute: false, solo: false,
+      color: opts.color || nextColor(p), volume: 0.8, pan: 0, drive: 0, filter: 0.5, reverb: 0, pump: 0, mute: false, solo: false,
       auto: {}, autoOpen: false, autoParam: 'volume',
       echoSend: type === 'drums' ? 0 : opts.echo === false ? 0 : 1,
     };
@@ -386,6 +386,7 @@ BDJ.Project = (() => {
         id: p.nextId++, type: t.type, name: str(t.name, t.type === 'drums' ? 'Drums' : 'Synth'),
         color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : nextColor(p),
         volume: num(t.volume, 0.8, 0, 1), pan: num(t.pan, 0, -1, 1), drive: num(t.drive, 0, 0, 1), filter: num(t.filter, 0.5, 0, 1),
+        reverb: num(t.reverb, 0, 0, 1), pump: num(t.pump, 0, 0, 1),
         mute: !!t.mute, solo: !!t.solo,
         auto: normAuto(t.auto), autoOpen: !!t.autoOpen,
         autoParam: BDJ.Sound.PARAMS.some((x) => x.id === t.autoParam) ? t.autoParam : 'volume',
@@ -478,11 +479,12 @@ BDJ.Project = (() => {
           : { start: ev.at, len: 0.2, pitch: BDJ.Sound.DRUMS.find((d) => d.id === ev.drum).gm, vel: Math.max(1, Math.round(ev.vel * (0.4 + 0.6 * ev.gain))) });
       });
       if (!notes.length) continue;
-      const controllers = [{ cc: 7, value: t.volume * 127 }, { cc: 10, value: 64 + (t.pan || 0) * 63 }];
+      const controllers = [{ cc: 7, value: t.volume * 127 }, { cc: 10, value: 64 + (t.pan || 0) * 63 }, { cc: 91, value: (t.reverb || 0) * 127 }];
       // song automation as controller changes: volume CC7, pan CC10, filter CC74, echo CC91
       const ccEvents = [];
       if (mode === 'song') {
-        const CC = { volume: 7, pan: 10, filter: 74, echo: 91 };
+        // the General MIDI way: 91 is the reverb send; echo goes on 94 (often used for delay)
+        const CC = { volume: 7, pan: 10, filter: 74, reverb: 91, echo: 94 };
         for (const id of autoParams(t)) {
           if (!CC[id]) continue;
           let last = -1;

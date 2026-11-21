@@ -292,6 +292,8 @@
       if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, ev.track.shape);
       else {
         SND.drumHit(ac, out, ev.drum, when, ev.vel, sampleBuf(ev.track, ev.drum), M.live, ev.gain);
+        // every kick pumps the tracks that have Pump turned up
+        if (ev.drum === 'kick' || ev.drum === 'hkick') M.pumpAt(when, ev.track.id);
       }
     }, { skipTrack });
   }

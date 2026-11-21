@@ -30,7 +30,7 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 - **Tracks** are instruments: a synth (piano roll) or a drum kit (step sequencer).
 - **Patterns** belong to a track. Clips in the playlist are links to a pattern, so editing it changes every clip.
 - **Pattern / Song** in the transport picks what Play (and export) plays. In Song mode with Loop on, a loop region (drag on the playlist ruler) limits the loop.
-- **Automation** lanes (the A button on a track) draw volume, filter, pan, drive and echo over the song; they play in Song mode and export to MIDI as controllers 7, 74, 10 and 91.
+- **Automation** lanes (the A button on a track) draw volume, filter, pan, drive, echo and reverb over the song; they play in Song mode and export to MIDI as controllers 7, 74, 10, 94 and 91.
 - **Markers** name song sections and are written into the MIDI file. Track volume and pan go in as controller 7 and 10.
 
 ## Tests

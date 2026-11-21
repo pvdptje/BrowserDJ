@@ -134,7 +134,8 @@
    "volume": 0.7,
    "pan": 0,
    "drive": 0.25,
-   "echoSend": 0
+   "echoSend": 0,
+   "pump": 0.55
   },
   {
    "id": 4,
@@ -145,7 +146,9 @@
    "volume": 0.66,
    "pan": 0.05,
    "drive": 0.35,
-   "echoSend": 0.45,
+   "echoSend": 0.35,
+   "reverb": 0.3,
+   "pump": 0.25,
    "auto": {
     "filter": [
      {
@@ -169,7 +172,9 @@
    "instrument": "pad",
    "volume": 0.6,
    "pan": -0.1,
-   "echoSend": 0.6,
+   "echoSend": 0.3,
+   "reverb": 0.6,
+   "pump": 0.6,
    "auto": {
     "volume": [
      {

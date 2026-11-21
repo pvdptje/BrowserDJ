@@ -84,6 +84,7 @@ BDJ.Sound = (() => {
     { id: 'pan', name: 'Pan', def: 0.5 },
     { id: 'drive', name: 'Drive', def: 0 },
     { id: 'echo', name: 'Echo', def: 0 },
+    { id: 'reverb', name: 'Reverb', def: 0 },
   ];
   /* the 0..1 value a track's own settings give a parameter */
   function trackParam(t, id) {
@@ -92,6 +93,7 @@ BDJ.Sound = (() => {
     if (id === 'pan') return ((t.pan || 0) + 1) / 2;
     if (id === 'drive') return t.drive || 0;
     if (id === 'echo') return t.echoSend || 0;
+    if (id === 'reverb') return t.reverb || 0;
     return 0;
   }
 
@@ -101,6 +103,37 @@ BDJ.Sound = (() => {
     if (!live) return;
     live.add(node);
     node.onended = () => live.delete(node);
+  }
+
+  /* ---------- reverb ----------
+     A generated room: stereo noise under an exponential decay that also darkens over time (high frequencies
+     die first, like a real room). Made once per sample rate and shared; AudioBuffers work in any context. */
+  const irCache = new Map();
+  function impulse(ac) {
+    const sr = ac.sampleRate;
+    let b = irCache.get(sr);
+    if (b) return b;
+    const secs = 2.6, n = Math.round(sr * secs), pre = Math.round(sr * 0.018);
+    b = ac.createBuffer(2, n, sr);
+    let seed = 22222;
+    const rnd = () => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed / 0x3fffffff - 1; };
+    for (let c = 0; c < 2; c++) {
+      const d = b.getChannelData(c);
+      let y = 0, energy = 0;
+      for (let i = pre; i < n; i++) {
+        const t = (i - pre) / sr;
+        const a = 0.85 * Math.exp(-t / 0.45) + 0.08;   // one-pole low-pass that closes as the tail goes on
+        y += a * (rnd() - y);
+        const v = y * Math.exp(-t / 0.62) * Math.min(1, t / 0.006);
+        d[i] = v;
+        energy += v * v;
+      }
+      // unit energy: a convolution then keeps the level of what goes in (the wet gain sets how loud the room is)
+      const norm = 1 / Math.sqrt(energy);
+      for (let i = 0; i < n; i++) d[i] *= norm;
+    }
+    irCache.set(sr, b);
+    return b;
   }
 
   /* ---------- mixer ---------- */
@@ -121,6 +154,15 @@ BDJ.Sound = (() => {
     fb.gain.value = 0.35; lp.type = 'lowpass'; lp.frequency.value = 2600; wet.gain.value = 0.28;
     echoIn.connect(dl); dl.connect(lp); lp.connect(fb); fb.connect(dl); lp.connect(wet); wet.connect(master);
 
+    // shared reverb: sends -> high-pass (keeps the low end clean) -> convolver -> master
+    const revIn = ac.createGain(), revHp = ac.createBiquadFilter(), conv = ac.createConvolver(), revWet = ac.createGain();
+    revHp.type = 'highpass'; revHp.frequency.value = 200;
+    conv.normalize = false;
+    conv.buffer = impulse(ac);
+    revWet.gain.value = 0.6;
+    revIn.connect(revHp); revHp.connect(conv); conv.connect(revWet); revWet.connect(master);
+    let bpm = opts.bpm || 120;
+
     // master meter, after the compressor
     const masterTap = ac.createAnalyser();
     masterTap.fftSize = 512;
@@ -128,26 +170,28 @@ BDJ.Sound = (() => {
 
     const channels = new Map();
     /* track: {id, volume, pan, echoSend, drive, filter} -> the node to play into.
-       input -> drive (pre gain, waveshaper, makeup) -> DJ filter (low-pass, high-pass) -> fader -> panner -> master,
-       with a post-fader echo send and a meter tap.
+       input -> drive (pre gain, waveshaper, makeup) -> DJ filter (low-pass, high-pass) -> pump (duck) -> fader -> panner
+       -> master, with post-fader echo and reverb sends and a meter tap.
        `auto` (a Set of parameter ids) marks parameters an automation lane drives; static updates leave those alone. */
     function channel(track) {
       let ch = channels.get(track.id);
       if (!ch) {
         const pre = ac.createGain(), shaper = ac.createWaveShaper(), post = ac.createGain();
         const lp = ac.createBiquadFilter(), hp = ac.createBiquadFilter();
-        const gain = ac.createGain(), send = ac.createGain(), tap = ac.createAnalyser();
+        const gain = ac.createGain(), send = ac.createGain(), rsend = ac.createGain(), duck = ac.createGain(), tap = ac.createAnalyser();
         const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
         shaper.oversample = '2x';
         lp.type = 'lowpass'; hp.type = 'highpass';
         lp.Q.value = 1.4; hp.Q.value = 1.4; // a little resonance makes sweeps sing
-        pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(gain);
+        pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(duck); duck.connect(gain);
         tap.fftSize = 512;
         if (pan) { gain.connect(pan); pan.connect(master); pan.connect(tap); }
         else { gain.connect(master); gain.connect(tap); }
         gain.connect(send);
         send.connect(echoIn);
-        ch = { pre, shaper, post, lp, hp, gain, send, pan, tap, buf: new Float32Array(512), auto: new Set() };
+        gain.connect(rsend);
+        rsend.connect(revIn);
+        ch = { pre, shaper, post, lp, hp, duck, gain, send, rsend, pan, tap, buf: new Float32Array(512), auto: new Set(), pump: track.pump || 0 };
         channels.set(track.id, ch);
         for (const prm of PARAMS) setParam(ch, prm.id, trackParam(track, prm.id), null);
       }
@@ -164,6 +208,7 @@ BDJ.Sound = (() => {
       if (id === 'volume') go(ch.gain.gain, v);
       else if (id === 'pan') { if (ch.pan) go(ch.pan.pan, v * 2 - 1); }
       else if (id === 'echo') go(ch.send.gain, v);
+      else if (id === 'reverb') go(ch.rsend.gain, v);
       else if (id === 'filter') { const f = filterFreqs(v); go(ch.lp.frequency, f.lp, true); go(ch.hp.frequency, f.hp, true); }
       else if (id === 'drive') {
         const d = driveSettings(v, ch.auto.has('drive'));
@@ -177,13 +222,23 @@ BDJ.Sound = (() => {
       const ch = channels.get(trackId);
       if (!ch) return;
       ch.auto.add(id);
-      const p = id === 'volume' ? ch.gain.gain : id === 'pan' ? ch.pan && ch.pan.pan : id === 'echo' ? ch.send.gain : null;
+      const p = id === 'volume' ? ch.gain.gain : id === 'pan' ? ch.pan && ch.pan.pan : id === 'echo' ? ch.send.gain : id === 'reverb' ? ch.rsend.gain : null;
       if (id === 'filter') { const f = filterFreqs(v); ch.lp.frequency.setValueAtTime(f.lp, at); ch.hp.frequency.setValueAtTime(f.hp, at); }
       else if (id === 'drive') {
         const d = driveSettings(v, true);
         ch.shaper.curve = d.curve;
         ch.pre.gain.setValueAtTime(d.pre, at); ch.post.gain.setValueAtTime(d.post, at);
       } else if (p) p.setValueAtTime(id === 'pan' ? v * 2 - 1 : v, at);
+    }
+    /* Sidechain pump: a kick at `when` ducks every channel that has pump, except the kick's own track,
+       then lets it swell back over about half a beat. */
+    function pumpAt(when, sourceId) {
+      for (const [id, ch] of channels) {
+        if (id === sourceId || !(ch.pump > 0)) continue;
+        const g = ch.duck.gain;
+        g.setTargetAtTime(1 - 0.92 * ch.pump, when, 0.003);
+        g.setTargetAtTime(1, when + 0.025, (60 / bpm) * 0.13);
+      }
     }
     const peak = (tap, buf) => {
       tap.getFloatTimeDomainData(buf);
@@ -195,12 +250,14 @@ BDJ.Sound = (() => {
 
     const live = new Set();
     return {
-      ac, master, live, channel, autoStart, autoAt,
+      ac, master, live, channel, autoStart, autoAt, pumpAt,
       /* static settings changed (a knob moved): follow them, except where automation is in charge */
       update(track) {
         const ch = channels.get(track.id);
         if (!ch) return;
         for (const prm of PARAMS) if (!ch.auto.has(prm.id)) setParam(ch, prm.id, trackParam(track, prm.id), ac.currentTime);
+        ch.pump = track.pump || 0;
+        if (!ch.pump) { ch.duck.gain.cancelScheduledValues(ac.currentTime); ch.duck.gain.setTargetAtTime(1, ac.currentTime, 0.02); }
       },
       setMaster(v) { master.gain.setTargetAtTime(v, ac.currentTime, 0.02); },
       /* current peak level (0..1+) of a track's channel, or of the master when id is null */
@@ -209,14 +266,14 @@ BDJ.Sound = (() => {
         const ch = channels.get(id);
         return ch ? peak(ch.tap, ch.buf) : 0;
       },
-      setBpm(bpm) { dl.delayTime.setTargetAtTime(Math.min(1.9, (60 / bpm) * 0.75), ac.currentTime, 0.05); },
+      setBpm(b) { bpm = b; dl.delayTime.setTargetAtTime(Math.min(1.9, (60 / b) * 0.75), ac.currentTime, 0.05); },
       stop() {
         const now = ac.currentTime;
         master.gain.cancelScheduledValues(now);
         master.gain.setTargetAtTime(0, now, 0.015);
         for (const n of live) { try { n.stop(now + 0.1); } catch (err) { /* already stopped */ } }
         live.clear();
-        setTimeout(() => { try { master.disconnect(); comp.disconnect(); } catch (err) { /* gone */ } }, 500);
+        setTimeout(() => { try { master.disconnect(); comp.disconnect(); conv.disconnect(); } catch (err) { /* gone */ } }, 500);
       },
     };
   }

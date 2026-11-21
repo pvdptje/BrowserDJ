@@ -199,6 +199,8 @@ input[type="range"].vol { width: 84px; }
 .fwrap.autod { position: relative; }
 .fwrap.autod::after { position: absolute; top: -4px; right: -10px; font-size: 10px; }
 .knob.filter input { accent-color: var(--trace); }
+.knob.reverb input { accent-color: #5fb4ff; }
+.knob.pump input { accent-color: var(--select); }
 .tog.x { font-size: 15px; }
 .tog:disabled { opacity: 0.3; cursor: default; }
 .pllanes { position: relative; min-width: 0; background: var(--roll); }

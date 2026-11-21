@@ -282,7 +282,7 @@ test('MIDI carries markers and per-track volume and pan', () => {
   const marks = m.tracks[0].filter((e) => e.meta === 0x06).map((e) => [e.tick / 480, String.fromCharCode(...e.data)]);
   eq(marks, [[0, 'Intro'], [16, 'Hook']]);
   const cc = m.tracks[2].filter((e) => e.type === 0xb0).map((e) => [e.a, e.b]); // the bass track
-  eq(cc, [[7, 64], [10, 1]]);
+  eq(cc, [[7, 64], [10, 1], [91, 0]]); // volume, pan, reverb send
 });
 
 test('drive and the hard kick', () => {
@@ -349,6 +349,17 @@ test('kit sample references: kept when valid, dropped when not', () => {
   eq(back.find((k) => k.id === 'snare').sample, { hash: '0fe912a76f03ec8026170740', name: 'tone.wav' });
   assert.strictEqual(back.find((k) => k.id === 'kick').sample, undefined);
   eq(back.find((k) => k.id === 'clap').sample, { hash: 'abcdef0123', name: 'sample' });
+});
+
+test('reverb and pump: defaults, clamping, reverb is automatable', () => {
+  const p = PJ.blank();
+  eq(p.tracks.map((t) => [t.reverb, t.pump]), [[0, 0], [0, 0]]);
+  const back = PJ.normalize({ ...JSON.parse(PJ.serialize(p)), tracks: p.tracks.map((t, i) => ({ ...t, reverb: i ? 0.4 : 3, pump: i ? -1 : 0.5 })) });
+  eq(back.tracks.map((t) => [t.reverb, t.pump]), [[1, 0.5], [0.4, 0]]);
+  assert.ok(ctx.BDJ.Sound.PARAMS.some((x) => x.id === 'reverb'));
+  // an old save without the fields gets none
+  const old = PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'synth' }] });
+  eq([old.tracks[0].reverb, old.tracks[0].pump], [0, 0]);
 });
 
 test('history undo/redo', () => {
