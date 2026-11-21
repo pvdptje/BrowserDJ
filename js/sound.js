@@ -54,11 +54,42 @@ BDJ.Sound = (() => {
     }
     return c;
   }
-  /* Track drive 0..1 -> {pre gain, curve, makeup gain}; 0 is a clean bypass. */
-  function driveSettings(drive) {
+  /* Track drive 0..1 -> {pre gain, curve, makeup gain}. The curve has slope SLOPE0 at zero, so the pre gain
+     divides it out: quiet signals pass at the same level for any drive, and more drive only adds clipping.
+     0 is a clean bypass (unless `keep`, used while drive is automated so the curve never switches mid-sweep). */
+  const DRIVE_H = 2.5, SLOPE0 = DRIVE_H / Math.tanh(DRIVE_H);
+  function driveSettings(drive, keep) {
     drive = Math.max(0, Math.min(1, drive || 0));
-    if (drive < 0.005) return { pre: 1, curve: null, post: 1 };
-    return { pre: 1 + 14 * drive, curve: clipCurve(2.5), post: 1 / (1 + 2 * drive) };
+    if (drive < 0.005 && !keep) return { pre: 1, curve: null, post: 1 };
+    // makeup: clipping turns waves square-ish, which carries more energy at the same peak, so pull back harder
+    return { pre: (1 + 14 * drive) / SLOPE0, curve: clipCurve(DRIVE_H), post: 1 / (1 + 4 * drive) };
+  }
+
+  /* DJ filter: 0..0.5 closes a low-pass, 0.5 is open, 0.5..1 raises a high-pass. */
+  function filterFreqs(v) {
+    v = Math.max(0, Math.min(1, v == null ? 0.5 : v));
+    return {
+      lp: v < 0.5 ? 60 * Math.pow(20000 / 60, v / 0.5) : 20000,
+      hp: v > 0.5 ? 20 * Math.pow(8000 / 20, (v - 0.5) / 0.5) : 20,
+    };
+  }
+
+  /* Automatable channel parameters, all stored as 0..1. */
+  const PARAMS = [
+    { id: 'volume', name: 'Volume', def: 0.8 },
+    { id: 'filter', name: 'Filter', def: 0.5 },
+    { id: 'pan', name: 'Pan', def: 0.5 },
+    { id: 'drive', name: 'Drive', def: 0 },
+    { id: 'echo', name: 'Echo', def: 0 },
+  ];
+  /* the 0..1 value a track's own settings give a parameter */
+  function trackParam(t, id) {
+    if (id === 'volume') return t.volume;
+    if (id === 'filter') return t.filter == null ? 0.5 : t.filter;
+    if (id === 'pan') return ((t.pan || 0) + 1) / 2;
+    if (id === 'drive') return t.drive || 0;
+    if (id === 'echo') return t.echoSend || 0;
+    return 0;
   }
 
   /* Keeps track of scheduled sources so playback can be stopped cleanly. */
@@ -93,35 +124,63 @@ BDJ.Sound = (() => {
     comp.connect(masterTap);
 
     const channels = new Map();
-    /* track: {id, volume, pan, echoSend, drive} -> the node to play into.
-       input -> drive (pre gain, waveshaper, makeup) -> fader -> panner -> master,
-       with a post-fader echo send and a meter tap */
-    function applyDrive(ch, drive, at) {
-      const d = driveSettings(drive);
-      ch.shaper.curve = d.curve;
-      if (at == null) { ch.pre.gain.value = d.pre; ch.post.gain.value = d.post; }
-      else { ch.pre.gain.setTargetAtTime(d.pre, at, 0.02); ch.post.gain.setTargetAtTime(d.post, at, 0.02); }
-    }
+    /* track: {id, volume, pan, echoSend, drive, filter} -> the node to play into.
+       input -> drive (pre gain, waveshaper, makeup) -> DJ filter (low-pass, high-pass) -> fader -> panner -> master,
+       with a post-fader echo send and a meter tap.
+       `auto` (a Set of parameter ids) marks parameters an automation lane drives; static updates leave those alone. */
     function channel(track) {
       let ch = channels.get(track.id);
       if (!ch) {
         const pre = ac.createGain(), shaper = ac.createWaveShaper(), post = ac.createGain();
+        const lp = ac.createBiquadFilter(), hp = ac.createBiquadFilter();
         const gain = ac.createGain(), send = ac.createGain(), tap = ac.createAnalyser();
         const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
         shaper.oversample = '2x';
-        pre.connect(shaper); shaper.connect(post); post.connect(gain);
+        lp.type = 'lowpass'; hp.type = 'highpass';
+        lp.Q.value = 1.4; hp.Q.value = 1.4; // a little resonance makes sweeps sing
+        pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(gain);
         tap.fftSize = 512;
-        gain.gain.value = track.volume;
-        send.gain.value = track.echoSend || 0;
-        if (pan) { pan.pan.value = track.pan || 0; gain.connect(pan); pan.connect(master); pan.connect(tap); }
+        if (pan) { gain.connect(pan); pan.connect(master); pan.connect(tap); }
         else { gain.connect(master); gain.connect(tap); }
         gain.connect(send);
         send.connect(echoIn);
-        ch = { pre, shaper, post, gain, send, pan, tap, buf: new Float32Array(512) };
-        applyDrive(ch, track.drive);
+        ch = { pre, shaper, post, lp, hp, gain, send, pan, tap, buf: new Float32Array(512), auto: new Set() };
         channels.set(track.id, ch);
+        for (const prm of PARAMS) setParam(ch, prm.id, trackParam(track, prm.id), null);
       }
       return ch.pre;
+    }
+
+    /* Moves one parameter to a 0..1 value: instantly (at == null), smoothly from `at`, or as a ramp ending at `at`. */
+    function setParam(ch, id, v, at, ramp) {
+      const go = (param, value, expo) => {
+        if (at == null) { param.value = value; return; }
+        if (ramp) { if (expo) param.exponentialRampToValueAtTime(value, at); else param.linearRampToValueAtTime(value, at); }
+        else param.setTargetAtTime(value, at, 0.02);
+      };
+      if (id === 'volume') go(ch.gain.gain, v);
+      else if (id === 'pan') { if (ch.pan) go(ch.pan.pan, v * 2 - 1); }
+      else if (id === 'echo') go(ch.send.gain, v);
+      else if (id === 'filter') { const f = filterFreqs(v); go(ch.lp.frequency, f.lp, true); go(ch.hp.frequency, f.hp, true); }
+      else if (id === 'drive') {
+        const d = driveSettings(v, ch.auto.has('drive'));
+        ch.shaper.curve = d.curve;
+        go(ch.pre.gain, d.pre); go(ch.post.gain, d.post);
+      }
+    }
+    /* automation: hold `v` from `at`, or ramp to `v` arriving at `at` */
+    function autoAt(trackId, id, v, at) { const ch = channels.get(trackId); if (ch) setParam(ch, id, v, at, true); }
+    function autoStart(trackId, id, v, at) {
+      const ch = channels.get(trackId);
+      if (!ch) return;
+      ch.auto.add(id);
+      const p = id === 'volume' ? ch.gain.gain : id === 'pan' ? ch.pan && ch.pan.pan : id === 'echo' ? ch.send.gain : null;
+      if (id === 'filter') { const f = filterFreqs(v); ch.lp.frequency.setValueAtTime(f.lp, at); ch.hp.frequency.setValueAtTime(f.hp, at); }
+      else if (id === 'drive') {
+        const d = driveSettings(v, true);
+        ch.shaper.curve = d.curve;
+        ch.pre.gain.setValueAtTime(d.pre, at); ch.post.gain.setValueAtTime(d.post, at);
+      } else if (p) p.setValueAtTime(id === 'pan' ? v * 2 - 1 : v, at);
     }
     const peak = (tap, buf) => {
       tap.getFloatTimeDomainData(buf);
@@ -133,15 +192,12 @@ BDJ.Sound = (() => {
 
     const live = new Set();
     return {
-      ac, master, live, channel,
+      ac, master, live, channel, autoStart, autoAt,
+      /* static settings changed (a knob moved): follow them, except where automation is in charge */
       update(track) {
         const ch = channels.get(track.id);
         if (!ch) return;
-        const now = ac.currentTime;
-        ch.gain.gain.setTargetAtTime(track.volume, now, 0.02);
-        ch.send.gain.setTargetAtTime(track.echoSend || 0, now, 0.02);
-        if (ch.pan) ch.pan.pan.setTargetAtTime(track.pan || 0, now, 0.02);
-        applyDrive(ch, track.drive, now);
+        for (const prm of PARAMS) if (!ch.auto.has(prm.id)) setParam(ch, prm.id, trackParam(track, prm.id), ac.currentTime);
       },
       setMaster(v) { master.gain.setTargetAtTime(v, ac.currentTime, 0.02); },
       /* current peak level (0..1+) of a track's channel, or of the master when id is null */
@@ -366,5 +422,5 @@ BDJ.Sound = (() => {
     return new Blob([data], { type: 'audio/wav' });
   }
 
-  return { INSTRUMENTS, DRUMS, createMixer, melodyNote, drumHit, encodeWav, midiToHz };
+  return { INSTRUMENTS, DRUMS, PARAMS, trackParam, filterFreqs, createMixer, melodyNote, drumHit, encodeWav, midiToHz };
 })();

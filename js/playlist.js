@@ -5,9 +5,20 @@ window.BDJ = window.BDJ || {};
 BDJ.Playlist = (() => {
   'use strict';
   const PJ = () => BDJ.Project;
-  const RULER = 38, MARK = 17, ROW = 52, EDGE = 8; // ruler: markers + loop band on top (MARK), bar numbers below
+  const RULER = 38, MARK = 17, ROW = 52, AROW = 60, EDGE = 8; // ruler: markers + loop band on top (MARK), bar numbers below
   const MARKER_COLOR = '#ffe066';
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  /* readable value of an automation point */
+  function autoLabel(id, v) {
+    if (id === 'volume') return v <= 0.0005 ? '−∞ dB' : (20 * Math.log10(v)).toFixed(1) + ' dB';
+    if (id === 'pan') { const p = v * 2 - 1; return Math.abs(p) < 0.01 ? 'centre' : (p < 0 ? 'L' : 'R') + Math.round(Math.abs(p) * 100); }
+    if (id === 'filter') {
+      if (Math.abs(v - 0.5) < 0.01) return 'open';
+      const f = BDJ.Sound.filterFreqs(v), hz = v < 0.5 ? f.lp : f.hp;
+      return (v < 0.5 ? 'low-pass ' : 'high-pass ') + (hz >= 1000 ? (hz / 1000).toFixed(1) + ' kHz' : Math.round(hz) + ' Hz');
+    }
+    return Math.round(v * 100) + '%';
+  }
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   class Playlist {
@@ -32,10 +43,24 @@ BDJ.Playlist = (() => {
     get p() { return this.host.project(); }
 
     /* ---------- geometry ---------- */
-    size() { return { W: Math.max(200, Math.floor(this.c.parentElement.getBoundingClientRect().width)), H: RULER + this.p.tracks.length * ROW }; }
+    /* rows top to bottom: every track, and under it its automation lane when open */
+    rows() {
+      const out = [];
+      let y = RULER;
+      for (const t of this.p.tracks) {
+        out.push({ t, kind: 'track', y, h: ROW });
+        y += ROW;
+        if (t.autoOpen) { out.push({ t, kind: 'auto', y, h: AROW }); y += AROW; }
+      }
+      return out;
+    }
+    size() {
+      const rs = this.rows(), last = rs[rs.length - 1];
+      return { W: Math.max(200, Math.floor(this.c.parentElement.getBoundingClientRect().width)), H: last ? last.y + last.h : RULER };
+    }
     x(b) { return (b - this.view.x0) * this.view.ppb; }
     beatAt(px) { return this.view.x0 + px / this.view.ppb; }
-    rowAt(py) { return py < RULER ? -1 : Math.floor((py - RULER) / ROW); }
+    rowAt(py) { return py < RULER ? null : this.rows().find((r) => py >= r.y && py < r.y + r.h) || null; }
     snap(b, free) { const s = free ? 1 : 4; return Math.max(0, Math.round(b / s) * s); }
     snapFloor(b, free) { const s = free ? 1 : 4; return Math.max(0, Math.floor(b / s + 1e-9) * s); }
 
@@ -53,8 +78,9 @@ BDJ.Playlist = (() => {
     }
 
     clipAt(px, py) {
-      const r = this.rowAt(py), t = this.p.tracks[r];
-      if (!t) return null;
+      const r = this.rowAt(py);
+      if (!r || r.kind !== 'track') return null;
+      const t = r.t;
       const b = this.beatAt(px);
       const cs = this.p.clips.filter((c) => c.trackId === t.id);
       for (let i = cs.length - 1; i >= 0; i--) {
@@ -75,11 +101,20 @@ BDJ.Playlist = (() => {
         html.push(`<div class="plhead${on ? ' on' : ''}${t.mute ? ' muted' : ''}" data-id="${t.id}" style="--tc:${t.color}">`);
         html.push(`<span class="swatch" aria-hidden="true"></span>`);
         html.push(`<div class="plname"><input type="text" value="${esc(t.name)}" maxlength="40" aria-label="Track name" spellcheck="false"><span class="pltype">${t.type === 'drums' ? 'Drum kit' : esc((BDJ.Sound.INSTRUMENTS.find((i) => i.id === t.instrument) || {}).name || 'Synth')}</span></div>`);
+        const hasAuto = PJ().autoParams(t).length > 0;
+        html.push(`<button type="button" class="tog auto${t.autoOpen ? ' on' : ''}${hasAuto ? ' has' : ''}" data-act="auto" aria-pressed="${t.autoOpen}" title="Automation lane${hasAuto ? ' (this track has automation)' : ''}">A</button>`);
         html.push(`<button type="button" class="tog${t.mute ? ' on' : ''}" data-act="mute" aria-pressed="${t.mute}" title="Mute">M</button>`);
         html.push(`<button type="button" class="tog solo${t.solo ? ' on' : ''}" data-act="solo" aria-pressed="${t.solo}" title="Solo">S</button>`);
         html.push(`<input type="range" class="plvol" min="0" max="100" value="${Math.round(t.volume * 100)}" aria-label="${esc(t.name)} volume" title="Volume">`);
         html.push(`<button type="button" class="tog x" data-act="del" title="Delete track"${p.tracks.length < 2 ? ' disabled' : ''}>&times;</button>`);
         html.push('</div>');
+        if (t.autoOpen) {
+          const used = new Set(PJ().autoParams(t));
+          html.push(`<div class="plauto" data-id="${t.id}" style="--tc:${t.color}"><span class="swatch" aria-hidden="true"></span>`);
+          html.push(`<label class="sr" for="autosel-${t.id}">Automated setting</label><select class="autosel" id="autosel-${t.id}">`);
+          for (const prm of BDJ.Sound.PARAMS) html.push(`<option value="${prm.id}"${prm.id === t.autoParam ? ' selected' : ''}>${prm.name}${used.has(prm.id) ? ' ●' : ''}</option>`);
+          html.push(`</select><button type="button" class="btn small" data-act="autoclear"${used.has(t.autoParam) ? '' : ' disabled'}>Clear</button></div>`);
+        }
       }
       this.heads.innerHTML = html.join('');
     }
@@ -91,13 +126,26 @@ BDJ.Playlist = (() => {
 
     bindHeads() {
       const h = this.heads;
-      const trackOf = (el) => { const r = el.closest('.plhead'); return r && PJ().track(this.p, +r.dataset.id); };
+      const trackOf = (el) => { const r = el.closest('.plhead, .plauto'); return r && PJ().track(this.p, +r.dataset.id); };
       h.addEventListener('click', (e) => {
         const t = trackOf(e.target);
         if (!t) return;
         const b = e.target.closest('[data-act]');
-        if (!b) { if (e.target.tagName !== 'INPUT') this.host.select(t.id); return; }
+        if (!b) { if (e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') this.host.select(t.id); return; }
         if (b.dataset.act === 'del') { this.host.removeTrack(t.id); return; }
+        if (b.dataset.act === 'auto') {
+          // showing a lane is a view setting: saved with the project, not an undo step
+          t.autoOpen = !t.autoOpen;
+          this.host.changed('view');
+          return;
+        }
+        if (b.dataset.act === 'autoclear') {
+          const before = this.host.begin();
+          delete t.auto[t.autoParam];
+          this.host.end(before);
+          this.host.changed('auto');
+          return;
+        }
         const before = this.host.begin();
         if (b.dataset.act === 'mute') t.mute = !t.mute;
         if (b.dataset.act === 'solo') t.solo = !t.solo;
@@ -108,6 +156,11 @@ BDJ.Playlist = (() => {
       h.addEventListener('change', (e) => {
         const t = trackOf(e.target);
         if (!t) return;
+        if (e.target.classList.contains('autosel')) {
+          t.autoParam = e.target.value;
+          this.host.changed('view');
+          return;
+        }
         if (e.target.type === 'text') {
           const v = e.target.value.trim().slice(0, 40);
           if (!v || v === t.name) { e.target.value = t.name; return; }
@@ -152,12 +205,15 @@ BDJ.Playlist = (() => {
         this.drag = { mode: 'pan', px, x0: this.view.x0 };
       } else if (py < RULER) {
         this.rulerDown(e, px, py, free);
+      } else if (this.rowAt(py) && this.rowAt(py).kind === 'auto') {
+        this.autoDown(e, this.rowAt(py), px, py, free);
       } else if (e.button === 2) {
         this.drag = { mode: 'erase', before: this.host.begin(), changed: false };
         this.erase(px, py);
       } else {
-        const t = p.tracks[this.rowAt(py)];
-        if (!t) return;
+        const row = this.rowAt(py);
+        if (!row) return;
+        const t = row.t;
         const h = this.clipAt(px, py);
         const before = this.host.begin();
         let clip, changed = false;
@@ -183,6 +239,51 @@ BDJ.Playlist = (() => {
       }
       if (this.drag) this.c.setPointerCapture(e.pointerId);
       this.draw();
+    }
+
+    /* Automation lane: click to add a point and drag it, drag points to move them, right-click to delete.
+       Points snap to beats (Alt: free). Values run 0 (bottom) to 1 (top). */
+    autoY(row, v) { return row.y + 6 + (1 - v) * (row.h - 12); }
+    autoV(row, py) { return clamp(1 - (py - row.y - 6) / (row.h - 12), 0, 1); }
+    autoPointAt(row, px, py) {
+      const pts = row.t.auto[row.t.autoParam] || [];
+      let best = null, bd = 8;
+      for (const pt of pts) {
+        const d = Math.hypot(this.x(pt.b) - px, this.autoY(row, pt.v) - py);
+        if (d < bd) { bd = d; best = pt; }
+      }
+      return best;
+    }
+    autoBeat(px, free) { const b = this.beatAt(px); return Math.max(0, free ? Math.round(b * 16) / 16 : Math.round(b)); }
+    autoDown(e, row, px, py, free) {
+      const t = row.t, id = t.autoParam;
+      const before = this.host.begin();
+      const hit = this.autoPointAt(row, px, py);
+      if (e.button === 2) {
+        this.drag = { mode: 'autoerase', row, before, changed: false };
+        this.autoErase(px, py);
+        return;
+      }
+      let pt = hit;
+      if (!pt) {
+        t.auto[id] = t.auto[id] || [];
+        pt = { b: this.autoBeat(px, free), v: this.autoV(row, py) };
+        t.auto[id].push(pt);
+        PJ().sortAuto(t.auto[id]);
+      }
+      this.drag = { mode: 'autopt', row, pt, before, changed: !hit };
+      this.host.changed('live');
+    }
+    autoErase(px, py) {
+      const d = this.drag, row = this.rowAt(py);
+      if (!row || row.kind !== 'auto' || row.t !== d.row.t) return;
+      const hit = this.autoPointAt(row, px, py);
+      if (!hit) return;
+      const list = row.t.auto[row.t.autoParam];
+      list.splice(list.indexOf(hit), 1);
+      if (!list.length) delete row.t.auto[row.t.autoParam];
+      d.changed = true;
+      this.host.changed('live');
     }
 
     /* Ruler: markers on top, loop region edges, click to set the marker, drag to draw a loop region. */
@@ -272,7 +373,12 @@ BDJ.Playlist = (() => {
       if (!d) {
         let cur = 'crosshair';
         if (py < RULER) cur = py < MARK && this.markerAt(px) ? 'grab' : this.loopEdgeAt(px) ? 'ew-resize' : 'text';
-        else { const h = this.clipAt(px, py); if (h) cur = h.edge ? 'ew-resize' : 'grab'; else if (!this.p.tracks[this.rowAt(py)]) cur = 'default'; }
+        else {
+          const row = this.rowAt(py);
+          if (!row) cur = 'default';
+          else if (row.kind === 'auto') cur = this.autoPointAt(row, px, py) ? 'move' : 'crosshair';
+          else { const h = this.clipAt(px, py); if (h) cur = h.edge ? 'ew-resize' : 'grab'; }
+        }
         this.c.style.cursor = cur;
         return;
       }
@@ -280,7 +386,14 @@ BDJ.Playlist = (() => {
       if (d.mode === 'pan') { this.view.x0 = Math.max(0, d.x0 - (px - d.px) / this.view.ppb); }
       else if (d.mode === 'ruler' || d.mode === 'marker' || d.mode === 'loop') this.rulerMove(d, px, free);
       else if (d.mode === 'erase') this.erase(px, py);
-      else {
+      else if (d.mode === 'autoerase') this.autoErase(px, py);
+      else if (d.mode === 'autopt') {
+        d.pt.b = this.autoBeat(px, free);
+        d.pt.v = this.autoV(d.row, py);
+        PJ().sortAuto(d.row.t.auto[d.row.t.autoParam]);
+        d.changed = true;
+        this.host.changed('live');
+      } else {
         const c = this.p.clips.find((x) => x.id === d.clip);
         if (!c) return;
         const db = this.beatAt(px) - d.b0;
@@ -303,6 +416,7 @@ BDJ.Playlist = (() => {
       this.drag = null;
       try { this.c.releasePointerCapture(e.pointerId); } catch (err) { /* not captured */ }
       if (d.mode === 'ruler' || d.mode === 'marker' || d.mode === 'loop') this.rulerUp(d);
+      else if (d.mode === 'autopt' || d.mode === 'autoerase') { if (d.changed) { this.host.end(d.before); this.host.changed('auto'); } }
       else if (d.before != null && d.changed) { this.host.end(d.before); this.host.changed('clips'); }
       this.draw();
     }
@@ -375,11 +489,12 @@ BDJ.Playlist = (() => {
       const b1 = this.beatAt(W);
 
       // lanes
-      p.tracks.forEach((t, i) => {
-        const y = RULER + i * ROW;
-        g.fillStyle = t.id === p.sel.trackId ? 'rgba(255,255,255,0.045)' : i % 2 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0)';
-        g.fillRect(0, y, W, ROW);
-        g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(0, y + ROW - 1, W, 1);
+      const rows = this.rows(), trackRow = new Map();
+      rows.forEach((r, i) => {
+        if (r.kind === 'track') trackRow.set(r.t.id, r);
+        g.fillStyle = r.kind === 'auto' ? 'rgba(0,0,0,0.28)' : r.t.id === p.sel.trackId ? 'rgba(255,255,255,0.045)' : i % 2 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0)';
+        g.fillRect(0, r.y, W, r.h);
+        g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(0, r.y + r.h - 1, W, 1);
       });
       // bar lines
       const every = v.ppb * 4 < 10 ? 4 : 1;
@@ -395,12 +510,12 @@ BDJ.Playlist = (() => {
       // clips
       g.textBaseline = 'middle';
       for (const cl of p.clips) {
-        const ti = p.tracks.findIndex((t) => t.id === cl.trackId);
-        const t = p.tracks[ti], pat = PJ().pattern(p, cl.patternId);
+        const row = trackRow.get(cl.trackId);
+        const t = row && row.t, pat = PJ().pattern(p, cl.patternId);
         if (!t || !pat) continue;
         const x = this.x(cl.start), w = Math.max(4, cl.len * v.ppb - 1);
         if (x > W || x + w < 0) continue;
-        const y = RULER + ti * ROW + 3, h = ROW - 6;
+        const y = row.y + 3, h = ROW - 6;
         const editing = pat.id === p.sel.patternId;
         g.save();
         this.rr(x, y, w, h, 5); g.clip();
@@ -426,6 +541,9 @@ BDJ.Playlist = (() => {
         }
         if (w > 18) { g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + w - 4, y + 19, 1.5, h - 24); }
       }
+
+      // automation lanes
+      for (const r of rows) if (r.kind === 'auto') this.paintAuto(r, W);
 
       // markers: a line through the lanes
       for (const m of p.markers) {
@@ -486,6 +604,55 @@ BDJ.Playlist = (() => {
       if (!p.clips.length) {
         g.fillStyle = C.muted; g.font = '13px ' + this.sans();
         g.fillText('Click a lane to place that track’s pattern in the song.', 12, RULER + ROW / 2);
+      }
+    }
+
+    /* an automation lane: the curve through its points, or the track's own setting as a dashed line */
+    paintAuto(row, W) {
+      const g = this.g, t = row.t, id = t.autoParam, pts = t.auto[id] || [];
+      const prm = BDJ.Sound.PARAMS.find((x) => x.id === id);
+      const yTop = row.y + 6, yBot = row.y + row.h - 6;
+      if (id === 'filter' || id === 'pan') {
+        g.fillStyle = 'rgba(255,255,255,0.12)';
+        const ym = Math.round(this.autoY(row, 0.5));
+        for (let x = 0; x < W; x += 8) g.fillRect(x, ym, 4, 1);
+      }
+      g.font = '11px ' + this.sans();
+      g.textBaseline = 'middle';
+      if (!pts.length) {
+        const y = Math.round(this.autoY(row, BDJ.Sound.trackParam(t, id)));
+        g.fillStyle = 'rgba(255,255,255,0.22)';
+        for (let x = 0; x < W; x += 6) g.fillRect(x, y, 3, 1);
+        g.fillStyle = this.col.muted;
+        g.fillText('Click to draw ' + prm.name.toLowerCase() + ' automation (plays in Song mode)', 10, row.y + 14);
+        return;
+      }
+      const xs = pts.map((pt) => this.x(pt.b)), ys = pts.map((pt) => this.autoY(row, pt.v));
+      g.beginPath();
+      g.moveTo(0, ys[0]);
+      for (let i = 0; i < pts.length; i++) g.lineTo(xs[i], ys[i]);
+      g.lineTo(W, ys[ys.length - 1]);
+      g.lineTo(W, yBot); g.lineTo(0, yBot); g.closePath();
+      g.globalAlpha = 0.16; g.fillStyle = t.color; g.fill();
+      g.globalAlpha = 1;
+      g.beginPath();
+      g.moveTo(0, ys[0]);
+      for (let i = 0; i < pts.length; i++) g.lineTo(xs[i], ys[i]);
+      g.lineTo(W, ys[ys.length - 1]);
+      g.strokeStyle = t.color; g.lineWidth = 2; g.stroke();
+      for (let i = 0; i < pts.length; i++) {
+        if (xs[i] < -6 || xs[i] > W + 6) continue;
+        const hot = this.drag && this.drag.pt === pts[i];
+        g.beginPath(); g.arc(xs[i], ys[i], hot ? 5.5 : 4, 0, Math.PI * 2);
+        g.fillStyle = hot ? '#fff' : t.color; g.fill();
+        g.strokeStyle = '#15131f'; g.lineWidth = 1.5; g.stroke();
+      }
+      g.fillStyle = this.col.muted;
+      g.fillText(prm.name, 10, yTop + 6);
+      if (this.drag && this.drag.pt && this.drag.row && this.drag.row.t === t) {
+        const pt = this.drag.pt;
+        g.fillStyle = this.col.text;
+        g.fillText(autoLabel(id, pt.v) + '  ·  bar ' + (Math.floor(pt.b / 4) + 1) + '.' + (Math.floor(pt.b % 4) + 1), this.x(pt.b) + 10, this.autoY(row, pt.v) - 10);
       }
     }
 

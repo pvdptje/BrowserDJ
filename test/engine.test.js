@@ -298,6 +298,30 @@ test('drive and the hard kick', () => {
   eq(m.tracks[1].filter((e) => e.type === 0x90).map((e) => [e.ch, e.a]), [[9, 35]]);
 });
 
+test('automation: values between points, cleanup, MIDI controllers', () => {
+  const pts = [{ b: 4, v: 0 }, { b: 8, v: 1 }, { b: 12, v: 0.5 }];
+  eq([0, 4, 6, 8, 10, 12, 99].map((b) => PJ.autoValue(pts, b)), [0, 0, 0.5, 1, 0.75, 0.5, 0.5]);
+  assert.strictEqual(PJ.autoValue([], 3), null);
+  const p = PJ.example();
+  const bass = p.tracks.find((t) => t.name === 'Bass');
+  const back = PJ.normalize({ ...JSON.parse(PJ.serialize(p)), tracks: p.tracks.map((t) => (t.id === bass.id
+    ? { ...t, auto: { filter: [{ b: 16, v: 0.5 }, { b: 'x', v: 1 }, { b: 8, v: 9 }, { b: 12, v: 0.2 }], volume: [], bogus: [{ b: 1, v: 1 }] }, autoParam: 'nope' }
+    : t)) });
+  const bb = back.tracks.find((t) => t.name === 'Bass');
+  eq(bb.auto, { filter: [{ b: 8, v: 1 }, { b: 12, v: 0.2 }, { b: 16, v: 0.5 }] }); // sorted, clamped, junk and empties dropped
+  assert.strictEqual(bb.autoParam, 'volume');
+  eq(PJ.autoParams(bb), ['filter']);
+  // filter automation becomes CC74 on the bass track, only when it changes
+  const m = parseMidi(E.writeMidiTracks(PJ.midiTracks(back, 'song'), back.bpm));
+  const cc74 = m.tracks[2].filter((e) => e.type === 0xb0 && e.a === 74).map((e) => [e.tick / 480, e.b]);
+  eq(cc74.slice(0, 2), [[0, 127], [8.125, 124]]);
+  eq(cc74[cc74.length - 1], [16, 64]);
+  assert.ok(cc74.every((c, i) => !i || c[1] !== cc74[i - 1][1]));
+  // pattern mode exports no automation
+  const pm = parseMidi(E.writeMidiTracks(PJ.midiTracks(back, 'pattern'), back.bpm));
+  assert.ok(pm.tracks.every((tr) => !tr.some((e) => e.type === 0xb0 && e.a === 74)));
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

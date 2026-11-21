@@ -77,6 +77,8 @@
     if (kind === 'drums') rack.render();
     if (kind === 'tracks') { playlist.renderHeads(); renderEditorHead(); rack.render(); mixer.render(); updateMixer(); }
     if (kind === 'mix') { playlist.renderHeads(); updateMixer(); }
+    if (kind === 'view') { playlist.renderHeads(); playlist.draw(); autosave(); return; }
+    if (kind === 'auto') { playlist.renderHeads(); mixer.render(); }
     if (kind !== 'quiet') { refreshInfo(); roll.draw(); playlist.draw(); }
     autosave();
   }
@@ -207,6 +209,18 @@
     }, { skipTrack });
   }
 
+  /* Song automation for song beats [lo, hi): hold the value at lo, ramp through any points, arrive at hi. */
+  function scheduleAuto(M, lo, hi, off, tOf) {
+    for (const t of P.tracks) {
+      for (const id of PJ.autoParams(t)) {
+        const pts = t.auto[id];
+        M.autoStart(t.id, id, PJ.autoValue(pts, lo), tOf(lo + off));
+        for (const pt of pts) if (pt.b > lo && pt.b < hi) M.autoAt(t.id, id, pt.v, tOf(pt.b + off));
+        M.autoAt(t.id, id, PJ.autoValue(pts, hi), tOf(hi + off));
+      }
+    }
+  }
+
   /* ---------- transport ---------- */
   const T = { on: false };
   let TK = null; // playing back the raw recording
@@ -271,6 +285,7 @@
           const wrapAt = a < T.E ? T.E : T.E + (Math.floor((a - T.E) / span) + 1) * span;
           const b = Math.min(endB, wrapAt);
           scheduleEvents(actx, T.M, items, pos, pos + (b - a), off, timeOf, T.bpm);
+          if (T.mode === 'song') scheduleAuto(T.M, pos, pos + (b - a), off, timeOf);
           clicks(pos, pos + (b - a), off, false);
           a = b;
         }
@@ -279,6 +294,7 @@
         // a recording count-in starts before the marker: only clicks there
         const lo = Math.max(a, T.rec ? T.from + 4 : 0);
         if (lo < b && a < L) scheduleEvents(actx, T.M, items, lo, Math.min(b, L), 0, timeOf, T.bpm, T.skipTrack);
+        if (T.mode === 'song') scheduleAuto(T.M, a, b, 0, timeOf);
         clicks(a, b, 0, T.rec && !items.some((it) => it.track.id !== T.skipTrack && PJ.audible(P, it.track)));
       }
       T.sched = endB;
@@ -634,14 +650,16 @@
       const oac = new Ctx(2, Math.ceil(total * sr), sr);
       const M = SND.createMixer(oac, { bpm: P.bpm, master: P.master });
       M.live = null;
+      for (const t of P.tracks) M.channel(t);
       const tOf = (b) => 0.02 + b * 60 / P.bpm;
+      const song = P.mode === 'song';
       // Schedule a few seconds at a time: the renderer pauses at each chunk boundary, we add the next
       // chunk's notes and report progress. Far fewer nodes exist at once, which also makes it faster.
       const CHUNK = 3, chunkBeats = CHUNK * P.bpm / 60;
       let next = 0;
       const scheduleChunk = () => {
         const a = next, b = Math.min(L, next + chunkBeats);
-        if (a < b) scheduleEvents(oac, M, items, a, b, 0, tOf, P.bpm);
+        if (a < b) { scheduleEvents(oac, M, items, a, b, 0, tOf, P.bpm); if (song) scheduleAuto(M, a, b, 0, tOf); }
         next = b;
       };
       let chunked = typeof oac.suspend === 'function';
@@ -659,7 +677,7 @@
         } catch (err) { chunked = false; }
       }
       // no suspend support (or it failed): schedule whatever is left in one go
-      if (!chunked && next < L) { scheduleEvents(oac, M, items, next, L, 0, tOf, P.bpm); next = L; }
+      if (!chunked && next < L) { scheduleEvents(oac, M, items, next, L, 0, tOf, P.bpm); if (song) scheduleAuto(M, next, L, 0, tOf); next = L; }
       const t0 = performance.now();
       const buf = await oac.startRendering();
       if (next < L - 1e-9) throw new Error('rendering stopped early');

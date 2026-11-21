@@ -498,6 +498,10 @@ const HumEngine = (() => {
         ev.push({ t: on, order: 1, data: [0x90 | ch, pitch, vel] });
         ev.push({ t: off, order: 0, data: [0x80 | ch, pitch, 0] });
       }
+      // controller changes over time (automation): before notes at the same tick
+      for (const c of tr.ccEvents || []) {
+        ev.push({ t: Math.max(0, Math.round(c.beat * PPQ)), order: -1, data: [0xb0 | ch, c.cc & 0x7f, Math.max(0, Math.min(127, Math.round(c.value)))] });
+      }
       ev.sort((x, y) => x.t - y.t || x.order - y.order);
       const body = [...text(0x03, tr.name || 'Track')];
       if (tr.program != null && ch !== 9) body.push(0x00, 0xc0 | ch, tr.program & 0x7f);

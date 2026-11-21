@@ -65,7 +65,8 @@ BDJ.Project = (() => {
     const n = p.tracks.filter((t) => t.type === type).length + 1;
     const t = {
       id: p.nextId++, type, name: opts.name || (type === 'drums' ? 'Drums' : 'Synth') + (n > 1 ? ' ' + n : ''),
-      color: opts.color || nextColor(p), volume: 0.8, pan: 0, drive: 0, mute: false, solo: false,
+      color: opts.color || nextColor(p), volume: 0.8, pan: 0, drive: 0, filter: 0.5, mute: false, solo: false,
+      auto: {}, autoOpen: false, autoParam: 'volume',
       echoSend: type === 'drums' ? 0 : opts.echo === false ? 0 : 1,
     };
     if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; } else { t.instrument = opts.instrument || 'pluck'; }
@@ -171,6 +172,23 @@ BDJ.Project = (() => {
     if (mode === 'song' && r && r.end > r.start) return { start: r.start, end: r.end };
     return { start: 0, end: length };
   }
+
+  /* ---------- automation ----------
+     track.auto[param] = [{b: beat, v: 0..1}] sorted by beat; a line through the points, flat before the first
+     and after the last. Only the song timeline uses it; Pattern mode plays the track's own settings. */
+  function autoValue(pts, b) {
+    if (!pts || !pts.length) return null;
+    if (b <= pts[0].b) return pts[0].v;
+    for (let i = 1; i < pts.length; i++) {
+      if (b < pts[i].b) {
+        const a = pts[i - 1], z = pts[i];
+        return a.v + ((z.v - a.v) * (b - a.b)) / (z.b - a.b);
+      }
+    }
+    return pts[pts.length - 1].v;
+  }
+  const autoParams = (t) => Object.keys(t.auto || {}).filter((k) => t.auto[k] && t.auto[k].length);
+  function sortAuto(pts) { pts.sort((a, b) => a.b - b.b || a.v - b.v); return pts; }
 
   function addMarker(p, beat, name) {
     const m = { id: p.nextId++, beat: Math.max(0, beat), name: (name || 'Marker').slice(0, 40) };
@@ -298,6 +316,18 @@ BDJ.Project = (() => {
     }));
   }
 
+  function normAuto(a) {
+    const out = {};
+    if (!a || typeof a !== 'object') return out;
+    for (const prm of BDJ.Sound.PARAMS) {
+      const list = Array.isArray(a[prm.id]) ? a[prm.id] : [];
+      const pts = list.slice(0, 2000).filter((x) => x && isFinite(+x.b) && isFinite(+x.v))
+        .map((x) => ({ b: num(x.b, 0, 0, 100000), v: num(x.v, prm.def, 0, 1) }));
+      if (pts.length) out[prm.id] = sortAuto(pts);
+    }
+    return out;
+  }
+
   /* Version 1 had one melody and one drum loop; turn them into two tracks with a clip each. */
   function migrateV1(o) {
     const p = shell();
@@ -354,7 +384,10 @@ BDJ.Project = (() => {
       const nt = {
         id: p.nextId++, type: t.type, name: str(t.name, t.type === 'drums' ? 'Drums' : 'Synth'),
         color: /^#[0-9a-f]{6}$/i.test(t.color) ? t.color : nextColor(p),
-        volume: num(t.volume, 0.8, 0, 1), pan: num(t.pan, 0, -1, 1), drive: num(t.drive, 0, 0, 1), mute: !!t.mute, solo: !!t.solo,
+        volume: num(t.volume, 0.8, 0, 1), pan: num(t.pan, 0, -1, 1), drive: num(t.drive, 0, 0, 1), filter: num(t.filter, 0.5, 0, 1),
+        mute: !!t.mute, solo: !!t.solo,
+        auto: normAuto(t.auto), autoOpen: !!t.autoOpen,
+        autoParam: BDJ.Sound.PARAMS.some((x) => x.id === t.autoParam) ? t.autoParam : 'volume',
         // older saves had echo on/off for synths
         echoSend: t.echoSend != null ? num(t.echoSend, 0, 0, 1) : t.type === 'synth' && t.echo !== false ? 1 : 0,
       };
@@ -437,9 +470,22 @@ BDJ.Project = (() => {
       });
       if (!notes.length) continue;
       const controllers = [{ cc: 7, value: t.volume * 127 }, { cc: 10, value: 64 + (t.pan || 0) * 63 }];
-      if (t.type === 'drums') { out.push({ name: t.name, channel: 9, notes, controllers }); continue; }
+      // song automation as controller changes: volume CC7, pan CC10, filter CC74, echo CC91
+      const ccEvents = [];
+      if (mode === 'song') {
+        const CC = { volume: 7, pan: 10, filter: 74, echo: 91 };
+        for (const id of autoParams(t)) {
+          if (!CC[id]) continue;
+          let last = -1;
+          for (let b = 0; b <= length + 1e-9; b += 0.125) {
+            const val = Math.round(autoValue(t.auto[id], b) * 127);
+            if (val !== last) { ccEvents.push({ beat: b, cc: CC[id], value: val }); last = val; }
+          }
+        }
+      }
+      if (t.type === 'drums') { out.push({ name: t.name, channel: 9, notes, controllers, ccEvents }); continue; }
       const inst = BDJ.Sound.INSTRUMENTS.find((i) => i.id === t.instrument);
-      out.push({ name: t.name, channel: ch, program: inst ? inst.program : 0, notes, controllers });
+      out.push({ name: t.name, channel: ch, program: inst ? inst.program : 0, notes, controllers, ccEvents });
       ch = ch + 1 === 9 ? 10 : (ch + 1) % 16;
     }
     return out;
@@ -462,7 +508,7 @@ BDJ.Project = (() => {
     track, pattern, patternsOf, selTrack, selPattern, select,
     blank, example, normalize, serialize,
     addTrack, addPattern, clonePattern, deletePattern, deleteTrack, addClip, uniqueName,
-    applyPreset, setDrumBars, notesEnd, patternBeats, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker,
+    applyPreset, setDrumBars, notesEnd, patternBeats, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, autoValue, autoParams, sortAuto,
     deriveFromTake, detectKey, midiTracks, History,
   };
 })();
