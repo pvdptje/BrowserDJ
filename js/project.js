@@ -70,7 +70,7 @@ BDJ.Project = (() => {
       echoSend: type === 'drums' ? 0 : opts.echo === false ? 0 : 1,
     };
     if (type === 'drums') { t.kit = kit(); t.swing = 0; t.volume = 0.85; }
-    else { t.instrument = opts.instrument || 'pluck'; t.shape = { ...BDJ.Sound.SHAPE, ...(opts.shape || {}) }; }
+    else { t.instrument = opts.instrument || 'pluck'; t.shape = { ...BDJ.Sound.SHAPE, ...(opts.shape || {}) }; t.lfo = { target: 'off', rate: '1/8', depth: 0.6 }; }
     p.tracks.push(t);
     addPattern(p, t.id);
     return t;
@@ -410,6 +410,9 @@ BDJ.Project = (() => {
         nt.instrument = BDJ.Sound.INSTRUMENTS.some((i) => i.id === t.instrument) ? t.instrument : 'pluck';
         const sh = t.shape || {};
         nt.shape = { attack: num(sh.attack, 0, 0, 1), release: num(sh.release, 0, 0, 1), tone: num(sh.tone, 0.5, 0, 1) };
+        // movement: a tempo-synced LFO on the filter, volume or pan
+        const lf = t.lfo || {};
+        nt.lfo = { target: BDJ.Sound.LFO_TARGETS.includes(lf.target) ? lf.target : 'off', rate: BDJ.Sound.LFO_RATES[lf.rate] ? lf.rate : '1/8', depth: num(lf.depth, 0.6, 0, 1) };
         // the Sampler's sound: a reference into the browser's sample store, the note it was recorded at, a level fix
         const sm = t.sampler;
         if (sm && /^[0-9a-f]{8,64}$/.test(sm.hash)) nt.sampler = { hash: sm.hash, name: str(sm.name, 'sound', 120), root: num(sm.root, 60, 0, 127), gain: num(sm.gain, 1, 0.05, 20) };

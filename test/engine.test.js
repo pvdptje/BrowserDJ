@@ -341,6 +341,19 @@ test('synth shape: defaults, round trip, clamping; new instruments are known', (
   eq(old.tracks[0].shape, { attack: 0, release: 0, tone: 0.5 });
 });
 
+test('movement (LFO): off by default, round trip, bad values cleaned up', () => {
+  const p = PJ.blank();
+  const syn = p.tracks.find((t) => t.type === 'synth'), drums = p.tracks.find((t) => t.type === 'drums');
+  eq(syn.lfo, { target: 'off', rate: '1/8', depth: 0.6 });
+  assert.strictEqual(drums.lfo, undefined);
+  syn.lfo = { target: 'filter', rate: '1/4T', depth: 0.3 };
+  eq(PJ.normalize(JSON.parse(PJ.serialize(p))).tracks.find((t) => t.type === 'synth').lfo, { target: 'filter', rate: '1/4T', depth: 0.3 });
+  const bad = PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'synth', lfo: { target: 'pitch', rate: '1/3', depth: 9 } }, { id: 2, type: 'synth' }] });
+  eq(bad.tracks[0].lfo, { target: 'off', rate: '1/8', depth: 1 });
+  eq(bad.tracks[1].lfo, { target: 'off', rate: '1/8', depth: 0.6 });
+  for (const r of Object.keys(ctx.BDJ.Sound.LFO_RATES)) assert.ok(ctx.BDJ.Sound.LFO_RATES[r] > 0);
+});
+
 test('kit sample references: kept when valid, dropped when not', () => {
   const p = PJ.blank();
   const dt = p.tracks.find((t) => t.type === 'drums');

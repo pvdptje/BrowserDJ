@@ -410,7 +410,8 @@
     Object.assign(T, {
       on: true, rec: !!opts.rec, mode, bpm: P.bpm, L, S: lr.start, E: lr.end,
       t0: ac.currentTime + 0.08, beat0: from, sched: from, from, skipTrack: opts.skipTrack || null,
-      M: SND.createMixer(ac, { bpm: P.bpm, master: P.master, loud: P.loud }),
+      // LFOs count their cycles from the moment beat 0 of what plays would have sounded
+      M: SND.createMixer(ac, { bpm: P.bpm, master: P.master, loud: P.loud, lfoZero: ac.currentTime + 0.08 - (from * 60) / P.bpm }),
     });
     for (const t of P.tracks) T.M.channel(t);
     T.timer = setInterval(pump, 25);
@@ -435,6 +436,7 @@
       T.beat0 = pos; T.t0 = now; T.sched = pos + ahead * (T.bpm / P.bpm);
       T.bpm = P.bpm; T.L = L; T.S = lr.start; T.E = lr.end;
       T.M.setBpm(P.bpm);
+      T.M.setLfoZero(T.t0 - (T.beat0 * 60) / T.bpm, P.tracks);
     }
     const endB = T.beat0 + (now + 0.15 - T.t0) / spb();
     if (endB > T.sched) {
@@ -970,7 +972,7 @@
     const label = opts.label || 'Rendering ' + whatPlays();
     const total = secs + 2.5;
     const oac = new Ctx(2, Math.ceil(total * sr), sr);
-    const M = SND.createMixer(oac, { bpm: P.bpm, master: P.master, loud: P.loud, only: opts.only });
+    const M = SND.createMixer(oac, { bpm: P.bpm, master: P.master, loud: P.loud, only: opts.only, lfoZero: 0.02 });
     M.live = null;
     for (const t of P.tracks) M.channel(t);
     const tOf = (b) => 0.02 + b * 60 / P.bpm;
@@ -1366,6 +1368,12 @@
       $(id).value = Math.round(sh[k] * 100);
       $(id + 'Out').textContent = shapeText[k](sh[k]);
     }
+    const lfo = curTrack().lfo || { target: 'off', rate: '1/8', depth: 0.6 };
+    $('lfoTarget').value = lfo.target;
+    $('lfoRate').value = lfo.rate;
+    $('lfoDepth').value = Math.round(lfo.depth * 100);
+    $('lfoDepthOut').textContent = Math.round(lfo.depth * 100);
+    $('lfoRate').disabled = $('lfoDepth').disabled = lfo.target === 'off';
   }
 
   function renderEditor() {
@@ -1747,6 +1755,25 @@
   });
   on('smpRec', 'click', toggleRecordSound);
   on('shReset', 'click', () => { commit(() => { curTrack().shape = { ...SND.SHAPE }; }); preview(60); });
+
+  // movement (LFO): heard right away while playing, and on held keys
+  const lfoOf = () => { const t = curTrack(); return (t.lfo = t.lfo || { target: 'off', rate: '1/8', depth: 0.6 }); };
+  const lfoLive = () => { const t = curTrack(); if (T.on && T.M) T.M.update(t); if (liveM) liveM.update(t); };
+  on('lfoTarget', 'change', () => {
+    commit(() => { lfoOf().target = $('lfoTarget').value; });
+    lfoLive();
+    const v = $('lfoTarget').value;
+    if (v !== 'off') say((v === 'filter' ? 'Wobble' : v === 'volume' ? 'Tremolo' : 'Auto-pan') + ' on ' + curTrack().name + ', ' + $('lfoRate').selectedOptions[0].text + ' and locked to the tempo. Hold a long note to hear it.');
+  });
+  on('lfoRate', 'change', () => { commit(() => { lfoOf().rate = $('lfoRate').value; }); lfoLive(); });
+  let lfoBefore = null;
+  on('lfoDepth', 'input', () => {
+    if (lfoBefore == null) lfoBefore = begin();
+    lfoOf().depth = +$('lfoDepth').value / 100;
+    $('lfoDepthOut').textContent = $('lfoDepth').value;
+    lfoLive();
+  });
+  on('lfoDepth', 'change', () => { if (lfoBefore != null) { end(lfoBefore); lfoBefore = null; autosave(); } });
 
   // live keys
   const syncKeys = () => {

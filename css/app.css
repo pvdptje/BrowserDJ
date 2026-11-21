@@ -329,6 +329,10 @@ button.sname:hover { background: rgba(255,255,255,0.06); }
 @media (pointer: coarse) { .welcome .k { display: none; } .welcome .t { display: inline; } }
 .wclose { position: absolute; top: 10px; right: 10px; width: 30px; height: 30px; padding: 0; font-size: 18px; }
 
+.lfobox { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lfobox select { padding: 4px 6px; font-size: 13px; }
+.lfobox select:disabled, .lfobox input:disabled { opacity: 0.4; }
+
 /* sampler */
 .samplerbox { flex-basis: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding-top: 8px; border-top: 1px dashed var(--line); }
 .smpname { font: 12px var(--font-mono); color: var(--trace); }

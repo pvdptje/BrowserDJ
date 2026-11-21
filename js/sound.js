@@ -153,6 +153,11 @@ BDJ.Sound = (() => {
   /* Loud 0..1 -> up to +12 dB pushed into the compressor and limiter */
   const pushGain = (loud) => Math.pow(10, (12 * Math.max(0, Math.min(1, loud || 0))) / 20);
 
+  /* ---------- movement (LFO) ----------
+     track.lfo = {target: 'off'|'filter'|'volume'|'pan', rate, depth 0..1}; rate is a note length, cycles lock to the beat */
+  const LFO_RATES = { '1/1': 4, '1/2': 2, '1/4': 1, '1/8': 0.5, '1/16': 0.25, '1/4T': 2 / 3, '1/8T': 1 / 3 };
+  const LFO_TARGETS = ['off', 'filter', 'volume', 'pan'];
+
   /* ---------- mixer ---------- */
   /* One channel per track (volume + echo send), a shared echo, and a gentle compressor on the master. */
   function createMixer(ac, opts = {}) {
@@ -188,6 +193,8 @@ BDJ.Sound = (() => {
     revWet.gain.value = 0.6;
     revIn.connect(revHp); revHp.connect(conv); conv.connect(revWet); revWet.connect(master);
     let bpm = opts.bpm || 120;
+    // the audio-clock time of song beat 0: LFO cycles start on beat boundaries counted from here
+    let lfoZero = opts.lfoZero || 0;
 
     // master meter, at the very end
     const masterTap = ac.createAnalyser();
@@ -204,12 +211,12 @@ BDJ.Sound = (() => {
       if (!ch) {
         const pre = ac.createGain(), shaper = ac.createWaveShaper(), post = ac.createGain();
         const lp = ac.createBiquadFilter(), hp = ac.createBiquadFilter();
-        const gain = ac.createGain(), send = ac.createGain(), rsend = ac.createGain(), duck = ac.createGain(), tap = ac.createAnalyser();
+        const gain = ac.createGain(), send = ac.createGain(), rsend = ac.createGain(), duck = ac.createGain(), trem = ac.createGain(), tap = ac.createAnalyser();
         const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
         shaper.oversample = '2x';
         lp.type = 'lowpass'; hp.type = 'highpass';
         lp.Q.value = 1.4; hp.Q.value = 1.4; // a little resonance makes sweeps sing
-        pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(duck); duck.connect(gain);
+        pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(duck); duck.connect(trem); trem.connect(gain);
         tap.fftSize = 512;
         const out = heard(track) ? master : sink;
         if (pan) { gain.connect(pan); pan.connect(out); pan.connect(tap); }
@@ -217,11 +224,40 @@ BDJ.Sound = (() => {
         gain.connect(send);
         gain.connect(rsend);
         if (heard(track)) { send.connect(echoIn); rsend.connect(revIn); }
-        ch = { pre, shaper, post, lp, hp, duck, gain, send, rsend, pan, tap, buf: new Float32Array(512), auto: new Set(), pump: track.pump || 0 };
+        ch = { pre, shaper, post, lp, hp, duck, trem, gain, send, rsend, pan, tap, lfo: null, lfoKey: '', buf: new Float32Array(512), auto: new Set(), pump: track.pump || 0 };
         channels.set(track.id, ch);
         for (const prm of PARAMS) setParam(ch, prm.id, trackParam(track, prm.id), null);
+        setLfo(ch, track.lfo);
       }
       return ch.pre;
+    }
+
+    /* (Re)builds a channel's LFO. Filter: moves the low-pass cutoff down by up to 7 octaves through its detune
+       input, so it never fights the DJ filter or its automation. Volume: dips the level by up to the depth.
+       Pan: sweeps left and right. The oscillator starts on the next cycle boundary of the song's grid. */
+    function setLfo(ch, lfo, force) {
+      const target = lfo && LFO_TARGETS.includes(lfo.target) ? lfo.target : 'off';
+      const depth = target === 'off' ? 0 : Math.max(0, Math.min(1, lfo.depth == null ? 0.6 : lfo.depth));
+      const beats = LFO_RATES[lfo && lfo.rate] || 0.5;
+      const key = target + '|' + beats + '|' + depth.toFixed(3) + '|' + bpm + '|' + lfoZero.toFixed(4);
+      if (!force && key === ch.lfoKey) return;
+      ch.lfoKey = key;
+      if (ch.lfo) { try { ch.lfo.osc.stop(); ch.lfo.osc.disconnect(); ch.lfo.amt.disconnect(); } catch (err) { /* gone */ } ch.lfo = null; }
+      ch.lp.detune.value = 0; ch.trem.gain.value = 1;
+      if (target === 'off' || depth <= 0) return;
+      const osc = ac.createOscillator(), amt = ac.createGain();
+      osc.type = target === 'filter' ? 'triangle' : 'sine';
+      const cycle = (beats * 60) / bpm;
+      osc.frequency.value = 1 / cycle;
+      osc.connect(amt);
+      if (target === 'filter') { amt.gain.value = depth * 4200; ch.lp.detune.value = -depth * 4200; amt.connect(ch.lp.detune); }
+      else if (target === 'volume') { amt.gain.value = depth / 2; ch.trem.gain.value = 1 - depth / 2; amt.connect(ch.trem.gain); }
+      else if (target === 'pan' && ch.pan) { amt.gain.value = depth; amt.connect(ch.pan.pan); }
+      // start exactly on a cycle boundary of the song grid, so every cycle sits the same way against the beat
+      const now = ac.currentTime;
+      const k = Math.max(0, Math.ceil((now + 0.005 - lfoZero) / cycle));
+      osc.start(lfoZero + k * cycle);
+      ch.lfo = { osc, amt };
     }
 
     /* Moves one parameter to a 0..1 value: instantly (at == null), smoothly from `at`, or as a ramp ending at `at`. */
@@ -283,6 +319,7 @@ BDJ.Sound = (() => {
         if (!ch) return;
         for (const prm of PARAMS) if (!ch.auto.has(prm.id)) setParam(ch, prm.id, trackParam(track, prm.id), ac.currentTime);
         ch.pump = track.pump || 0;
+        setLfo(ch, track.lfo);
         if (!ch.pump) { ch.duck.gain.cancelScheduledValues(ac.currentTime); ch.duck.gain.setTargetAtTime(1, ac.currentTime, 0.02); }
       },
       setMaster(v) { master.gain.setTargetAtTime(v, ac.currentTime, 0.02); },
@@ -294,12 +331,15 @@ BDJ.Sound = (() => {
         return ch ? peak(ch.tap, ch.buf) : 0;
       },
       setBpm(b) { bpm = b; dl.delayTime.setTargetAtTime(Math.min(1.9, (60 / b) * 0.75), ac.currentTime, 0.05); },
+      /* where song beat 0 sits on the audio clock (after a tempo change or a jump); LFOs restart on the new grid */
+      setLfoZero(t, tracks) { lfoZero = t; for (const tr of tracks || []) { const ch = channels.get(tr.id); if (ch) setLfo(ch, tr.lfo, true); } },
       stop() {
         const now = ac.currentTime;
         master.gain.cancelScheduledValues(now);
         master.gain.setTargetAtTime(0, now, 0.015);
         for (const n of live) { try { n.stop(now + 0.1); } catch (err) { /* already stopped */ } }
         live.clear();
+        for (const ch of channels.values()) if (ch.lfo) { try { ch.lfo.osc.stop(now + 0.1); } catch (err) { /* gone */ } }
         setTimeout(() => { try { master.disconnect(); clip.disconnect(); conv.disconnect(); } catch (err) { /* gone */ } }, 500);
       },
     };
@@ -575,5 +615,5 @@ BDJ.Sound = (() => {
     return new Blob([data], { type: 'audio/wav' });
   }
 
-  return { INSTRUMENTS, DRUMS, PARAMS, SHAPE, attackTime, releaseTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, encodeWav, midiToHz };
+  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, PARAMS, SHAPE, attackTime, releaseTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, encodeWav, midiToHz };
 })();
