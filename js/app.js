@@ -989,6 +989,7 @@
       if (T.on && !T.rec) play();
     },
     trackChanged: (t) => { if (T.on && T.M) T.M.update(t); if (liveM) liveM.update(t); mixer.render(); },
+    status: say,
     removeTrack: (id) => {
       const t = PJ.track(P, id);
       commit(() => PJ.deleteTrack(P, id));
@@ -1116,6 +1117,7 @@
     say('Added a drum track. Load a pattern or click steps in the editor below.');
   });
   on('plFit', 'click', () => playlist.fit());
+  on('makeUnique', 'click', () => playlist.makeUnique());
   on('addMarker', 'click', () => playlist.addMarkerAt(songCursor));
   on('clearLoop', 'click', () => {
     if (!P.region) { say('Drag along the playlist ruler to make a loop region.'); return; }

@@ -92,6 +92,7 @@
       <span class="sep"></span>
       <button id="addSynth" class="btn small" type="button">+ Synth track</button>
       <button id="addDrums" class="btn small" type="button">+ Drum track</button>
+      <button id="makeUnique" class="btn small" type="button" title="Give the selected clip(s) their own copy of the pattern, so you can change it in just that spot (U)">Make unique</button>
       <button id="plFit" class="btn small" type="button" title="Zoom to the whole song">Zoom to fit</button>
     </div>
     <div class="plgrid">
@@ -223,7 +224,9 @@
         <ul>
           <li><b>Click</b> a lane to place that track&rsquo;s current pattern. <b>Click a clip</b> to edit its pattern below</li>
           <li><b>Drag</b> a clip to move it, drag its <b>right edge</b> to repeat the pattern</li>
-          <li><b>Shift+drag</b> copies a clip. <b>Right-click</b> deletes it. <b>Delete</b> and <b>Ctrl+D</b> work on the selected clip</li>
+          <li><b>Ctrl+drag</b> draws a selection box (Shift adds to it). Dragging a selected clip moves them all; <b>Shift+drag</b> copies. <b>Right-click</b> deletes a clip</li>
+          <li>On the selection: <b>Delete</b>, <b>Ctrl+D</b> duplicate after it, <b>Ctrl+C / X / V</b> copy, cut, paste at the marker, <b>Ctrl+A</b> all, <b>Esc</b> none</li>
+          <li><b>Make unique</b> (or <b>U</b> when &ldquo;Keyboard plays&rdquo; is off): the selected clips get their own copy of the pattern, to make a variation in just that spot</li>
           <li>Clips snap to bars. Hold <b>Alt</b> to snap to beats</li>
           <li>Clips are links: change the pattern once and every clip of it changes. Use <b>Clone</b> to make a variation</li>
           <li>Click the playlist&rsquo;s <b>ruler</b> to play the song from there, the piano roll&rsquo;s ruler to loop the pattern</li>

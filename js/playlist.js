@@ -8,6 +8,15 @@ BDJ.Playlist = (() => {
   const RULER = 38, MARK = 17, ROW = 52, AROW = 60, EDGE = 8; // ruler: markers + loop band on top (MARK), bar numbers below
   const MARKER_COLOR = '#ffe066';
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  /* the n-th pattern of a track: the track colour, then alternately lighter and darker */
+  function shade(hex, n) {
+    if (!(n > 0)) return hex;
+    const steps = [0, 0.24, -0.16, 0.4, -0.24, 0.12, -0.08, 0.32, -0.2]; // darkening kept gentle so dark clip labels stay readable
+    const a = steps[n % steps.length], c = parseInt(hex.slice(1), 16);
+    const mix = (v) => Math.round(a > 0 ? v + (255 - v) * a : v * (1 + a));
+    return 'rgb(' + mix(c >> 16) + ',' + mix((c >> 8) & 255) + ',' + mix(c & 255) + ')';
+  }
+
   /* readable value of an automation point */
   function autoLabel(id, v) {
     if (id === 'volume') return v <= 0.0005 ? '−∞ dB' : (20 * Math.log10(v)).toFixed(1) + ' dB';
@@ -31,7 +40,7 @@ BDJ.Playlist = (() => {
       this.host = host;
       this.view = { x0: 0, ppb: 12 };
       this.drag = null;
-      this.selClip = null;
+      this.sel = new Set(); // selected clip ids
       this.col = {};
       const cs = getComputedStyle(document.documentElement);
       for (const k of ['roll', 'line', 'text', 'muted', 'panel', 'panel-2', 'trace', 'bg']) this.col[k] = cs.getPropertyValue('--' + k).trim();
@@ -215,27 +224,37 @@ BDJ.Playlist = (() => {
         if (!row) return;
         const t = row.t;
         const h = this.clipAt(px, py);
-        const before = this.host.begin();
-        let clip, changed = false;
-        if (h && (e.shiftKey || e.ctrlKey || e.metaKey)) {
-          clip = { ...h.clip, id: p.nextId++ };
-          p.clips.push(clip);
-          changed = true;
-        } else if (h) {
-          clip = h.clip;
+        if (e.ctrlKey || e.metaKey) {
+          // box select (Shift keeps what was already selected)
+          this.drag = { mode: 'box', ax: px, ay: py, bx: px, by: py, base: e.shiftKey ? new Set(this.sel) : new Set() };
         } else {
-          // place the track's current pattern here
-          const pat = this.brush(t);
-          clip = PJ().addClip(p, pat, this.snapFloor(this.beatAt(px), free));
-          changed = true;
+          const before = this.host.begin();
+          let clip = h && h.clip, changed = false, group;
+          if (h && e.shiftKey) {
+            // Shift+drag copies: the whole selection when the clip is part of it, otherwise just this clip
+            const src = this.sel.has(h.clip.id) ? p.clips.filter((c) => this.sel.has(c.id)) : [h.clip];
+            const copies = src.map((c) => ({ ...c, id: p.nextId++ }));
+            p.clips.push(...copies);
+            clip = copies[src.indexOf(h.clip)];
+            this.sel = new Set(copies.map((c) => c.id));
+            changed = true;
+          } else if (h) {
+            if (!this.sel.has(h.clip.id)) this.sel = new Set([h.clip.id]);
+          } else {
+            // place the track's current pattern here
+            const pat = this.brush(t);
+            clip = PJ().addClip(p, pat, this.snapFloor(this.beatAt(px), free));
+            this.sel = new Set([clip.id]);
+            changed = true;
+          }
+          group = p.clips.filter((c) => this.sel.has(c.id)).map((c) => ({ id: c.id, start: c.start, len: c.len }));
+          this.host.select(clip.trackId, clip.patternId);
+          this.drag = {
+            mode: h && h.edge && !changed ? 'resize' : 'move', clip: clip.id, b0: this.beatAt(px),
+            start: clip.start, len: clip.len, group, before, changed,
+          };
+          if (changed) this.host.changed('live');
         }
-        this.selClip = clip.id;
-        this.host.select(clip.trackId, clip.patternId);
-        this.drag = {
-          mode: h && h.edge && !changed ? 'resize' : 'move', clip: clip.id, b0: this.beatAt(px),
-          start: clip.start, len: clip.len, before, changed,
-        };
-        if (changed) this.host.changed('live');
       }
       if (this.drag) this.c.setPointerCapture(e.pointerId);
       this.draw();
@@ -393,13 +412,26 @@ BDJ.Playlist = (() => {
         PJ().sortAuto(d.row.t.auto[d.row.t.autoParam]);
         d.changed = true;
         this.host.changed('live');
+      } else if (d.mode === 'box') {
+        d.bx = px; d.by = py;
+        const b0 = this.beatAt(Math.min(d.ax, d.bx)), b1 = this.beatAt(Math.max(d.ax, d.bx));
+        const y0 = Math.min(d.ay, d.by), y1 = Math.max(d.ay, d.by);
+        const rows = this.rows().filter((r) => r.kind === 'track' && r.y + r.h > y0 && r.y < y1).map((r) => r.t.id);
+        this.sel = new Set(d.base);
+        for (const c of this.p.clips) if (rows.includes(c.trackId) && c.start < b1 && c.start + c.len > b0) this.sel.add(c.id);
       } else {
         const c = this.p.clips.find((x) => x.id === d.clip);
         if (!c) return;
         const db = this.beatAt(px) - d.b0;
         if (d.mode === 'move') {
+          // move the whole selection by the snapped amount the grabbed clip moved; nothing goes before the start
           const s = this.snap(d.start + db, free);
-          if (s !== c.start) { c.start = s; d.changed = true; }
+          const minStart = Math.min(...d.group.map((g) => g.start));
+          const delta = Math.max(s - d.start, -minStart);
+          for (const g of d.group) {
+            const cl = this.p.clips.find((x) => x.id === g.id);
+            if (cl && cl.start !== g.start + delta) { cl.start = g.start + delta; d.changed = true; }
+          }
         } else {
           const end = this.snap(d.start + d.len + db, free);
           const len = Math.max(free ? 1 : 4, end - d.start);
@@ -416,6 +448,7 @@ BDJ.Playlist = (() => {
       this.drag = null;
       try { this.c.releasePointerCapture(e.pointerId); } catch (err) { /* not captured */ }
       if (d.mode === 'ruler' || d.mode === 'marker' || d.mode === 'loop') this.rulerUp(d);
+      else if (d.mode === 'box') { if (this.sel.size) this.host.status(this.sel.size + (this.sel.size === 1 ? ' clip' : ' clips') + ' selected. Drag to move, Shift+drag to copy, Delete, Ctrl+D to duplicate, Make unique for a variation.'); }
       else if (d.mode === 'autopt' || d.mode === 'autoerase') { if (d.changed) { this.host.end(d.before); this.host.changed('auto'); } }
       else if (d.before != null && d.changed) { this.host.end(d.before); this.host.changed('clips'); }
       this.draw();
@@ -434,25 +467,81 @@ BDJ.Playlist = (() => {
       this.host.changed('live');
     }
 
+    /* ---------- clip selection actions ---------- */
+    selected() { return this.p.clips.filter((c) => this.sel.has(c.id)); }
+    edit(fn, kind = 'clips') {
+      const before = this.host.begin();
+      fn();
+      this.host.end(before);
+      this.host.changed(kind);
+    }
+    deleteSelected() {
+      if (!this.sel.size) return;
+      this.edit(() => { this.p.clips = this.p.clips.filter((c) => !this.sel.has(c.id)); this.sel.clear(); });
+    }
+    /* copies of the selection right after it (rounded up to whole bars) */
+    duplicateSelected() {
+      const cs = this.selected();
+      if (!cs.length) return;
+      const s0 = Math.min(...cs.map((c) => c.start)), e0 = Math.max(...cs.map((c) => c.start + c.len));
+      const span = Math.ceil((e0 - s0) / 4 - 1e-9) * 4;
+      this.edit(() => {
+        const copies = cs.map((c) => ({ ...c, id: this.p.nextId++, start: c.start + span }));
+        this.p.clips.push(...copies);
+        this.sel = new Set(copies.map((c) => c.id));
+      });
+    }
+    copySelected() {
+      const cs = this.selected();
+      if (!cs.length) return false;
+      const s0 = Math.min(...cs.map((c) => c.start));
+      this.clip = cs.map((c) => ({ trackId: c.trackId, patternId: c.patternId, d: c.start - s0, len: c.len }));
+      return true;
+    }
+    paste() {
+      const p = this.p;
+      const list = (this.clip || []).filter((c) => PJ().pattern(p, c.patternId) && PJ().track(p, c.trackId));
+      if (!list.length) return;
+      const at = this.host.cursor();
+      this.edit(() => {
+        const made = list.map((c) => ({ id: p.nextId++, trackId: c.trackId, patternId: c.patternId, start: at + c.d, len: c.len }));
+        p.clips.push(...made);
+        this.sel = new Set(made.map((c) => c.id));
+      });
+    }
+    /* each selected clip gets its own copy of its pattern, so it can change without touching the others */
+    makeUnique() {
+      const cs = this.selected();
+      if (!cs.length) { this.host.status('Select a clip first (click it), then Make unique gives it its own copy of the pattern.', 'warn'); return; }
+      let last = null;
+      this.edit(() => {
+        for (const c of cs) {
+          const src = PJ().pattern(this.p, c.patternId);
+          if (!src) continue;
+          const copy = PJ().clonePattern(this.p, src);
+          c.patternId = copy.id;
+          last = c;
+        }
+        if (last) PJ().select(this.p, last.trackId, last.patternId);
+      }, 'all'); // the editor switches to the new copy, so redraw everything
+      if (last) this.host.status(cs.length === 1
+        ? 'That clip now plays its own pattern, "' + PJ().pattern(this.p, last.patternId).name + '". Edit it below; the other clips stay as they were.'
+        : cs.length + ' clips now each play their own copy of their pattern.');
+    }
+
     key(e) {
-      const p = this.p, c = p.clips.find((x) => x.id === this.selClip);
-      if (!c) return;
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        const before = this.host.begin();
-        p.clips = p.clips.filter((x) => x !== c);
-        this.selClip = null;
-        this.host.end(before);
-        this.host.changed('clips');
-      } else if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D' || e.key === 'b' || e.key === 'B')) {
-        e.preventDefault();
-        const before = this.host.begin();
-        const n = { ...c, id: p.nextId++, start: c.start + c.len };
-        p.clips.push(n);
-        this.selClip = n.id;
-        this.host.end(before);
-        this.host.changed('clips');
-      }
+      const ctrl = e.ctrlKey || e.metaKey, k = e.key;
+      let used = true;
+      if (k === 'Delete' || k === 'Backspace') this.deleteSelected();
+      else if (ctrl && (k === 'd' || k === 'D' || k === 'b' || k === 'B')) this.duplicateSelected();
+      else if (ctrl && (k === 'c' || k === 'C')) this.copySelected();
+      else if (ctrl && (k === 'x' || k === 'X')) { if (this.copySelected()) this.deleteSelected(); }
+      else if (ctrl && (k === 'v' || k === 'V')) this.paste();
+      else if (ctrl && (k === 'a' || k === 'A')) { this.sel = new Set(this.p.clips.map((c) => c.id)); this.draw(); }
+      else if (!ctrl && (k === 'u' || k === 'U')) this.makeUnique();
+      else if (k === 'Escape') { this.sel.clear(); this.draw(); }
+      else used = false;
+      if (used) e.preventDefault();
     }
 
     wheel(e) {
@@ -516,13 +605,15 @@ BDJ.Playlist = (() => {
         const x = this.x(cl.start), w = Math.max(4, cl.len * v.ppb - 1);
         if (x > W || x + w < 0) continue;
         const y = row.y + 3, h = ROW - 6;
-        const editing = pat.id === p.sel.patternId;
+        const editing = pat.id === p.sel.patternId, picked = this.sel.has(cl.id);
+        // each pattern on a track gets its own shade of the track colour
+        const col = shade(t.color, PJ().patternsOf(p, t.id).indexOf(pat));
         g.save();
         this.rr(x, y, w, h, 5); g.clip();
         g.globalAlpha = t.mute ? 0.35 : 1;
-        g.fillStyle = t.color; g.globalAlpha *= 0.28; g.fillRect(x, y, w, h);
+        g.fillStyle = col; g.globalAlpha *= 0.28; g.fillRect(x, y, w, h);
         g.globalAlpha = t.mute ? 0.35 : 1;
-        g.fillStyle = t.color; g.fillRect(x, y, w, 15);
+        g.fillStyle = col; g.fillRect(x, y, w, 15);
         // pattern repeats
         const PL = PJ().patternBeats(pat);
         for (let r = PL; r < cl.len - 1e-6; r += PL) {
@@ -534,12 +625,19 @@ BDJ.Playlist = (() => {
         g.font = '600 11px ' + this.sans();
         if (w > 24) g.fillText(pat.name, x + 6, y + 8, w - 10);
         g.restore();
-        if (editing || cl.id === this.selClip) {
-          g.strokeStyle = cl.id === this.selClip ? '#fff' : 'rgba(255,255,255,0.55)';
-          g.lineWidth = cl.id === this.selClip ? 2 : 1;
+        if (editing || picked) {
+          g.strokeStyle = picked ? '#fff' : 'rgba(255,255,255,0.55)';
+          g.lineWidth = picked ? 2 : 1;
           this.rr(x + 0.5, y + 0.5, w - 1, h - 1, 5); g.stroke();
         }
         if (w > 18) { g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + w - 4, y + 19, 1.5, h - 24); }
+      }
+      // selection box
+      const bd = this.drag;
+      if (bd && bd.mode === 'box') {
+        const bx = Math.min(bd.ax, bd.bx), by = Math.min(bd.ay, bd.by), bw = Math.abs(bd.bx - bd.ax), bh = Math.abs(bd.by - bd.ay);
+        g.fillStyle = 'rgba(88,214,197,0.12)'; g.fillRect(bx, by, bw, bh);
+        g.strokeStyle = C.trace; g.lineWidth = 1; g.strokeRect(bx + 0.5, by + 0.5, bw, bh);
       }
 
       // automation lanes
