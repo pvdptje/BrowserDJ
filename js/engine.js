@@ -458,8 +458,9 @@ const HumEngine = (() => {
   }
 
   /* ---------- Multi-track standard MIDI file (format 1), timed in beats ----------
-     tracks: [{name, channel (0-15), notes:[{start, len, pitch, vel}]}] with start/len in quarter notes. */
-  function writeMidiTracks(tracks, bpm, markers = []) {
+     tracks: [{name, channel (0-15), notes:[{start, len, pitch, vel}]}] with start/len in quarter notes.
+     tempo: [{b, bpm}] changes after the start (the song's tempo changes), as tempo events in the conductor track. */
+  function writeMidiTracks(tracks, bpm, markers = [], tempo = []) {
     const PPQ = 480;
     const vlq = (v) => {
       const b = [v & 0x7f];
@@ -477,14 +478,16 @@ const HumEngine = (() => {
       0x00, 0xff, 0x51, 0x03, (usPerQ >> 16) & 0xff, (usPerQ >> 8) & 0xff, usPerQ & 0xff,
       0x00, 0xff, 0x58, 0x04, 0x04, 0x02, 0x18, 0x08,
     ];
-    // markers (meta 0x06) so music programs show the song sections
-    let lastM = 0;
-    for (const m of markers.slice().sort((a, b) => a.beat - b.beat)) {
-      const t = Math.max(0, Math.round(m.beat * PPQ));
-      const s = Array.from(new TextEncoder().encode(String(m.name || 'Marker')));
-      conductor.push(...vlq(t - lastM), 0xff, 0x06, ...vlq(s.length), ...s);
-      lastM = t;
+    // markers (meta 0x06) so music programs show the song sections, and tempo changes (meta 0x51)
+    const meta = [];
+    for (const m of markers) meta.push({ t: Math.max(0, Math.round(m.beat * PPQ)), data: ((s) => [0xff, 0x06, ...vlq(s.length), ...s])(Array.from(new TextEncoder().encode(String(m.name || 'Marker')))) });
+    for (const c of tempo) {
+      const us = Math.round(60000000 / c.bpm);
+      meta.push({ t: Math.max(0, Math.round(c.b * PPQ)), data: [0xff, 0x51, 0x03, (us >> 16) & 0xff, (us >> 8) & 0xff, us & 0xff] });
     }
+    meta.sort((a, b) => a.t - b.t);
+    let lastM = 0;
+    for (const e of meta) { conductor.push(...vlq(e.t - lastM), ...e.data); lastM = e.t; }
     conductor.push(0x00, 0xff, 0x2f, 0x00);
     const out = [0x4d, 0x54, 0x68, 0x64, 0, 0, 0, 6, 0, 1, 0, tracks.length + 1, (PPQ >> 8) & 0xff, PPQ & 0xff, ...chunk(conductor)];
     for (const tr of tracks) {

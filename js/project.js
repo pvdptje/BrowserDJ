@@ -201,6 +201,45 @@ BDJ.Project = (() => {
   const autoParams = (t) => Object.keys(t.auto || {}).filter((k) => t.auto[k] && t.auto[k].length);
   function sortAuto(pts) { pts.sort((a, b) => a.b - b.b || a.v - b.v); return pts; }
 
+  /* ---------- tempo changes ----------
+     p.tempo = [{b, bpm}] sorted by beat, every b > 0: from beat b on the song plays at bpm, until the next change.
+     Before the first one it plays at p.bpm. Like automation, only the song timeline uses them; Pattern mode
+     always plays at p.bpm. Notes and clips live in beats, so they follow; audio takes keep their own speed. */
+  const tempoList = (p, mode) => (mode === 'song' && p.tempo && p.tempo.length ? p.tempo : null);
+  function tempoAt(p, b, mode) {
+    let bpm = p.bpm;
+    for (const c of tempoList(p, mode) || []) { if (c.b <= b + 1e-6) bpm = c.bpm; else break; }
+    return bpm;
+  }
+  /* the beat of the first change after b, or Infinity */
+  function nextTempo(p, b, mode) {
+    for (const c of tempoList(p, mode) || []) if (c.b > b + 1e-6) return c.b;
+    return Infinity;
+  }
+  /* song beats <-> seconds from the song start */
+  function tempoMap(p, mode) {
+    const seg = [{ b: 0, s: 0, bpm: p.bpm }];
+    for (const c of tempoList(p, mode) || []) {
+      const z = seg[seg.length - 1];
+      if (c.b <= z.b) { z.bpm = c.bpm; continue; }
+      seg.push({ b: c.b, s: z.s + ((c.b - z.b) * 60) / z.bpm, bpm: c.bpm });
+    }
+    const by = (key, v) => { let i = seg.length - 1; while (i > 0 && seg[i][key] > v) i--; return seg[i]; };
+    return {
+      seg,
+      sec: (b) => { const z = by('b', b); return z.s + ((b - z.b) * 60) / z.bpm; },
+      beat: (s) => { const z = by('s', s); return z.b + ((s - z.s) * z.bpm) / 60; },
+    };
+  }
+  const songSecs = (p, mode, beats) => tempoMap(p, mode).sec(beats);
+  function sortTempo(p) {
+    // one change per beat: the later one in the list wins
+    const m = new Map();
+    for (const c of p.tempo) m.set(c.b, c);
+    p.tempo = [...m.values()].sort((a, z) => a.b - z.b);
+    return p.tempo;
+  }
+
   function addMarker(p, beat, name) {
     const m = { id: p.nextId++, beat: Math.max(0, beat), name: (name || 'Marker').slice(0, 40) };
     p.markers.push(m);
@@ -297,7 +336,7 @@ BDJ.Project = (() => {
     return {
       version: 2, name: 'Untitled', bpm: 120, root: 0, scale: 'major', snap: 16, loop: true, click: false, mode: 'pattern',
       capture: { detail: 0.5, fixTuning: true, playBeat: false, mode: 'melody' },
-      master: 0.85, loud: 0, region: null, markers: [],
+      master: 0.85, loud: 0, region: null, markers: [], tempo: [], tempoOpen: false,
       tracks: [], patterns: [], clips: [], sel: { trackId: 0, patternId: 0 }, nextId: 1,
     };
   }
@@ -423,6 +462,11 @@ BDJ.Project = (() => {
       .filter((m) => m && isFinite(+m.beat))
       .map((m) => ({ id: p.nextId++, beat: num(m.beat, 0, 0, 100000), name: str(m.name, 'Marker', 40) }))
       .sort((a, b) => a.beat - b.beat);
+    p.tempo = (Array.isArray(o.tempo) ? o.tempo : []).slice(0, 256)
+      .filter((c) => c && isFinite(+c.b) && +c.b > 0 && isFinite(+c.bpm))
+      .map((c) => ({ b: Math.round(num(c.b, 4, 0, 100000) * 1000) / 1000, bpm: Math.round(num(c.bpm, 120, 40, 240) * 100) / 100 }));
+    sortTempo(p);
+    p.tempoOpen = !!o.tempoOpen;
 
     // ids are renumbered; keep maps from the old ones
     const tMap = new Map(), pMap = new Map();
@@ -512,13 +556,14 @@ BDJ.Project = (() => {
   const serialize = (p) => JSON.stringify(p);
 
   /* ---------- hum take -> notes ---------- */
-  /* take: {raw, tuning, anchor?}; returns {notes (beats), shift (s)} */
+  /* take: {raw, tuning, anchor?, tempo?}; returns {notes (beats), shift (s)} */
   function deriveFromTake(p, pat, take) {
     const fin = E.finalize(take.raw, {
       root: p.root, scale: p.scale, fixTuning: p.capture.fixTuning, tuning: take.tuning,
-      bpm: p.bpm, grid: p.snap, octave: pat.takeOctave || 0, anchor: take.anchor,
+      bpm: take.tempo || p.bpm, grid: p.snap, octave: pat.takeOctave || 0, anchor: take.anchor,
     }, new Map());
-    const k = p.bpm / 60, r = (v) => Math.round(v * 10000) / 10000;
+    // a take recorded over the song is read at the tempo where it was recorded
+    const k = (take.tempo || p.bpm) / 60, r = (v) => Math.round(v * 10000) / 10000;
     const notes = fin.notes.map((n) => ({
       id: p.nextId++, start: r(n.start * k), len: Math.max(1 / 64, r((n.end - n.start) * k)), pitch: n.pitch, vel: n.vel,
     }));
@@ -588,7 +633,7 @@ BDJ.Project = (() => {
     track, pattern, patternsOf, selTrack, selPattern, select,
     blank, example, normalize, serialize,
     addTrack, addPattern, clonePattern, deletePattern, deleteTrack, addClip, uniqueName,
-    applyPreset, setDrumBars, notesEnd, patternBeats, syncAudio, isAudio, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, autoValue, autoParams, sortAuto,
+    applyPreset, setDrumBars, notesEnd, patternBeats, syncAudio, isAudio, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, tempoAt, nextTempo, tempoMap, songSecs, sortTempo, autoValue, autoParams, sortAuto,
     deriveFromTake, detectKey, midiTracks, History, slideFrom,
   };
 })();

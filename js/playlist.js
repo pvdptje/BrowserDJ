@@ -5,8 +5,10 @@ window.BDJ = window.BDJ || {};
 BDJ.Playlist = (() => {
   'use strict';
   const PJ = () => BDJ.Project;
-  const RULER = 38, MARK = 17, ROW = 52, AROW = 60, EDGE = 8; // ruler: markers + loop band on top (MARK), bar numbers below
-  const MARKER_COLOR = '#ffe066';
+  const RULER = 38, MARK = 17, ROW = 52, AROW = 60, TROW = 44, EDGE = 8; // ruler: markers + loop band on top (MARK), bar numbers below
+  const MARKER_COLOR = '#ffe066', TEMPO_COLOR = '#ff9f5a';
+  const fmtBpm = (v) => (Math.abs(v - Math.round(v)) < 0.005 ? String(Math.round(v)) : v.toFixed(1));
+  const barLabel = (b) => String(Math.floor(b / 4) + 1) + (b % 4 ? '.' + (Math.floor(b % 4) + 1) : '');
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   /* the n-th pattern of a track: the track colour, then alternately lighter and darker */
   function shade(hex, n) {
@@ -56,6 +58,7 @@ BDJ.Playlist = (() => {
     rows() {
       const out = [];
       let y = RULER;
+      if (this.p.tempoOpen) { out.push({ kind: 'tempo', y, h: TROW }); y += TROW; }
       for (const t of this.p.tracks) {
         out.push({ t, kind: 'track', y, h: ROW });
         y += ROW;
@@ -104,7 +107,12 @@ BDJ.Playlist = (() => {
 
     /* ---------- track headers (DOM) ---------- */
     renderHeads() {
-      const p = this.p, html = ['<div class="plcorner">Tracks</div>'];
+      const p = this.p, n = p.tempo.length;
+      const html = [`<div class="plcorner"><span>Tracks</span><button type="button" class="tog tempo${p.tempoOpen ? ' on' : ''}${n ? ' has' : ''}" data-act="tempo" aria-pressed="${p.tempoOpen}" title="Tempo changes${n ? ' (this song has ' + n + ')' : ''}">Tempo</button></div>`];
+      if (p.tempoOpen) {
+        html.push(`<div class="pltempo"><span class="tlabel">Tempo<small>${n ? n + (n === 1 ? ' change' : ' changes') : 'Song mode'}</small></span>` +
+          `<button type="button" class="btn small" data-act="tempoclear"${n ? '' : ' disabled'}>Clear</button></div>`);
+      }
       for (const t of p.tracks) {
         const on = t.id === p.sel.trackId;
         html.push(`<div class="plhead${on ? ' on' : ''}${t.mute ? ' muted' : ''}" data-id="${t.id}" style="--tc:${t.color}">`);
@@ -137,6 +145,21 @@ BDJ.Playlist = (() => {
       const h = this.heads;
       const trackOf = (el) => { const r = el.closest('.plhead, .plauto'); return r && PJ().track(this.p, +r.dataset.id); };
       h.addEventListener('click', (e) => {
+        const act = e.target.closest('[data-act]');
+        if (act && act.dataset.act === 'tempo') {
+          this.p.tempoOpen = !this.p.tempoOpen;
+          this.host.changed('view');
+          if (this.p.tempoOpen && !this.p.tempo.length) this.host.status('The Tempo lane: click a bar to change the tempo from there on, drag a change up or down to set it. Plays in Song mode.');
+          return;
+        }
+        if (act && act.dataset.act === 'tempoclear') {
+          const before = this.host.begin();
+          this.p.tempo = [];
+          this.host.end(before);
+          this.renderHeads();
+          this.host.changed('song');
+          return;
+        }
         const t = trackOf(e.target);
         if (!t) return;
         const b = e.target.closest('[data-act]');
@@ -214,6 +237,8 @@ BDJ.Playlist = (() => {
         this.drag = { mode: 'pan', px, x0: this.view.x0 };
       } else if (py < RULER) {
         this.rulerDown(e, px, py, free);
+      } else if (this.rowAt(py) && this.rowAt(py).kind === 'tempo') {
+        this.tempoDown(e, this.rowAt(py), px, py, free);
       } else if (this.rowAt(py) && this.rowAt(py).kind === 'auto') {
         this.autoDown(e, this.rowAt(py), px, py, free);
       } else if (e.button === 2) {
@@ -303,6 +328,96 @@ BDJ.Playlist = (() => {
       if (!list.length) delete row.t.auto[row.t.autoParam];
       d.changed = true;
       this.host.changed('live');
+    }
+
+    /* Tempo lane: click a bar to add a change there (and type its tempo), drag a change up or down to set it,
+       sideways to move it; double-click to type it, right-click to remove it. Changes snap to bars (Alt: beats). */
+    tempoRange() {
+      if (this.drag && this.drag.range) return this.drag.range;
+      const vs = [this.p.bpm, ...this.p.tempo.map((c) => c.bpm)];
+      const lo = Math.min(...vs), hi = Math.max(...vs), pad = Math.max(8, (24 - (hi - lo)) / 2);
+      return { lo: lo - pad, hi: hi + pad };
+    }
+    tempoY(row, v, R = this.tempoRange()) { return row.y + 9 + (1 - (v - R.lo) / (R.hi - R.lo)) * (row.h - 18); }
+    tempoHit(px, tol) {
+      let best = null, bd = tol;
+      for (const c of this.p.tempo) { const d = Math.abs(this.x(c.b) - px); if (d <= bd) { bd = d; best = c; } }
+      return best;
+    }
+    tempoDown(e, row, px, py, free) {
+      const p = this.p, hit = this.tempoHit(px, e.pointerType === 'touch' ? 14 : 7);
+      if (e.button === 2) {
+        if (!hit) return;
+        const before = this.host.begin();
+        p.tempo = p.tempo.filter((c) => c !== hit);
+        this.host.end(before);
+        this.renderHeads();
+        this.host.changed('song');
+        this.host.status('Tempo change at bar ' + barLabel(hit.b) + ' removed.');
+        return;
+      }
+      const before = this.host.begin();
+      let c = hit;
+      if (!c) {
+        const b = this.snapFloor(this.beatAt(px), free);
+        if (b <= 0) { this.host.status('The song starts at the tempo in the BPM box. Click further along to change it from that bar on.'); return; }
+        c = { b, bpm: PJ().tempoAt(p, b, 'song') };
+        p.tempo.push(c);
+        p.tempo.sort((x, z) => x.b - z.b);
+      }
+      this.drag = { mode: 'tempo', c, b0: this.beatAt(px), cb: c.b, py0: py, bpm0: c.bpm, range: this.tempoRange(), before, made: !hit, moved: false };
+      this.host.changed('live');
+    }
+    tempoMove(d, px, py, free) {
+      const c = d.c;
+      if (!d.moved && Math.abs(py - d.py0) < 3 && Math.abs(this.beatAt(px) - d.b0) * this.view.ppb < 4) return;
+      d.moved = true;
+      const nb = Math.max(free ? 1 : 4, this.snap(d.cb + this.beatAt(px) - d.b0, free));
+      // 2 pixels per BPM, wherever the pointer goes
+      const nv = clamp(Math.round(d.bpm0 + (d.py0 - py) / 2), 40, 240);
+      if (nb !== c.b || nv !== c.bpm) {
+        c.b = nb; c.bpm = nv;
+        this.p.tempo.sort((x, z) => x.b - z.b);
+        this.host.changed('live');
+      }
+    }
+    tempoUp(d) {
+      const p = this.p, c = d.c;
+      if (!d.moved && d.made) {
+        // a click on an empty bar: say the tempo
+        const v = this.askBpm(c);
+        if (v == null) { p.tempo = p.tempo.filter((x) => x !== c); this.draw(); return; }
+        c.bpm = v;
+      }
+      if (!d.moved && !d.made) {
+        this.host.status('From bar ' + barLabel(c.b) + ': ' + fmtBpm(c.bpm) + ' BPM. Drag it up or down to change it, sideways to move it; double-click to type it, right-click to remove it.');
+        return;
+      }
+      // one change per beat: the one just placed wins
+      p.tempo = p.tempo.filter((x) => x === c || x.b !== c.b);
+      this.host.end(d.before);
+      this.renderHeads();
+      this.host.changed('song');
+      const was = PJ().tempoAt({ ...p, tempo: p.tempo.filter((x) => x !== c) }, c.b, 'song');
+      this.host.status('From bar ' + barLabel(c.b) + ': ' + fmtBpm(c.bpm) + ' BPM' + (was !== c.bpm ? ' (was ' + fmtBpm(was) + ')' : '') + '.' + (p.mode !== 'song' ? ' Tempo changes play in Song mode.' : ''));
+    }
+    askBpm(c) {
+      const v = window.prompt('Tempo from bar ' + barLabel(c.b) + ' (BPM, 40 to 240)', fmtBpm(c.bpm));
+      if (v === null) return null;
+      const n = parseFloat(String(v).replace(',', '.'));
+      if (!isFinite(n)) { this.host.status('That is not a tempo: type a number of BPM, like 140.', 'warn'); return null; }
+      return clamp(Math.round(n * 100) / 100, 40, 240);
+    }
+    tempoDbl(px) {
+      const c = this.tempoHit(px, 9);
+      if (!c) return;
+      const v = this.askBpm(c);
+      if (v == null || v === c.bpm) return;
+      const before = this.host.begin();
+      c.bpm = v;
+      this.host.end(before);
+      this.host.changed('song');
+      this.host.status('From bar ' + barLabel(c.b) + ': ' + fmtBpm(v) + ' BPM.');
     }
 
     /* Ruler: markers on top, loop region edges, click to set the marker, drag to draw a loop region. */
@@ -396,6 +511,7 @@ BDJ.Playlist = (() => {
           const row = this.rowAt(py);
           if (!row) cur = 'default';
           else if (row.kind === 'auto') cur = this.autoPointAt(row, px, py) ? 'move' : 'crosshair';
+          else if (row.kind === 'tempo') cur = this.tempoHit(px, 7) ? 'ns-resize' : 'copy';
           else { const h = this.clipAt(px, py); if (h) cur = h.edge ? 'ew-resize' : 'grab'; }
         }
         this.c.style.cursor = cur;
@@ -406,6 +522,7 @@ BDJ.Playlist = (() => {
       else if (d.mode === 'ruler' || d.mode === 'marker' || d.mode === 'loop') this.rulerMove(d, px, free);
       else if (d.mode === 'erase') this.erase(px, py);
       else if (d.mode === 'autoerase') this.autoErase(px, py);
+      else if (d.mode === 'tempo') this.tempoMove(d, px, py, free);
       else if (d.mode === 'autopt') {
         d.pt.b = this.autoBeat(px, free);
         d.pt.v = this.autoV(d.row, py);
@@ -448,6 +565,7 @@ BDJ.Playlist = (() => {
       this.drag = null;
       try { this.c.releasePointerCapture(e.pointerId); } catch (err) { /* not captured */ }
       if (d.mode === 'ruler' || d.mode === 'marker' || d.mode === 'loop') this.rulerUp(d);
+      else if (d.mode === 'tempo') this.tempoUp(d);
       else if (d.mode === 'box') { if (this.sel.size) this.host.status(this.sel.size + (this.sel.size === 1 ? ' clip' : ' clips') + ' selected. Drag to move, Shift+drag to copy, Delete, Ctrl+D to duplicate, Make unique for a variation.'); }
       else if (d.mode === 'autopt' || d.mode === 'autoerase') { if (d.changed) { this.host.end(d.before); this.host.changed('auto'); } }
       else if (d.before != null && d.changed) { this.host.end(d.before); this.host.changed('clips'); }
@@ -456,6 +574,8 @@ BDJ.Playlist = (() => {
 
     dbl(e) {
       const { px, py } = this.pos(e);
+      const row = this.rowAt(py);
+      if (row && row.kind === 'tempo') { this.tempoDbl(px); return; }
       if (py < RULER && !(py < MARK && this.markerAt(px))) this.addMarkerAt(this.snapFloor(this.beatAt(px), e.altKey));
     }
 
@@ -581,7 +701,7 @@ BDJ.Playlist = (() => {
       const rows = this.rows(), trackRow = new Map();
       rows.forEach((r, i) => {
         if (r.kind === 'track') trackRow.set(r.t.id, r);
-        g.fillStyle = r.kind === 'auto' ? 'rgba(0,0,0,0.28)' : r.t.id === p.sel.trackId ? 'rgba(255,255,255,0.045)' : i % 2 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0)';
+        g.fillStyle = r.kind !== 'track' ? 'rgba(0,0,0,0.28)' : r.t.id === p.sel.trackId ? 'rgba(255,255,255,0.045)' : i % 2 ? 'rgba(0,0,0,0.12)' : 'rgba(0,0,0,0)';
         g.fillRect(0, r.y, W, r.h);
         g.fillStyle = 'rgba(255,255,255,0.06)'; g.fillRect(0, r.y + r.h - 1, W, 1);
       });
@@ -641,7 +761,7 @@ BDJ.Playlist = (() => {
       }
 
       // automation lanes
-      for (const r of rows) if (r.kind === 'auto') this.paintAuto(r, W);
+      for (const r of rows) if (r.kind === 'auto') this.paintAuto(r, W); else if (r.kind === 'tempo') this.paintTempo(r, W);
 
       // markers: a line through the lanes
       for (const m of p.markers) {
@@ -751,6 +871,48 @@ BDJ.Playlist = (() => {
         const pt = this.drag.pt;
         g.fillStyle = this.col.text;
         g.fillText(autoLabel(id, pt.v) + '  ·  bar ' + (Math.floor(pt.b / 4) + 1) + '.' + (Math.floor(pt.b % 4) + 1), this.x(pt.b) + 10, this.autoY(row, pt.v) - 10);
+      }
+    }
+
+    /* the tempo lane: a step line through the changes, each labelled */
+    paintTempo(row, W) {
+      const g = this.g, p = this.p, R = this.tempoRange(), list = p.tempo;
+      const Y = (v) => Math.round(this.tempoY(row, v, R)) + 0.5;
+      const song = p.mode === 'song';
+      // the steps: the song tempo, then each change from its beat on
+      const pts = [{ x: this.x(0), v: p.bpm, c: null }, ...list.map((c) => ({ x: this.x(c.b), v: c.bpm, c }))];
+      g.beginPath();
+      g.moveTo(pts[0].x, Y(pts[0].v));
+      for (let i = 1; i < pts.length; i++) { g.lineTo(pts[i].x, Y(pts[i - 1].v)); g.lineTo(pts[i].x, Y(pts[i].v)); }
+      g.lineTo(W, Y(pts[pts.length - 1].v));
+      g.globalAlpha = song ? 1 : 0.5;
+      g.strokeStyle = TEMPO_COLOR; g.lineWidth = 2; g.stroke();
+      g.lineTo(W, row.y + row.h - 1); g.lineTo(pts[0].x, row.y + row.h - 1); g.closePath();
+      g.globalAlpha = song ? 0.12 : 0.06; g.fillStyle = TEMPO_COLOR; g.fill();
+      g.globalAlpha = 1;
+      g.font = '600 11px ' + this.mono();
+      g.textBaseline = 'middle';
+      const hot = this.drag && this.drag.mode === 'tempo' ? this.drag.c : null;
+      for (let i = 0; i < pts.length; i++) {
+        const pt = pts[i], y = Y(pt.v), nx = i + 1 < pts.length ? pts[i + 1].x : Infinity;
+        const lx = Math.max(4, pt.x + 6);
+        let label = fmtBpm(pt.v) + (pt === pts[0] || pt.c === hot ? ' BPM' : '');
+        if (lx + g.measureText(label).width + 4 >= nx) label = fmtBpm(pt.v); // short of room: just the number
+        const tw = g.measureText(label).width;
+        if (lx + tw + 4 < nx && lx < W) {
+          const ly = y - 9 > row.y + 5 ? y - 9 : y + 10;
+          g.fillStyle = pt.c === hot && hot ? '#fff' : this.col.text;
+          g.fillText(label, lx, ly);
+        }
+        if (pt.c && pt.x > -6 && pt.x < W + 6) {
+          g.fillStyle = pt.c === hot ? '#fff' : TEMPO_COLOR;
+          g.fillRect(Math.round(pt.x) - 4, y - 4.5, 8, 8);
+          g.strokeStyle = '#15131f'; g.lineWidth = 1.5; g.strokeRect(Math.round(pt.x) - 4, y - 4.5, 8, 8);
+        }
+      }
+      if (!list.length) {
+        g.fillStyle = this.col.muted; g.font = '11px ' + this.sans();
+        g.fillText('Click a bar to change the tempo from there on' + (song ? '' : ' (plays in Song mode)'), Math.max(4, this.x(0)) + 74, row.y + row.h / 2);
       }
     }
 

@@ -627,6 +627,42 @@ test('MIDI import: every example survives export -> import, note for note', () =
   assert.throws(() => MI.toProject(new Uint8Array([1, 2, 3, 4]), 'x.mid'), /not a MIDI file/);
 });
 
+test('tempo changes: beats <-> seconds, Song mode only, cleaned up on load', () => {
+  const p = PJ.normalize({ ...JSON.parse(PJ.serialize(PJ.blank())), bpm: 120,
+    tempo: [{ b: 32, bpm: 60 }, { b: 16, bpm: 240 }, { b: 0, bpm: 90 }, { b: 'x', bpm: 100 }, { b: 48, bpm: 9999 }, { b: 32, bpm: 80 }] });
+  // sorted, one per beat (the later wins), nothing at or before the start, tempos clamped
+  eq(p.tempo, [{ b: 16, bpm: 240 }, { b: 32, bpm: 80 }, { b: 48, bpm: 240 }]);
+  assert.strictEqual(PJ.tempoAt(p, 15.9, 'song'), 120);
+  assert.strictEqual(PJ.tempoAt(p, 16, 'song'), 240);
+  assert.strictEqual(PJ.tempoAt(p, 40, 'song'), 80);
+  assert.strictEqual(PJ.tempoAt(p, 40, 'pattern'), 120, 'Pattern mode plays at the song tempo');
+  assert.strictEqual(PJ.nextTempo(p, 16, 'song'), 32);
+  assert.strictEqual(PJ.nextTempo(p, 50, 'song'), Infinity);
+  const m = PJ.tempoMap(p, 'song');
+  // 16 beats at 120 = 8 s, 16 at 240 = 4 s, 16 at 80 = 12 s
+  assert.strictEqual(m.sec(16), 8);
+  assert.strictEqual(m.sec(32), 12);
+  assert.strictEqual(m.sec(48), 24);
+  assert.strictEqual(m.sec(52), 25);
+  for (const b of [0, 3.5, 16, 20, 31.99, 40, 60]) assert.ok(Math.abs(m.beat(m.sec(b)) - b) < 1e-9, 'round trip at ' + b);
+  assert.strictEqual(PJ.tempoMap(p, 'pattern').sec(48), 24 * 1, 'Pattern mode ignores them');
+  assert.strictEqual(PJ.songSecs(p, 'song', 64), 24 + 4);
+  // older songs have none
+  eq(PJ.normalize(JSON.parse(PJ.serialize(PJ.blank()))).tempo, []);
+});
+
+test('tempo changes go out to MIDI and come back in', () => {
+  const MI = require('../js/midiimport.js');
+  const p = PJ.normalize(JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'examples', 'first-light.browserdj.json'), 'utf8')));
+  p.tempo = [{ b: 16, bpm: 140 }, { b: 33, bpm: 96.5 }];
+  const bytes = E.writeMidiTracks(PJ.midiTracks(p, 'song'), p.bpm, p.markers, p.tempo);
+  const back = PJ.normalize(MI.toProject(bytes, 'x.mid'));
+  assert.strictEqual(back.bpm, p.bpm);
+  eq(back.tempo, p.tempo);
+  assert.ok(back.tempoOpen, 'an imported song with tempo changes shows its Tempo lane');
+  eq(back.markers.map((m) => [m.beat, m.name]), p.markers.map((m) => [m.beat, m.name]));
+});
+
 test('Sampler sound reference: kept when valid, cleaned up, dropped when not', () => {
   const p = PJ.blank();
   const syn = p.tracks.find((t) => t.type === 'synth');

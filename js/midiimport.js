@@ -76,8 +76,7 @@
   function toProject(bytes, fileName) {
     const mid = parse(bytes);
     const ppq = mid.ppq || 480;
-    let bpm = 120, gotTempo = false;
-    const markers = [];
+    const markers = [], tempos = []; // tempos: [{tick, bpm}] from every track
     // collect notes per part: format 1 -> per track (and channel), format 0 -> per channel
     const parts = new Map(); // key -> {name, ch, program, vol, pan, notes: [{start, len, pitch, vel}]}
     mid.tracks.forEach((ev, ti) => {
@@ -86,7 +85,7 @@
       const programs = new Map(), vols = new Map(), pans = new Map();
       const key = (ch) => (mid.format === 0 ? 'c' + ch : 't' + ti + 'c' + ch);
       for (const e of ev) {
-        if (e.meta === 0x51 && !gotTempo && e.data.length >= 3) { bpm = 60000000 / ((e.data[0] << 16) | (e.data[1] << 8) | e.data[2]); gotTempo = true; }
+        if (e.meta === 0x51 && e.data.length >= 3) tempos.push({ tick: e.tick, bpm: 60000000 / ((e.data[0] << 16) | (e.data[1] << 8) | e.data[2]) });
         else if (e.meta === 0x03 && !trackName) trackName = text(e.data);
         else if (e.meta === 0x06) markers.push({ beat: e.tick / ppq, name: text(e.data) || 'Marker' });
         else if (e.kind === 0xc0) { if (!programs.has(e.ch)) programs.set(e.ch, e.d1); }
@@ -200,6 +199,17 @@
       if (own.length === 1) own[0].name = t.name;
     }
     if (!tracks.length) throw new Error('this MIDI file has no notes');
+    // the first tempo is the song's; later ones become tempo changes (on 16ths, nearest 0.1 BPM, repeats dropped)
+    tempos.sort((a, b) => a.tick - b.tick);
+    const bpm = tempos.length ? tempos[0].bpm : 120, tempo = [];
+    let lastBpm = Math.max(40, Math.min(240, Math.round(bpm)));
+    for (const tp of tempos.slice(1)) {
+      const b = Math.round((tp.tick / ppq) * 4) / 4, v = Math.round(Math.max(40, Math.min(240, tp.bpm)) * 10) / 10;
+      if (b <= 0 || Math.abs(v - lastBpm) < 0.05) continue;
+      if (tempo.length && tempo[tempo.length - 1].b === b) tempo.pop();
+      tempo.push({ b, bpm: v });
+      lastBpm = v;
+    }
     const first = tracks.find((t) => t.type === 'synth') || tracks[0];
     const firstPat = patterns.find((x) => x.trackId === first.id);
     return {
@@ -207,7 +217,7 @@
       name: (fileName || 'Imported').replace(/\.(mid|midi|smf)$/i, '').slice(0, 80) || 'Imported',
       bpm: Math.max(40, Math.min(240, Math.round(bpm))),
       mode: 'song', snap: 16, loop: true,
-      tracks, patterns, clips,
+      tracks, patterns, clips, tempo: tempo.slice(0, 256), tempoOpen: tempo.length > 0,
       markers: markers.filter((m) => m.name).map((m, i) => ({ id: 1000 + i, beat: Math.round(m.beat * 4) / 4, name: m.name.slice(0, 40) })),
       sel: { trackId: first.id, patternId: firstPat && firstPat.id },
     };

@@ -55,7 +55,7 @@
     clearTimeout(libTimer); libTimer = 0;
     if (!P.songId) P.songId = BDJ.Library.newId();
     const { length } = PJ.playItems(P, P.clips.length ? 'song' : 'pattern');
-    return BDJ.Library.put(P.songId, JSON.parse(snap()), (length * 60) / P.bpm);
+    return BDJ.Library.put(P.songId, JSON.parse(snap()), PJ.songSecs(P, P.clips.length ? 'song' : 'pattern', length));
   }
   /* save anything pending right now (before switching songs, or when the tab is hidden) */
   function flushLib() { return libTimer ? saveLib() : Promise.resolve(); }
@@ -133,7 +133,7 @@
     pat.notes = d.notes;
     pat.fromTake = true;
     take.shift = d.shift;
-    take.bpm = P.bpm;
+    take.bpm = take.tempo || P.bpm;
     pat.bars = Math.max(1, Math.ceil(PJ.notesEnd(pat) / 4 - 1e-6));
     roll.sel.clear();
   }
@@ -165,7 +165,7 @@
       // A first idea also hands its tempo to the song.
       const performed = hits.length >= 4 ? E.guessTempo(hits.map((h) => ({ start: h.t }))).bpm : P.bpm;
       if (!kept && !aligned) P.bpm = performed;
-      st = BDJ.Beatbox.toSteps(hits, aligned ? P.bpm : performed, aligned ? anchor : null);
+      st = BDJ.Beatbox.toSteps(hits, aligned ? PJ.tempoAt(P, songCursor, 'song') : performed, aligned ? anchor : null);
       if (!st) return;
       pat.bars = st.bars;
       pat.steps = Object.fromEntries(SND.DRUMS.map((d) => [d.id, st.steps[d.id] ? st.steps[d.id].slice() : new Array(st.bars * PJ.STEPS_PER_BAR).fill(0)]));
@@ -205,6 +205,8 @@
     commit(() => {
       const pat = PJ.pattern(P, targetId) || takeTarget();
       take = { frames: F, raw: seg.notes, track: seg.track, tuning: seg.tuning, audio: buf, anchor: aligned ? anchor : null, aligned, shift: 0, bpm: P.bpm, patternId: pat.id };
+      // over the song, the notes are read at the tempo where the recording started
+      if (aligned) take.tempo = PJ.tempoAt(P, songCursor, 'song');
       // a first idea sets key and tempo; once there is other music, the hum fits into it instead
       kept = otherMusic(pat.id);
       if (!kept) {
@@ -366,15 +368,15 @@
 
   /* Plays every note and hit of `items` that starts in [lo, hi) (local beats), shifted by `off` beats. */
   /* catchUp: also start recordings already under way at lo. cut: a song beat where recordings stop (the loop end). */
-  function scheduleEvents(ac, M, items, lo, hi, off, timeOf, bpm, skipTrack, catchUp, cut) {
-    const bps = 60 / bpm;
+  function scheduleEvents(ac, M, items, lo, hi, off, timeOf, skipTrack, catchUp, cut) {
+    const bps = 60 / P.bpm; // a take's beats are counted at the song's tempo (PJ.syncAudio): audio is not stretched
     PJ.eventsIn(P, items, lo, hi, (ev) => {
       const out = M.channel(ev.track), when = timeOf(ev.at + off);
       if (ev.kind === 'audio') {
         const au = ev.pattern.audio, buf = decoded.get(au.hash);
         const len = cut != null ? Math.min(ev.len, cut - ev.at) : ev.len;
         if (buf && len > 0) SND.audioClip(ac, out, buf, when, au.start + ev.offset * bps, len * bps, au.gain, M.live);
-      } else if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, ev.len * bps, ev.track.instrument, M.live, voiceShape(ev.track), samplerFor(ev.track));
+      } else if (ev.kind === 'note') SND.melodyNote(ac, out, ev, when, timeOf(ev.at + ev.len + off) - when, ev.track.instrument, M.live, voiceShape(ev.track), samplerFor(ev.track));
       else {
         SND.drumHit(ac, out, ev.drum, when, ev.vel, sampleBuf(ev.track, ev.drum), M.live, ev.gain, ev.track.kitStyle);
         // every kick pumps the tracks that have Pump turned up
@@ -399,10 +401,27 @@
   const T = { on: false };
   let TK = null; // playing back the raw recording
 
-  const spb = () => 60 / T.bpm;
-  const beatAbs = () => T.beat0 + (actx.currentTime - T.t0) / spb();
-  const timeOf = (b) => T.t0 + (b - T.beat0) * spb();
+  /* The clock: T.A is a list of tempo anchors {t, b, bpm}: from audio time t (beat b of the unwrapped counter)
+     on, beats go by at bpm. A tempo change in the song adds one, a little ahead of time, at the exact beat. */
+  const anchorAtT = (t) => { const A = T.A; let i = A.length - 1; while (i > 0 && A[i].t > t) i--; return A[i]; };
+  const anchorAtB = (b) => { const A = T.A; let i = A.length - 1; while (i > 0 && A[i].b > b) i--; return A[i]; };
+  const beatAt = (t) => { const a = anchorAtT(t); return a.b + ((t - a.t) * a.bpm) / 60; };
+  const beatAbs = () => beatAt(actx.currentTime);
+  const timeOf = (b) => { const a = anchorAtB(b); return a.t + ((b - a.b) * 60) / a.bpm; };
   const looping = () => P.loop && !T.rec;
+  // what the clock has to follow: the song tempo and its changes (Song mode only)
+  const tempoKey = (mode) => P.bpm + (mode === 'song' && P.tempo.length ? JSON.stringify(P.tempo) : '');
+  /* The tempo at abs beat a (song position pos): adds an anchor when it differs from the running one.
+     Returns the abs beat of the next tempo change in the song (Infinity when there is none). */
+  function tempoStep(a, pos) {
+    const bpm = PJ.tempoAt(P, pos, T.mode), last = T.A[T.A.length - 1];
+    if (bpm !== last.bpm) {
+      const t = timeOf(a);
+      T.A.push({ t, b: a, bpm });
+      T.M.setBpm(bpm, t, t - (a * 60) / bpm);
+    }
+    return a + (PJ.nextTempo(P, pos, T.mode) - pos);
+  }
 
   /* Playback runs on an unwrapped beat counter ("abs"). The first pass goes from the start point to the loop end E,
      then every pass repeats [S, E). songPos maps abs to the song position. */
@@ -419,11 +438,12 @@
     const L = PJ.playItems(P, mode).length, lr = PJ.loopRange(P, mode, L);
     // starting outside the loop jumps to its start
     if (!opts.rec && P.loop && (from < lr.start || from >= lr.end)) from = lr.start;
+    const bpm = PJ.tempoAt(P, from, mode), t0 = ac.currentTime + 0.08;
     Object.assign(T, {
-      on: true, rec: !!opts.rec, mode, bpm: P.bpm, L, S: lr.start, E: lr.end,
-      t0: ac.currentTime + 0.08, beat0: from, sched: from, from, skipTrack: opts.skipTrack || null, catchUp: true,
+      on: true, rec: !!opts.rec, mode, bpm, tk: tempoKey(mode), L, S: lr.start, E: lr.end,
+      A: [{ t: t0, b: from, bpm }], sched: from, from, skipTrack: opts.skipTrack || null, catchUp: true,
       // LFOs count their cycles from the moment beat 0 of what plays would have sounded
-      M: SND.createMixer(ac, { bpm: P.bpm, master: P.master, loud: P.loud, lfoZero: ac.currentTime + 0.08 - (from * 60) / P.bpm }),
+      M: SND.createMixer(ac, { bpm, master: P.master, loud: P.loud, lfoZero: t0 - (from * 60) / bpm }),
     });
     for (const t of P.tracks) T.M.channel(t);
     T.timer = setInterval(pump, 25);
@@ -439,42 +459,61 @@
     const now = actx.currentTime;
     const { items, length: L } = PJ.playItems(P, T.mode);
     const lr = PJ.loopRange(P, T.mode, L);
-    if (P.bpm !== T.bpm || L !== T.L || lr.start !== T.S || lr.end !== T.E) {
+    const tk = tempoKey(T.mode);
+    if (tk !== T.tk || L !== T.L || lr.start !== T.S || lr.end !== T.E) {
       // tempo, length or loop region changed while playing: carry on from the current song position
-      const b = beatAbs();
+      const b = beatAbs(), covered = timeOf(T.sched);
       let pos = songPos(b);
-      const ahead = T.sched - b;
       if (looping() && (pos < lr.start || pos >= lr.end)) pos = lr.start;
-      T.beat0 = pos; T.t0 = now; T.sched = pos + ahead * (T.bpm / P.bpm);
-      T.bpm = P.bpm; T.L = L; T.S = lr.start; T.E = lr.end;
-      T.M.setBpm(P.bpm);
-      T.M.setLfoZero(T.t0 - (T.beat0 * 60) / T.bpm, P.tracks);
+      T.tk = tk; T.L = L; T.S = lr.start; T.E = lr.end;
+      const bpm = PJ.tempoAt(P, pos, T.mode);
+      T.A = [{ t: now, b: pos, bpm }];
+      // what is already scheduled stays; carry on from the beat where it ends
+      T.sched = pos + (Math.max(0, covered - now) * bpm) / 60;
+      T.bpm = bpm;
+      T.M.setBpm(bpm);
+      T.M.setLfoZero(now - (pos * 60) / bpm, P.tracks);
     }
-    const endB = T.beat0 + (now + 0.15 - T.t0) / spb();
+    // anchors that are long gone; the running tempo (for the latency correction)
+    while (T.A.length > 1 && T.A[1].t < now - 1) T.A.shift();
+    T.bpm = anchorAtT(now).bpm;
+    let endB = beatAt(now + 0.15);
     if (endB > T.sched) {
       if (looping()) {
-        // cut the window at every loop boundary
+        // cut the window at every loop boundary and every tempo change
         let a = T.sched;
         const span = T.E - T.S;
         for (let guard = 0; a < endB - 1e-9 && guard < 64; guard++) {
           const pos = songPos(a), off = a - pos;
           const wrapAt = a < T.E ? T.E : T.E + (Math.floor((a - T.E) / span) + 1) * span;
-          const b = Math.min(endB, wrapAt);
+          const nextT = tempoStep(a, pos);
+          endB = beatAt(now + 0.15);
+          if (a >= endB - 1e-9) break;
+          const b = Math.min(endB, wrapAt, nextT);
           // at the start and at every jump back to the loop start, recordings already under way join in
           const fresh = T.catchUp || (a > T.from && Math.abs(pos - T.S) < 1e-9);
           T.catchUp = false;
-          scheduleEvents(actx, T.M, items, pos, pos + (b - a), off, timeOf, T.bpm, null, fresh, T.E);
+          scheduleEvents(actx, T.M, items, pos, pos + (b - a), off, timeOf, null, fresh, T.E);
           if (T.mode === 'song') scheduleAuto(T.M, pos, pos + (b - a), off, timeOf);
           clicks(pos, pos + (b - a), off, false);
           a = b;
         }
+        endB = a;
       } else {
-        const a = T.sched, b = endB;
-        // a recording count-in starts before the marker: only clicks there
-        const lo = Math.max(a, T.rec ? T.from + 4 : 0);
-        if (lo < b && a < L) { scheduleEvents(actx, T.M, items, lo, Math.min(b, L), 0, timeOf, T.bpm, T.skipTrack, T.catchUp); T.catchUp = false; }
-        if (T.mode === 'song') scheduleAuto(T.M, a, b, 0, timeOf);
-        clicks(a, b, 0, T.rec && !items.some((it) => it.track.id !== T.skipTrack && PJ.audible(P, it.track)));
+        let a = T.sched;
+        for (let guard = 0; a < endB - 1e-9 && guard < 64; guard++) {
+          const nextT = tempoStep(a, a);
+          endB = beatAt(now + 0.15);
+          if (a >= endB - 1e-9) break;
+          const b = Math.min(endB, nextT);
+          // a recording count-in starts before the marker: only clicks there
+          const lo = Math.max(a, T.rec ? T.from + 4 : 0);
+          if (lo < b && a < L) { scheduleEvents(actx, T.M, items, lo, Math.min(b, L), 0, timeOf, T.skipTrack, T.catchUp); T.catchUp = false; }
+          if (T.mode === 'song') scheduleAuto(T.M, a, b, 0, timeOf);
+          clicks(a, b, 0, T.rec && !items.some((it) => it.track.id !== T.skipTrack && PJ.audible(P, it.track)));
+          a = b;
+        }
+        endB = a;
       }
       T.sched = endB;
     }
@@ -988,15 +1027,15 @@
     const tracks = PJ.midiTracks(P, P.mode);
     if (!tracks.length) { say('There is nothing to export in ' + whatPlays() + ' yet.', 'warn'); return; }
     const name = slug() + (P.mode === 'pattern' ? '-' + curPat().name.toLowerCase().replace(/[^a-z0-9]+/g, '-') : '') + '.mid';
-    downloadBlob(new Blob([E.writeMidiTracks(tracks, P.bpm, P.mode === 'song' ? P.markers : [])], { type: 'audio/midi' }), name);
-    say('Saved ' + name + ' with ' + whatPlays() + ': ' + tracks.length + (tracks.length === 1 ? ' track' : ' tracks') + ', drums on channel 10. Set your music program to ' + P.bpm + ' BPM.');
+    downloadBlob(new Blob([E.writeMidiTracks(tracks, P.bpm, P.mode === 'song' ? P.markers : [], P.mode === 'song' ? P.tempo : [])], { type: 'audio/midi' }), name);
+    say('Saved ' + name + ' with ' + whatPlays() + ': ' + tracks.length + (tracks.length === 1 ? ' track' : ' tracks') + ', drums on channel 10. ' + (P.mode === 'song' && P.tempo.length ? 'The tempo changes are in the file too.' : 'Set your music program to ' + P.bpm + ' BPM.'));
   }
 
   /* Renders what Play plays to an AudioBuffer, a few seconds at a time: the renderer pauses at each chunk
      boundary, we add the next chunk's notes and report progress. Far fewer nodes exist at once, which also
      makes it much faster. `only` renders one track (a stem); `label` prefixes the progress message. */
   async function renderAudio(opts = {}) {
-    const sr = 44100, { items, length: L } = PJ.playItems(P, P.mode), secs = L * 60 / P.bpm;
+    const sr = 44100, { items, length: L } = PJ.playItems(P, P.mode), map = PJ.tempoMap(P, P.mode), secs = map.sec(L);
     const Ctx = window.OfflineAudioContext || window.webkitOfflineAudioContext;
     if (!Ctx) throw new Error('this browser cannot render audio files');
     const label = opts.label || 'Rendering ' + whatPlays();
@@ -1005,14 +1044,16 @@
     const M = SND.createMixer(oac, { bpm: P.bpm, master: P.master, loud: P.loud, only: opts.only, lfoZero: 0.02 });
     M.live = null;
     for (const t of P.tracks) M.channel(t);
-    const tOf = (b) => 0.02 + b * 60 / P.bpm;
+    const tOf = (b) => 0.02 + map.sec(b);
     const song = P.mode === 'song';
-    const CHUNK = 3, chunkBeats = CHUNK * P.bpm / 60;
-    let next = 0;
+    // the song's tempo changes: the echo and the LFOs follow
+    for (const z of map.seg.slice(1)) M.setBpm(z.bpm, tOf(z.b), tOf(z.b) - (z.b * 60) / z.bpm);
+    const CHUNK = 3;
+    let next = 0, k = 0;
     const scheduleChunk = () => {
-      const a = next, b = Math.min(L, next + chunkBeats);
-      if (a < b) { scheduleEvents(oac, M, items, a, b, 0, tOf, P.bpm); if (song) scheduleAuto(M, a, b, 0, tOf); }
-      next = b;
+      const a = next, b = Math.min(L, map.beat(++k * CHUNK));
+      if (a < b) { scheduleEvents(oac, M, items, a, b, 0, tOf); if (song) scheduleAuto(M, a, b, 0, tOf); }
+      next = Math.max(a, b);
     };
     let chunked = typeof oac.suspend === 'function';
     if (chunked) {
@@ -1029,7 +1070,7 @@
       } catch (err) { chunked = false; }
     }
     // no suspend support (or it failed): schedule whatever is left in one go
-    if (!chunked && next < L) { scheduleEvents(oac, M, items, next, L, 0, tOf, P.bpm); if (song) scheduleAuto(M, next, L, 0, tOf); next = L; }
+    if (!chunked && next < L) { scheduleEvents(oac, M, items, next, L, 0, tOf); if (song) scheduleAuto(M, next, L, 0, tOf); next = L; }
     const t0 = performance.now();
     const buf = await oac.startRendering();
     if (next < L - 1e-9) throw new Error('rendering stopped early');
@@ -1044,7 +1085,7 @@
     try {
       const { buf, secs } = await renderAudio();
       downloadBlob(SND.encodeWav(buf), slug() + '.wav');
-      say('Saved ' + slug() + '.wav with ' + whatPlays() + ' (' + secs.toFixed(1) + ' s at ' + P.bpm + ' BPM).');
+      say('Saved ' + slug() + '.wav with ' + whatPlays() + ' (' + secs.toFixed(1) + ' s' + (P.mode === 'song' && P.tempo.length ? ', starting at ' + P.bpm + ' BPM, with its tempo ' + (P.tempo.length === 1 ? 'change' : 'changes') : ' at ' + P.bpm + ' BPM') + ').');
     } catch (err) {
       say('Rendering failed: ' + (err && err.message ? err.message : err), 'warn');
     } finally {
@@ -1305,7 +1346,7 @@
   function refreshInfo() {
     const L = PJ.songBeats(P), bars = L / 4;
     $('songInfo').textContent = P.clips.length
-      ? bars + (bars === 1 ? ' bar' : ' bars') + ' · ' + fmtTime(L * 60 / P.bpm) + ' · ' + keyLabel() + ' · ' + P.bpm + ' BPM'
+      ? bars + (bars === 1 ? ' bar' : ' bars') + ' · ' + fmtTime(PJ.songSecs(P, 'song', L)) + ' · ' + keyLabel() + ' · ' + P.bpm + ' BPM' + (P.tempo.length ? ' (' + P.tempo.length + (P.tempo.length === 1 ? ' tempo change)' : ' tempo changes)') : '')
       : 'Empty song · ' + keyLabel() + ' · ' + P.bpm + ' BPM';
     const t = curTrack(), pat = curPat();
     const pb = PJ.patternBeats(pat) / 4;

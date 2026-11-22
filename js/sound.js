@@ -361,7 +361,23 @@ BDJ.Sound = (() => {
         const ch = channels.get(id);
         return ch ? peak(ch.tap, ch.buf) : 0;
       },
-      setBpm(b) { bpm = b; dl.delayTime.setTargetAtTime(Math.min(1.9, (60 / b) * 0.75), ac.currentTime, 0.05); },
+      /* a new tempo, now, or from `when` (a tempo change in the song, scheduled ahead). With `zero` (where beat 0
+         would have sounded at the new tempo) running LFOs keep going: they just change speed at `when`. */
+      setBpm(b, when, zero) {
+        bpm = b;
+        const at = when == null ? ac.currentTime : when;
+        if (when == null) dl.delayTime.cancelScheduledValues(at);
+        dl.delayTime.setTargetAtTime(Math.min(1.9, (60 / b) * 0.75), at, 0.05);
+        if (zero == null) return;
+        lfoZero = zero;
+        for (const ch of channels.values()) {
+          if (!ch.lfo) continue;
+          const parts = ch.lfoKey.split('|'), beats = +parts[1];
+          ch.lfo.osc.frequency.setValueAtTime(b / (beats * 60), at);
+          parts[3] = String(b); parts[4] = zero.toFixed(4);
+          ch.lfoKey = parts.join('|');
+        }
+      },
       /* where song beat 0 sits on the audio clock (after a tempo change or a jump); LFOs restart on the new grid */
       setLfoZero(t, tracks) { lfoZero = t; for (const tr of tracks || []) { const ch = channels.get(tr.id); if (ch) setLfo(ch, tr.lfo, true); } },
       stop() {

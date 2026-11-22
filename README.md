@@ -40,6 +40,7 @@ The **Examples** button opens the songs in `examples/`. First-time visitors star
 - **Patterns** belong to a track. Clips in the playlist are links to a pattern, so editing it changes every clip.
 - **Pattern / Song** in the transport picks what Play (and export) plays. In Song mode with Loop on, a loop region (drag on the playlist ruler) limits the loop.
 - **Automation** lanes (the A button on a track) draw volume, filter, pan, drive, echo and reverb over the song; they play in Song mode and export to MIDI as controllers 7, 74, 10, 94 and 91.
+- **Tempo changes**: the Tempo lane at the top of the playlist changes the tempo from any bar on. Playback, loops, WAV export, the echo and LFOs all follow it; MIDI export writes the changes and MIDI import reads them. Audio takes keep their own speed (they are not stretched).
 - **Export**: Download MIDI (one track per instrument, with markers and controllers), Export WAV (a limiter keeps it under full scale; the master Loud knob pushes into it), or Stems (one WAV per track, all the same length).
 - **Expression**: a note with `slide: true` glides (detune ramp, Shape → Glide) from the note before it, wrapping at the pattern start; velocity sets level and brightness; Shift+drag in the velocity lane draws a line.
 - **Drum kits and rolls**: a drum track's `kitStyle` (Classic, 808, Acoustic, Lo-fi) changes how the nine sounds are synthesized; a pattern's optional `rolls[drum][step]` (2, 3 or 4) splits a step into even, slightly softer hits.
