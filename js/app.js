@@ -1759,6 +1759,35 @@
 
   window.BrowserDJ = { get project() { return P; }, get take() { return take; }, roll, rack, playlist, mixer, live, transport: T, get tour() { return tour; } };
 
+  /* BrowserDJ.agent: a stable way for an AI agent (or anyone at the console) to make a song in this tab while
+     the person watches. See js/agent.js, or run BrowserDJ.agent.help(). Each edit is one undo step; a call that
+     throws leaves the song as it was. */
+  window.BrowserDJ.agent = BDJ.Agent.create({
+    get: () => P,
+    edit(fn) {
+      const before = begin();
+      // no normalize here: it renumbers ids, and the agent hands those ids back to the caller
+      try { fn(P); } catch (err) { P = JSON.parse(before); throw err; }
+      end(before);
+      changed('all');
+      autosave();
+    },
+    replace(p) {
+      stopAll();
+      loadCommit(() => { P = PJ.normalize(JSON.parse(JSON.stringify(p))); take = null; P.songId = BDJ.Library.newId(); });
+      patCursor = songCursor = 0;
+      roll.sel.clear(); roll.fit(); playlist.fit();
+      autosave();
+    },
+    render: (opts) => { stopAll(); return renderAudio(opts); },
+    play: (beat) => play(P.mode === 'song' ? beat : 0),
+    stop: () => stopAll(),
+    undo: () => undo(),
+    say: (text) => say(text),
+    shareLink: async () => shareBase() + '#s=' + (await BDJ.Share.encode(P)),
+  });
+  console.info('BrowserDJ: AI agents can make songs here. Try BrowserDJ.agent.help()');
+
   /* ---------- wiring ---------- */
   E.NOTE_NAMES.forEach((nm, i) => $('root').add(new Option(nm, i)));
   for (const k of ['major', 'minor', 'minorPent', 'majorPent', 'dorian', 'phrygian', 'harmonicMinor', 'chromatic']) $('scale').add(new Option(E.SCALES[k].name, k));

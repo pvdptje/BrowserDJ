@@ -21,6 +21,7 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 | `js/midiimport.js` | MIDI import: format 0/1 files into tracks, 4-bar patterns (shared when they repeat) and clips. Also loads in Node. |
 | `js/live.js` | Playing live: computer keyboard (by key position) and Web MIDI input. |
 | `js/samples.js` | Your own sounds: stored in IndexedDB by content hash; packed into saved project files as base64. |
+| `js/agent.js` | `BrowserDJ.agent`: a stable interface for AI agents (or anyone at the console) to compose in the open page, with note/chord names, drum step strings, and `listen()`, which renders and measures the song. `llms.txt` points agents at it. |
 | `js/tour.js` | The guided tour: a ring around one real control at a time and a bubble; a step moves on by itself when its `done()` turns true. The steps live in `app.js`. |
 | `js/app.js` | Transport (look-ahead scheduler), recording, export, controls. |
 | `sw.js`, `manifest.webmanifest`, `icons/` | Offline and install: served from a web address, the service worker keeps every file (network first, so updates land on the next visit). Its file list must match what `index.html` loads; the unit tests check that. |
@@ -54,6 +55,7 @@ The **Examples** button opens the songs in `examples/`. First-time visitors star
 - **Sampler**: a synth track can play your own sound (a file, or recorded with the mic); its pitch is found with the hum tracker so it plays in tune across the keyboard.
 - **Chance**: a note's `chance` (1–99, percent) or a drum pattern's `chance[drum][step]` (0 = always) makes it play only some of the time. The dice (`chanceRoll`) hash the track, the sound and the beat it lands on, so a song plays and exports the same way every time, while each pass of a loop rolls again.
 - **Nylon guitar** is a physical model (Karplus-Strong): seeded noise round a one-period delay line, rendered once per pitch and touch (`Sound.ksString`). **Strum** in the piano roll spreads a chord 1/32 beat per note, upwards when the chord starts between beats.
+- **Agents**: `BrowserDJ.agent.help()` in the page lists the calls. Edits go through the normal undo history (no normalize, so the ids it returns stay valid); `newSong` and `load` replace the song like opening a file. Errors throw before anything changes.
 - **Swing**: a track's `swing` (0–0.6 of a 16th) delays the off-beat 16ths, on drum tracks (the step's position) and on synth tracks (notes that start exactly on the second or fourth 16th of a beat).
 - **Markers** name song sections and are written into the MIDI file. Track volume and pan go in as controller 7 and 10.
 

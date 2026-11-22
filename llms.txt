@@ -1,0 +1,42 @@
+# BrowserDJ
+
+> A music studio that runs entirely in the browser (piano roll, drum sequencer, playlist, mixer, WAV and MIDI export). No accounts, no server, nothing uploaded.
+
+AI agents are welcome to make songs here. If you can run JavaScript in the page (a browser agent, devtools, or a
+headless browser), the page has a small, stable interface for composing while the person watches it appear:
+
+    BrowserDJ.agent.help()     // the full reference, with the real instrument, kit and drum names
+
+Each call is one undo step and shows what it did in the status line. Bars count from 1; inside a pattern, times are
+beats (4 per bar). Pitches are MIDI numbers or names ('C4' = 60). Mistakes throw a message that says what is allowed,
+and change nothing.
+
+You cannot hear the result, so `await BrowserDJ.agent.listen()` renders the song offline and returns numbers:
+loudness per marked section, peak, loudness per second, and warnings (clipping, silence). `check()` points out
+notes outside the key and patterns that are not placed. `await shareLink()` gives a link that opens the song for anyone.
+
+## A first song
+
+    const a = BrowserDJ.agent;
+    a.newSong({name: 'First try', bpm: 100, key: 'A', scale: 'minor'});   // replaces the open song (Undo brings it back)
+    const keys = a.addTrack({instrument: 'ep', name: 'Keys', reverb: 0.3});
+    const k = a.addPattern(keys, {name: 'Chords', notes: a.chords('Am F C G').flatMap((c, i) => c.map((p) => [p + 12, i * 4, 4, 80]))});
+    const d = a.addTrack({type: 'drums', kit: 'acoustic'});
+    const beat = a.addPattern(d, {steps: {kick: 'x.......x.x.....', snare: '....x.......x...', chat: 'x.x.x.x.x.x.x.x.'}});
+    a.addClip(k, 1, 8); a.addClip(beat, 5, 4);
+    a.addMarker(1, 'Intro'); a.addMarker(5, 'Groove');
+    console.log(await a.listen());
+
+## Calls
+
+- Song: newSong, setSong, info, summary, song (the project as JSON), load
+- Tracks: addTrack, setTrack, removeTrack
+- Patterns: addPattern, setPattern (notes for synths; step strings like 'x... o... x... o...' for drums, with optional chance rows)
+- Arrangement: addClip, clearClips, addMarker, automate
+- Helpers: chord, chords, scale, note, noteName
+- Ears and hands: check, listen, play, stop, undo, shareLink
+
+## Without running code
+
+A song is a JSON file (`*.browserdj.json`). The examples (https://github.com/pvdptje/BrowserDJ/tree/master/examples) are
+made by small Node scripts in `tools/make-*.js`, which are good models. Drop a .browserdj.json or .mid file onto the page to open it.

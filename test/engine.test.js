@@ -940,6 +940,46 @@ test('nylon guitar: the string model is in tune, dies away, and sounds the same 
   assert.strictEqual(ctx.BDJ.MidiImport ? ctx.BDJ.MidiImport.instrumentFor(24) : 'guitar', 'guitar');
 });
 
+test('agent shorthand: note and chord names, note lists, drum step strings, helpful errors', () => {
+  const code = fs.readFileSync(path.join(__dirname, '..', 'js', 'agent.js'), 'utf8');
+  vm.runInContext(code, ctx, { filename: 'agent.js' });
+  const A = ctx.BDJ.Agent;
+  assert.strictEqual(A.note('C4'), 60); assert.strictEqual(A.note('F#2'), 42); assert.strictEqual(A.note('Bb3'), 58); assert.strictEqual(A.note(69), 69);
+  assert.strictEqual(A.noteName(61), 'C#4');
+  assert.throws(() => A.note('H2'), /not a note name.*C4 is middle C/);
+  eq(A.chord('Am7'), [57, 60, 64, 67]);
+  eq(A.chord('C', 4), [60, 64, 67]);
+  eq(A.chord('G/B'), [47, 55, 59, 62]);
+  eq(A.chord('Dsus4'), [50, 55, 57]);
+  eq(A.chords('G Em, C|D').map((c) => c[0]), [55, 52, 48, 50]);
+  assert.throws(() => A.chord('Cfoo'), /not a chord name/);
+  eq(JSON.parse(JSON.stringify(A.parseNotes('C4 0 1, E4 1 0.5 90; G4 1.5 0.5'))), [{ pitch: 60, start: 0, len: 1, vel: 100 }, { pitch: 64, start: 1, len: 0.5, vel: 90 }, { pitch: 67, start: 1.5, len: 0.5, vel: 100 }]);
+  eq(JSON.parse(JSON.stringify(A.parseNotes([[62, 2, 1], { pitch: 'A3', start: 0, len: 2, vel: 70, chance: 50, slide: true }]))), [{ pitch: 62, start: 2, len: 1, vel: 100 }, { pitch: 57, start: 0, len: 2, vel: 70, chance: 50, slide: true }]);
+  assert.throws(() => A.parseNotes([[60, -1, 1]]), /note 0.*start must be between 0/);
+  assert.throws(() => A.parseNotes([[60, 0, 0]]), /len/);
+  const { steps, chance } = A.parseSteps({ kick: 'x... o... X... g...', chat: '..x.' }, 1, { chat: '..5.' });
+  eq(Array.from(steps.kick), [100, 0, 0, 0, 62, 0, 0, 0, 124, 0, 0, 0, 40, 0, 0, 0]);
+  eq(Array.from(steps.chat).filter((v) => v).length, 4);
+  eq(Array.from(steps.snare), new Array(16).fill(0));
+  eq(Array.from(chance.chat).filter((v) => v), [50, 50, 50, 50]);
+  assert.throws(() => A.parseSteps({ hihat: 'x...' }, 1), /no drum called "hihat"; the kit has kick/);
+  assert.throws(() => A.parseSteps({ kick: 'x..' }, 1), /3 steps, which does not fit 16/);
+  assert.throws(() => A.parseSteps({ kick: 'x..q' }, 1), /unknown step "q"/);
+  // the ears: a full-scale sine is about -3 dB and peaks at 1; silence is -120
+  const sr = 1000, L = new Float32Array(2000), R = new Float32Array(2000);
+  for (let i = 0; i < 1000; i++) L[i] = R[i] = Math.sin((i / sr) * 2 * Math.PI * 50);
+  const r = A.analyze(L, R, sr, [{ name: 'tone', bar: 1, from: 0, to: 1 }, { name: 'quiet', bar: 2, from: 1, to: 2 }]);
+  assert.ok(Math.abs(r.sections[0].db + 3) < 0.1 && r.sections[1].db === -120 && r.peak === 1 && r.perSecond.length === 2, JSON.stringify(r.sections));
+  // every call llms.txt lists is a real one
+  const api = A.create({ get: () => ({}), edit() {}, replace() {}, render() {}, play() {}, stop() {}, undo() {}, say() {}, shareLink() {} });
+  const llms = fs.readFileSync(path.join(__dirname, '..', 'llms.txt'), 'utf8');
+  const listed = llms.split('## Calls')[1].split('##')[0].match(/^- [^:]+: (.+)$/gm).flatMap((l) => l.replace(/^- [^:]+: /, '').replace(/\(.*\)/, '').split(/,\s*/)).map((x) => x.trim().split(' ')[0]);
+  assert.ok(listed.length > 20, listed.join(' '));
+  for (const k of listed) assert.strictEqual(typeof api[k], 'function', 'llms.txt lists ' + k);
+  for (const k of Object.keys(api)) if (typeof api[k] === 'function' && k !== 'help') assert.ok(listed.includes(k), k + ' is missing from llms.txt');
+  assert.ok(/addTrack/.test(A.HELP) && /guitar/.test(A.HELP) && /chat/.test(A.HELP) && !/${/.test(A.HELP));
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');
