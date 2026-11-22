@@ -2111,6 +2111,10 @@
     if (roll.arpeggiate($('arpMode').value)) say('Chords turned into arpeggios on the ' + (P.snap ? '1/' + P.snap : '1/16') + ' grid. Undo puts the chords back.');
     else say('Arpeggiate works on chords: notes that start at the same time. Draw some with Draw: Triad.', 'warn');
   });
+  on('strumBtn', 'click', () => {
+    const n = roll.strum();
+    say(n ? 'Strummed ' + n + (n === 1 ? ' chord' : ' chords') + ': lowest string first, upwards between the beats. Quantize puts them back.' : 'Nothing to strum: a chord is notes that start together.', n ? '' : 'warn');
+  });
   on('humanBtn', 'click', () => { roll.humanize(); say('Velocities loosened up a little. Do it again for more.'); });
 
   /* Chord progressions: the list follows the song's key; picking one fills the pattern (a bass track gets roots). */

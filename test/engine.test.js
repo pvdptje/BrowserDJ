@@ -825,7 +825,7 @@ test('every instrument comes back from a MIDI file as itself; General MIDI famil
     programs.add(ins.program);
     assert.strictEqual(MI.instrumentFor(ins.program), ins.id, ins.id);
   }
-  const fam = { 0: 'soft', 13: 'marimba', 40: 'strings', 52: 'pad', 56: 'brass', 66: 'brass', 74: 'flute', 33: 'bass', 34: 'bass' };
+  const fam = { 25: 'guitar', 27: 'pluck', 0: 'soft', 13: 'marimba', 40: 'strings', 52: 'pad', 56: 'brass', 66: 'brass', 74: 'flute', 33: 'bass', 34: 'bass' };
   for (const [p, id] of Object.entries(fam)) assert.strictEqual(MI.instrumentFor(+p), id, 'program ' + p);
 });
 
@@ -915,6 +915,29 @@ test('swing on a synth track: off-beat 16ths come late, nothing else moves, kept
   assert.strictEqual(back.tracks.find((t) => t.name === syn.name).swing, 0.4);
   syn.swing = 0;
   assert.strictEqual(PJ.normalize(JSON.parse(JSON.stringify(p))).tracks.find((t) => t.name === syn.name).swing, undefined);
+});
+
+test('nylon guitar: the string model is in tune, dies away, and sounds the same every time', () => {
+  const S = ctx.BDJ.Sound, sr = 44100;
+  for (const pitch of [40, 57, 69, 84]) {
+    const y = S.ksString(sr, pitch, 2 / 3), f = 440 * Math.pow(2, (pitch - 69) / 12), P = sr / f;
+    // the period by autocorrelation, a little after the pluck, refined between samples
+    const from = Math.round(sr * 0.15), W = 4096, ac = (lag) => { let s = 0; for (let i = 0; i < W; i++) s += y[from + i] * y[from + i + lag]; return s; };
+    let best = 0, bv = -Infinity;
+    for (let lag = Math.floor(P * 0.9); lag <= Math.ceil(P * 1.1); lag++) { const v = ac(lag); if (v > bv) { bv = v; best = lag; } }
+    const l = ac(best - 1), r = ac(best + 1), lag = best + (0.5 * (l - r)) / (l - 2 * bv + r);
+    const cents = 1200 * Math.log2(P / lag);
+    assert.ok(Math.abs(cents) < 6, 'pitch ' + pitch + ' is ' + cents.toFixed(1) + ' cents out');
+    const rms = (a, b) => { let s = 0; for (let i = a; i < b; i++) s += y[i] * y[i]; return Math.sqrt(s / (b - a)); };
+    assert.ok(rms(Math.round(sr * 0.6), Math.round(sr * 0.7)) < rms(0, Math.round(sr * 0.1)) * 0.7, 'pitch ' + pitch + ' dies away');
+    assert.strictEqual(y[y.length - 1], 0);
+  }
+  const a = S.ksString(sr, 60, 1), b = S.ksString(sr, 60, 1), soft = S.ksString(sr, 60, 1 / 3);
+  assert.deepStrictEqual(Array.from(a.slice(0, 2000)), Array.from(b.slice(0, 2000)));
+  // a soft touch is darker: less sample-to-sample movement for the same peak
+  const rough = (y) => { let s = 0; for (let i = 1; i < 4000; i++) s += Math.abs(y[i] - y[i - 1]); return s; };
+  assert.ok(rough(soft) < rough(a) * 0.8, rough(soft).toFixed(1) + ' vs ' + rough(a).toFixed(1));
+  assert.strictEqual(ctx.BDJ.MidiImport ? ctx.BDJ.MidiImport.instrumentFor(24) : 'guitar', 'guitar');
 });
 
 test('history undo/redo', () => {

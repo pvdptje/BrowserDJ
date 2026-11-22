@@ -24,6 +24,7 @@ BDJ.Sound = (() => {
     { id: 'flute', name: 'Flute', program: 73 },
     { id: 'sub', name: 'Sub bass', program: 32 },
     { id: 'reese', name: 'Reese bass', program: 87 },
+    { id: 'guitar', name: 'Nylon guitar', program: 24 },
     { id: 'sampler', name: 'Sampler (your sound)', program: 52 },
   ];
 
@@ -443,6 +444,57 @@ BDJ.Sound = (() => {
   const attackTime = (v) => (v > 0 ? 0.002 * Math.pow(1000, v) : 0);
   const releaseTime = (v) => (v > 0 ? 0.01 * Math.pow(300, v) : 0);
 
+  /* ---------- plucked string (Karplus-Strong) ----------
+     A burst of noise goes round a delay line one period long and is averaged on every pass, so the highs die first,
+     as on a real string. touch (1/3, 2/3, 1) is how hard it is plucked: harder is brighter. The noise is seeded,
+     so a note sounds the same in playback and in every export. Returns a Float32Array, peak 1. */
+  function ksString(sr, pitch, touch) {
+    const P = sr / midiToHz(pitch);
+    // the loop: N samples, plus half a sample for the averaging, plus an allpass for the fraction that is left
+    const D = P - 0.5, N = Math.max(2, Math.floor(D)), frac = D - N, C = (1 - frac) / (1 + frac);
+    const t60 = Math.min(4, Math.max(0.7, 4 * Math.pow(2, -(pitch - 40) / 24))); // low strings ring longer
+    const rho = Math.pow(0.001, P / (sr * t60));
+    const len = Math.round(sr * Math.min(3.5, t60 + 0.1));
+    let seed = (pitch * 7919 + Math.round(touch * 100) * 104729) >>> 0;
+    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return (seed / 4294967296) * 2 - 1; };
+    // the pluck: noise, darker for a soft touch, minus itself a little later (the finger a fifth of the way along the string)
+    const exc = new Float32Array(N), a = 0.2 + 0.65 * touch;
+    let lp = 0, mean = 0;
+    for (let i = 0; i < N; i++) { lp += a * (rnd() - lp); exc[i] = lp; }
+    const M = Math.max(1, Math.round(N * 0.18));
+    for (let i = N - 1; i >= M; i--) exc[i] -= exc[i - M];
+    for (let i = 0; i < N; i++) mean += exc[i];
+    mean /= N;
+    const y = new Float32Array(len);
+    let x1 = 0, y1 = 0, peak = 1e-9;
+    for (let n = 0; n < len; n++) {
+      const s = rho * 0.5 * ((n >= N ? y[n - N] : 0) + (n > N ? y[n - N - 1] : 0));
+      const ap = C * s + x1 - C * y1;
+      x1 = s; y1 = ap;
+      y[n] = (n < N ? exc[n] - mean : 0) + ap;
+      if (Math.abs(y[n]) > peak) peak = Math.abs(y[n]);
+    }
+    const fade = Math.min(len, Math.round(sr * 0.05));
+    // a gentle saturation on the way out rounds off the spiky first pass, so the pluck is full without clipping
+    const sat = Math.tanh(2);
+    for (let n = 0; n < len; n++) y[n] = (Math.tanh((2 * y[n]) / peak) / sat) * (n >= len - fade ? (len - 1 - n) / fade : 1);
+    return y;
+  }
+  // one buffer per sample rate, pitch and touch, made the first time it is played
+  const strings = new Map();
+  function guitarString(ac, pitch, vel) {
+    const p = Math.round(pitch), touch = Math.max(1, Math.min(3, Math.round((vel / 127) * 3))) / 3;
+    const key = ac.sampleRate + ':' + p + ':' + touch;
+    let b = strings.get(key);
+    if (!b) {
+      const d = ksString(ac.sampleRate, p, touch);
+      b = ac.createBuffer(1, d.length, ac.sampleRate);
+      b.copyToChannel(d, 0);
+      strings.set(key, b);
+    }
+    return b;
+  }
+
   /* Starts a voice and returns {release(at, planned)}. A live key calls release when it is let go;
      planned releases (known length) are scheduled straight away. maxDur keeps short notes' attack short. */
   /* sampler: {buffer, root (MIDI pitch of the recording, may be fractional), gain} for the Sampler instrument */
@@ -593,6 +645,14 @@ BDJ.Sound = (() => {
       osc('sawtooth', -18, 0.5); osc('sawtooth', 18, 0.5); osc('sawtooth', -7, 0.25); osc('sine', 0, 0.5, -1);
       filt.Q.value = 2; filt.frequency.value = Math.min(2200, f * 4);
       att = 0.01; rel = 0.12; peak = v * 0.85;
+    } else if (preset === 'guitar') {
+      // a plucked nylon string that rings out on its own; the end of the note is a finger damping it
+      const src = ac.createBufferSource(), body = ac.createBiquadFilter();
+      src.buffer = guitarString(ac, note.pitch, note.vel);
+      body.type = 'peaking'; body.frequency.value = 190; body.Q.value = 1.1; body.gain.value = 3; // the wooden box
+      src.connect(body); body.connect(filt);
+      mine.push(src);
+      filt.frequency.value = 5200; att = 0.0015; rel = 0.12; peak = v * 2.4;
     } else if (preset === 'organ') {
       // drawbar-style stack of sine harmonics
       for (const [h, l] of [[1, 0.5], [2, 0.32], [3, 0.22], [4, 0.14], [6, 0.08], [8, 0.06]]) {
@@ -901,5 +961,5 @@ BDJ.Sound = (() => {
     return new Blob([data], { type: 'audio/wav' });
   }
 
-  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, KITS, PARAMS, EQ_BANDS, EQ_MAX, eqResponse, SHAPE, attackTime, releaseTime, glideTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, audioClip, encodeWav, midiToHz };
+  return { ksString, LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, KITS, PARAMS, EQ_BANDS, EQ_MAX, eqResponse, SHAPE, attackTime, releaseTime, glideTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, audioClip, encodeWav, midiToHz };
 })();

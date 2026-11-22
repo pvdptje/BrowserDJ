@@ -253,6 +253,34 @@ BDJ.PianoRoll = (() => {
       return t.length;
     }
 
+    /* Strum: the notes of a chord (notes that start together and sound together) spread out a little, lowest first,
+       like a hand across guitar strings; a chord that starts between the beats is strummed upwards (highest first).
+       The ends stay where they are, and strumming again gives the same result. Returns how many chords it strummed. */
+    strum() {
+      const t = this.targets().slice().sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+      const groups = [];
+      for (const n of t) {
+        const g = groups[groups.length - 1];
+        if (g && n.start - g[0].start < 0.2 && n.start < g[0].start + g[0].len - 1e-6) g.push(n); else groups.push([n]);
+      }
+      const chords = groups.filter((g) => g.length > 1);
+      if (!chords.length) return 0;
+      const gap = 1 / 32;
+      this.edit(() => {
+        for (const g of chords) {
+          const at = g[0].start, up = Math.abs(at - Math.round(at)) > 1e-4;
+          const order = g.slice().sort((a, b) => (up ? b.pitch - a.pitch : a.pitch - b.pitch));
+          order.forEach((n, k) => {
+            const end = n.start + n.len;
+            n.start = at + k * gap;
+            n.len = Math.max(1 / 32, end - n.start);
+          });
+        }
+        this.sortNotes();
+      });
+      return chords.length;
+    }
+
     legato() {
       const t = this.targets().slice().sort((a, b) => a.start - b.start);
       this.edit(() => {
