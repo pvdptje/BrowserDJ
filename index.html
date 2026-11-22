@@ -190,6 +190,7 @@
         <label for="swing" class="lab">Swing</label>
         <input id="swing" type="range" min="0" max="60" value="0" class="vol">
         <button id="rollMode" class="btn small tgl" type="button" aria-pressed="false" title="While on, clicking a step turns it into a roll: 2, 3 or 4 quick hits">Rolls</button>
+        <button id="chanceMode" class="btn small tgl" type="button" aria-pressed="false" title="While on, clicking a step makes it play only some of the time: 75%, 50%, 25%, then always again">Chance</button>
         <button id="drumClear" class="btn small" type="button">Clear</button>
       </span>
     </div>
@@ -275,6 +276,15 @@
       <button id="keyBtn" class="btn small" type="button" title="Move notes into the key">Fit to key</button>
       <button id="legatoBtn" class="btn small" type="button" title="Stretch each note up to the next one">Legato</button>
       <button id="slideBtn" class="btn small" type="button" title="The selected notes glide in from the note before them, like a 303 slide">Slide</button>
+      <label for="chanceSel" class="sr">How often the notes play</label>
+      <select id="chanceSel" title="Leave notes to chance: they play only some of the time, so every pass of the loop is a little different">
+        <option value="">Chance&hellip;</option>
+        <option value="100">Always</option>
+        <option value="75">75%</option>
+        <option value="50">50%</option>
+        <option value="25">25%</option>
+        <option value="10">10%</option>
+      </select>
       <span class="arpbox">
         <button id="arpBtn" class="btn small" type="button" title="Turn chords (notes that start together) into an arpeggio on the snap grid">Arpeggiate</button>
         <label for="arpMode" class="sr">Arpeggio direction</label>
@@ -371,6 +381,7 @@
           <li><b>Right-click</b> a step to make it an accent or a soft ghost hit</li>
           <li><b>Kit</b> picks how the drums sound: Classic, 808 (booming kick, snappy snare), Acoustic or Lo-fi (crunchy and dark)</li>
           <li>Turn on <b>Rolls</b> and click a step to split it into 2, 3 or 4 quick hits, for hi-hat rolls and snare build-ups</li>
+          <li>Turn on <b>Chance</b> and click a step to make it play only some of the time (75%, 50%, 25%), so a beat keeps changing a little. The song still plays and exports the same way every time</li>
           <li><b>Click a name</b> to hear the sound. <b>Drop an audio file</b> on a row (or use its &#8613; button) to use your own; &times; goes back to the built-in sound</li>
           <li>Your own sounds are kept in this browser, and <b>Save</b> puts them inside the project file so it opens complete anywhere</li>
         </ul></div>

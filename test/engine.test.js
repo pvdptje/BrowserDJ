@@ -842,6 +842,55 @@ test('track EQ: kept in dB, clamped, rounded to half a dB, dropped when flat', (
   eq(PJ.normalize(JSON.parse(JSON.stringify(back))).tracks[0].eq, { low: 3.5, mid: -12 });
 });
 
+test('chance: notes and drum steps play about as often as asked, the same way every time, differently per pass', () => {
+  const p = PJ.blank();
+  const syn = p.tracks.find((t) => t.type === 'synth'), dr = p.tracks.find((t) => t.type === 'drums');
+  const mel = PJ.patternsOf(p, syn.id)[0], beat = PJ.patternsOf(p, dr.id)[0];
+  mel.bars = 1;
+  mel.notes = [{ id: 1, start: 0, len: 0.5, pitch: 60, vel: 100, chance: 50 }, { id: 2, start: 1, len: 0.5, pitch: 64, vel: 100 }, { id: 3, start: 2, len: 0.5, pitch: 67, vel: 100, chance: 25 }];
+  PJ.applyPreset(p, beat, 'empty');
+  beat.steps.chat = beat.steps.chat.map(() => 100);
+  beat.chance = { chat: beat.steps.chat.map((_, i) => (i % 2 ? 50 : 0)) };
+  p.clips = [];
+  PJ.addClip(p, mel, 0, 4 * 200); PJ.addClip(p, beat, 0, 4 * 200);
+  const run = (shift) => {
+    const out = [];
+    PJ.eventsIn(p, PJ.playItems(p, 'song').items, 0, 800, (ev) => out.push((ev.pitch || ev.drum) + '@' + ev.at), { shift });
+    return out;
+  };
+  const a = run(0), count = (re) => a.filter((x) => re.test(x)).length;
+  assert.strictEqual(count(/^64@/), 200, 'a note without chance plays every pass');
+  assert.ok(Math.abs(count(/^60@/) - 100) < 25, 'about half of 200: ' + count(/^60@/));
+  assert.ok(Math.abs(count(/^67@/) - 50) < 20, 'about a quarter of 200: ' + count(/^67@/));
+  const odd = a.filter((x) => /^chat@/.test(x) && Math.round(+x.split('@')[1] * 4) % 2).length, even = count(/^chat@/) - odd;
+  assert.strictEqual(even, 1600, 'steps at 0 (always) all play');
+  assert.ok(Math.abs(odd - 800) < 90, 'about half the 50% steps play: ' + odd);
+  eq(run(0), a); // the same dice every time
+  assert.notDeepStrictEqual(run(800), a, 'a later loop pass rolls again');
+  // passes differ from each other (not the same half every time)
+  const firsts = a.filter((x) => /^60@/.test(x)).map((x) => +x.split('@')[1] / 4);
+  assert.ok(firsts.some((k, i) => i && k !== firsts[i - 1] + 1), 'the 50% note skips passes irregularly');
+  // ignored when asked (ghost notes), kept and cleaned up through save and load, MIDI export follows the dice
+  let all = 0; PJ.eventsIn(p, PJ.playItems(p, 'song').items, 0, 800, () => all++, { all: true });
+  assert.strictEqual(all, 600 + 3200);
+  mel.notes.push({ id: 4, start: 3, len: 0.5, pitch: 70, vel: 90, chance: 100 }, { id: 5, start: 3.5, len: 0.5, pitch: 71, vel: 90, chance: 'x' });
+  beat.chance.kick = beat.steps.kick.map(() => 0);
+  beat.chance.snare = beat.steps.snare.map((_, i) => (i === 3 ? 140 : i === 4 ? 33.4 : 0));
+  const back = PJ.normalize(JSON.parse(JSON.stringify(p)));
+  const bm = back.patterns.find((x) => x.notes && x.notes.length === 5), bb = back.patterns.find((x) => x.steps && x.chance);
+  eq(bm.notes.map((n) => n.chance), [50, undefined, 25, undefined, undefined].map((v) => v));
+  eq(Object.keys(bb.chance).sort(), ['chat', 'snare']);
+  eq(bb.chance.snare.slice(0, 6), [0, 0, 0, 0, 33, 0]);
+  const midi = PJ.midiTracks(p, 'song'), melNotes = midi.find((t) => t.notes.some((n) => n.pitch === 64)).notes;
+  assert.strictEqual(melNotes.filter((n) => n.pitch === 60).length, count(/^60@/), 'MIDI export plays the same dice as the song');
+  // a drum pattern's chance follows its length
+  PJ.setDrumBars(beat, 2);
+  assert.strictEqual(beat.chance.chat.length, 32);
+  assert.strictEqual(beat.chance.chat[17], 50);
+  PJ.applyPreset(p, beat, 'house');
+  assert.strictEqual(beat.chance, undefined);
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

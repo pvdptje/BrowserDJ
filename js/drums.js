@@ -41,12 +41,20 @@ BDJ.DrumRack = (() => {
       pat.rolls = pat.rolls || {};
       return pat.rolls[id] || (pat.rolls[id] = new Array(n).fill(0));
     }
-    /* drop empty roll rows, so patterns without rolls stay as small as before */
+    /* how often each step of a row plays (1-99 %; 0 = always), made on first use */
+    chance(id) {
+      const pat = this.host.pattern(), n = pat.bars * BDJ.Project.STEPS_PER_BAR;
+      pat.chance = pat.chance || {};
+      return pat.chance[id] || (pat.chance[id] = new Array(n).fill(0));
+    }
+    /* drop empty roll and chance rows, so patterns without them stay as small as before */
     tidyRolls() {
       const pat = this.host.pattern();
-      if (!pat.rolls) return;
-      for (const id of Object.keys(pat.rolls)) if (!pat.rolls[id].some((v) => v)) delete pat.rolls[id];
-      if (!Object.keys(pat.rolls).length) delete pat.rolls;
+      for (const k of ['rolls', 'chance']) {
+        if (!pat[k]) continue;
+        for (const id of Object.keys(pat[k])) if (!pat[k][id].some((v) => v)) delete pat[k][id];
+        if (!Object.keys(pat[k]).length) delete pat[k];
+      }
     }
     steps(id) { const pat = this.host.pattern(); return pat.steps[id] || (pat.steps[id] = new Array(pat.bars * BDJ.Project.STEPS_PER_BAR).fill(0)); }
 
@@ -56,7 +64,7 @@ BDJ.DrumRack = (() => {
       const anySolo = this.kit.some((r) => r.solo);
       const html = [];
       for (const row of this.kit) {
-        const steps = this.steps(row.id), rl = (this.host.pattern().rolls || {})[row.id] || [];
+        const steps = this.steps(row.id), rl = (this.host.pattern().rolls || {})[row.id] || [], cl = (this.host.pattern().chance || {})[row.id] || [];
         const def = BDJ.Sound.DRUMS.find((d) => d.id === row.id);
         const sample = this.host.sampleName(row.id);
         const silent = row.mute || (anySolo && !row.solo);
@@ -74,8 +82,8 @@ BDJ.DrumRack = (() => {
         for (let i = 0; i < n; i++) {
           const v = steps[i] || 0;
           const cls = 'step' + (v ? ' on' : '') + (v >= 127 ? ' acc' : v && v < 80 ? ' ghost' : '') + (Math.floor(i / 4) % 2 ? ' alt' : '') + (i === this.cur ? ' now' : '');
-          const r = v && rl[i] > 1 ? rl[i] : 0;
-          html.push(`<button type="button" class="${cls}" data-i="${i}"${r ? ` data-r="${r}"` : ''} aria-label="${esc(def.name)} step ${i + 1}${r ? ', roll of ' + r : ''}" aria-pressed="${!!v}"></button>`);
+          const r = v && rl[i] > 1 ? rl[i] : 0, c = v && cl[i] > 0 ? cl[i] : 0;
+          html.push(`<button type="button" class="${cls}" data-i="${i}"${r ? ` data-r="${r}"` : ''}${c ? ` data-c="${c}" style="--c:${c}" title="Plays ${c}% of the time"` : ''} aria-label="${esc(def.name)} step ${i + 1}${r ? ', roll of ' + r : ''}${c ? ', plays ' + c + '% of the time' : ''}" aria-pressed="${!!v}"></button>`);
         }
         html.push(`</div></div>`);
       }
@@ -127,6 +135,17 @@ BDJ.DrumRack = (() => {
         this.host.previewDrum(row.id, st[i]);
         return;
       }
+      if (this.host.chanceMode && this.host.chanceMode()) {
+        // Chance mode: always -> 75% -> 50% -> 25% -> always (an empty step starts at 50%)
+        const st = this.steps(row.id), ch = this.chance(row.id), NEXT = { 0: 75, 75: 50, 50: 25 };
+        if (!st[i]) { st[i] = 100; ch[i] = 50; } else ch[i] = NEXT[ch[i] || 0] || 0;
+        this.tidyRolls();
+        this.host.end(before);
+        this.host.changed('drums');
+        this.render();
+        this.host.previewDrum(row.id, st[i]);
+        return;
+      }
       const val = this.steps(row.id)[i] ? 0 : 100;
       this.paint = { val, before, touched: new Set() };
       this.apply(st);
@@ -146,8 +165,9 @@ BDJ.DrumRack = (() => {
       this.paint.touched.add(key);
       const row = this.rowOf(st), i = +st.dataset.i;
       this.steps(row.id)[i] = this.paint.val;
-      const pr = this.host.pattern().rolls;
+      const pr = this.host.pattern().rolls, pc = this.host.pattern().chance;
       if (!this.paint.val && pr && pr[row.id]) { pr[row.id][i] = 0; st.removeAttribute('data-r'); }
+      if (!this.paint.val && pc && pc[row.id]) { pc[row.id][i] = 0; st.removeAttribute('data-c'); st.removeAttribute('title'); st.style.removeProperty('--c'); }
       st.classList.toggle('on', !!this.paint.val);
       st.classList.remove('acc', 'ghost');
       st.setAttribute('aria-pressed', String(!!this.paint.val));

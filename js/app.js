@@ -384,7 +384,7 @@
         // every kick pumps the tracks that have Pump turned up
         if (ev.drum === 'kick' || ev.drum === 'hkick') M.pumpAt(when, ev.track.id);
       }
-    }, { skipTrack, catchUp });
+    }, { skipTrack, catchUp, shift: off });
   }
 
   /* Song automation for song beats [lo, hi): hold the value at lo, ramp through any points, arrive at hi. */
@@ -563,7 +563,7 @@
     const items = PJ.playItems(P, 'song').items.filter((it) => it.track.type === 'synth' && it.track.id !== pat.trackId)
       .map((it) => ({ ...it, track: { ...it.track, mute: false, solo: false } }));
     const out = [];
-    PJ.eventsIn({ tracks: [] }, items, org, org + L, (ev) => out.push({ start: ev.at - org, len: ev.len, pitch: ev.pitch, color: ev.track.color }));
+    PJ.eventsIn({ tracks: [] }, items, org, org + L, (ev) => out.push({ start: ev.at - org, len: ev.len, pitch: ev.pitch, color: ev.track.color }), { all: true });
     return out;
   }
   function songPlayhead() {
@@ -1687,6 +1687,7 @@
     pattern: curPat,
     begin, end, changed, previewDrum,
     rollMode: () => rollMode,
+    chanceMode: () => chanceMode,
     loadSample, clearSample,
     pickSample: (id) => { sampleTarget = id; $('sampleInput').click(); },
     sampleName: (id) => { const k = curTrack().kit.find((r) => r.id === id); return k && k.sample ? k.sample.name + (decoded.has(k.sample.hash) ? '' : ' (missing)') : null; },
@@ -2094,6 +2095,15 @@
     if (!r) { say('Select the notes that should slide first (click, Shift+click, or Ctrl+drag a box), then press Slide.', 'warn'); return; }
     say(r > 0 ? 'Those notes now glide in from the note before them. Glide in the Shape row sets how long the slide takes.' : 'Slide off for those notes.');
   });
+  on('chanceSel', 'change', () => {
+    const v = +$('chanceSel').value;
+    $('chanceSel').value = '';
+    if (!v) return;
+    const k = roll.setChance(v);
+    if (!k) { say('There are no notes to give a chance to yet.', 'warn'); return; }
+    say(v >= 100 ? (k === 1 ? 'That note plays' : 'Those ' + k + ' notes play') + ' every time again.'
+      : (k === 1 ? 'That note plays ' : 'Those ' + k + ' notes play ') + v + '% of the time now, so every pass of the loop comes out a little different. The faint, dashed notes are the ones left to chance.');
+  });
   on('arpBtn', 'click', () => {
     if (roll.arpeggiate($('arpMode').value)) say('Chords turned into arpeggios on the ' + (P.snap ? '1/' + P.snap : '1/16') + ' grid. Undo puts the chords back.');
     else say('Arpeggiate works on chords: notes that start at the same time. Draw some with Draw: Triad.', 'warn');
@@ -2254,9 +2264,17 @@
     say('The ' + t.name + ' track now plays the ' + $('kitStyle').selectedOptions[0].text + ' kit. Your own sounds on a row stay as they are.');
   });
   // Rolls: while on, clicking a step makes it 2, 3 or 4 quick hits (a fourth click goes back to one)
-  let rollMode = false;
+  let rollMode = false, chanceMode = false;
+  const stepMode = (id, on) => { $(id).classList.toggle('on', on); $(id).setAttribute('aria-pressed', String(on)); };
+  on('chanceMode', 'click', () => {
+    chanceMode = !chanceMode;
+    if (chanceMode && rollMode) { rollMode = false; stepMode('rollMode', false); }
+    stepMode('chanceMode', chanceMode);
+    say(chanceMode ? 'Chance: click a step to make it play only some of the time: 75%, 50%, 25%, then always again. The fuller the step, the more often it plays. Turn Chance off to paint steps again.' : 'Chance off: clicking steps paints them again.');
+  });
   on('rollMode', 'click', () => {
     rollMode = !rollMode;
+    if (rollMode && chanceMode) { chanceMode = false; stepMode('chanceMode', false); }
     $('rollMode').classList.toggle('on', rollMode);
     $('rollMode').setAttribute('aria-pressed', String(rollMode));
     say(rollMode ? 'Rolls: click a step to split it into 2, 3 or 4 quick hits; click again for more, a fourth time to go back. Turn Rolls off to paint steps again.' : 'Rolls off: clicking steps paints them again.');

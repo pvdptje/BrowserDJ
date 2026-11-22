@@ -52,6 +52,7 @@ The **Examples** button opens the songs in `examples/`. First-time visitors star
 - **Audio tracks**: record over the song (count-in, latency-compensated) or load an audio file. A take is a pattern with `audio: {hash, name, secs, start, end, gain}` pointing into the sample store; its clip plays it once (no time-stretch, so its length in beats follows the tempo). Trimming keeps the sound in place by moving its clips. Playback that starts or loops into the middle of a clip picks the recording up mid-way.
 - **Movement**: every synth track has a tempo-locked LFO: Wobble (filter), Tremolo (volume) or Auto-pan, from 1/1 to 1/16 including triplets, with a depth control. It stays on the beat through tempo changes and in exports.
 - **Sampler**: a synth track can play your own sound (a file, or recorded with the mic); its pitch is found with the hum tracker so it plays in tune across the keyboard.
+- **Chance**: a note's `chance` (1–99, percent) or a drum pattern's `chance[drum][step]` (0 = always) makes it play only some of the time. The dice (`chanceRoll`) hash the track, the sound and the beat it lands on, so a song plays and exports the same way every time, while each pass of a loop rolls again.
 - **Markers** name song sections and are written into the MIDI file. Track volume and pan go in as controller 7 and 10.
 
 ## Tests

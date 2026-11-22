@@ -245,6 +245,14 @@ BDJ.PianoRoll = (() => {
       return on ? 1 : -1;
     }
 
+    /* Chance: the notes play pct % of the time (100: always). Returns how many notes it changed. */
+    setChance(pct) {
+      const t = this.targets();
+      if (!t.length) return 0;
+      this.edit(() => { for (const n of t) { if (pct >= 100) delete n.chance; else n.chance = Math.max(1, Math.round(pct)); } });
+      return t.length;
+    }
+
     legato() {
       const t = this.targets().slice().sort((a, b) => a.start - b.start);
       this.edit(() => {
@@ -258,7 +266,7 @@ BDJ.PianoRoll = (() => {
       const t = this.selected();
       if (!t.length) return false;
       const s0 = Math.min(...t.map((n) => n.start));
-      this.clip = t.map((n) => ({ d: n.start - s0, len: n.len, pitch: n.pitch, vel: n.vel, slide: !!n.slide }));
+      this.clip = t.map((n) => ({ d: n.start - s0, len: n.len, pitch: n.pitch, vel: n.vel, slide: !!n.slide, chance: n.chance }));
       this.clipSpan = Math.max(...t.map((n) => n.start + n.len)) - s0;
       return true;
     }
@@ -268,7 +276,7 @@ BDJ.PianoRoll = (() => {
       const at = this.snapFloor(this.host.cursor());
       this.edit(() => {
         this.sel.clear();
-        for (const c of this.clip) { const n = this.addNote(at + c.d, c.pitch, c.len, c.vel); if (c.slide) n.slide = true; this.sel.add(n.id); }
+        for (const c of this.clip) { const n = this.addNote(at + c.d, c.pitch, c.len, c.vel); if (c.slide) n.slide = true; if (c.chance) n.chance = c.chance; this.sel.add(n.id); }
       });
       this.host.setCursor(at + Math.ceil(this.clipSpan - 1e-6));
     }
@@ -279,7 +287,7 @@ BDJ.PianoRoll = (() => {
       const span = Math.max(1, Math.ceil(e0 - s0 - 1e-6));
       this.edit(() => {
         this.sel.clear();
-        for (const n of t) { const m = this.addNote(n.start + span, n.pitch, n.len, n.vel); if (n.slide) m.slide = true; this.sel.add(m.id); }
+        for (const n of t) { const m = this.addNote(n.start + span, n.pitch, n.len, n.vel); if (n.slide) m.slide = true; if (n.chance) m.chance = n.chance; this.sel.add(m.id); }
       });
     }
 
@@ -641,16 +649,19 @@ BDJ.PianoRoll = (() => {
         const y = this.y(n.pitch) + 1, h = Math.max(3, v.rowH - 2);
         if (y > GB || y + h < RULER) continue;
         const on = this.sel.has(n.id);
-        g.globalAlpha = 0.5 + 0.5 * (n.vel / 127);
+        // a note left to chance is fainter the less often it plays, with a dashed outline
+        g.globalAlpha = (0.5 + 0.5 * (n.vel / 127)) * (n.chance ? 0.3 + 0.5 * (n.chance / 100) : 1);
         g.fillStyle = on ? lighten(NOTE) : NOTE;
         this.rr(x, y, w, h, 3);
         g.fill();
         g.globalAlpha = 1;
+        if (n.chance && !on) { g.strokeStyle = NOTE; g.lineWidth = 1; g.setLineDash([3, 2]); this.rr(x + 0.5, y + 0.5, w - 1, h - 1, 3); g.stroke(); g.setLineDash([]); }
         if (on) { g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 1; this.rr(x + 0.5, y + 0.5, w - 1, h - 1, 3); g.stroke(); }
         // resize grip
         if (w > 14) { g.fillStyle = 'rgba(0,0,0,0.22)'; g.fillRect(x + w - 4, y + 3, 1.5, h - 6); }
         if (n.slide) { g.fillStyle = 'rgba(255,255,255,0.85)'; g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.min(7, w / 2), y); g.lineTo(x, y + Math.min(7, h)); g.closePath(); g.fill(); }
-        if (w > 30 && v.rowH >= 12) { g.fillStyle = C['note-ink']; g.fillText(E.noteName(n.pitch), x + 5 + (n.slide ? 4 : 0), y + h / 2 + 0.5); }
+        if (w > 30 && v.rowH >= 12) { g.fillStyle = n.chance ? (C.text || '#fff') : C['note-ink']; g.fillText(E.noteName(n.pitch), x + 5 + (n.slide ? 4 : 0), y + h / 2 + 0.5); }
+        if (n.chance && w > 58 && v.rowH >= 12) { g.fillStyle = C.text || '#fff'; g.textAlign = 'right'; g.fillText(n.chance + '%', x + w - 7, y + h / 2 + 0.5); g.textAlign = 'left'; }
       }
 
       // box select

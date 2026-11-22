@@ -234,6 +234,7 @@ BDJ.Project = (() => {
       pat.steps[d.id] = Array.from({ length: n }, (_, i) => (s ? STEP_VEL[s[i % s.length]] || 0 : 0));
     }
     delete pat.rolls;
+    delete pat.chance;
     const t = track(p, pat.trackId);
     if (pre.swing != null) t.swing = pre.swing;
   }
@@ -246,7 +247,7 @@ BDJ.Project = (() => {
       // growing repeats what is there, shrinking keeps the start
       pat.steps[id] = Array.from({ length: n }, (_, i) => src[i % old] || 0);
     }
-    for (const id of Object.keys(pat.rolls || {})) { const src = pat.rolls[id]; pat.rolls[id] = Array.from({ length: n }, (_, i) => src[i % old] || 0); }
+    for (const k of ['rolls', 'chance']) for (const id of Object.keys(pat[k] || {})) { const src = pat[k][id]; pat[k][id] = Array.from({ length: n }, (_, i) => src[i % old] || 0); }
     pat.bars = bars;
   }
 
@@ -370,13 +371,28 @@ BDJ.Project = (() => {
     return out;
   }
 
+  /* Chance: a note's `chance` (1-99 %) or a drum step's `pattern.chance[drum][step]` (0 = always) makes it play only
+     some of the time. The dice are a hash of the track, the sound and the beat it lands on, so the same song plays the
+     same way every time (and exports as it plays), while every pass of a loop rolls again. */
+  function chanceRoll(a, b, beat) {
+    let h = Math.imul((a | 0) ^ 0x9e3779b9, 0x85ebca6b);
+    h ^= Math.imul(((b | 0) + 0x632be5ab) | 0, 0xc2b2ae35);
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d);
+    h ^= Math.imul((Math.round(beat * 96) + 0x27d4eb2f) | 0, 0x165667b1);
+    h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995); h ^= h >>> 15;
+    return (h >>> 0) / 4294967296;
+  }
+  const plays = (pct, a, b, beat) => !(pct > 0 && pct < 100) || chanceRoll(a, b, beat) * 100 < pct;
+
   /* Calls fn(event) for every note/hit of the items that starts in [lo, hi) song beats.
-     event: {track, pattern, item, kind:'note'|'drum', at (beats), len (beats), pitch | drum, vel} */
+     event: {track, pattern, item, kind:'note'|'drum', at (beats), len (beats), pitch | drum, vel}
+     opt.shift: beats added to `at` for the chance dice (a loop's later passes roll again); opt.all: ignore chance. */
   function eventsIn(p, items, lo, hi, fn, opt = {}) {
-    const EPS = 1e-7;
+    const EPS = 1e-7, shift = opt.shift || 0;
     for (const it of items) {
       const t = it.track, pat = it.pattern;
       if (!audible(p, t) || (opt.skipTrack && opt.skipTrack === t.id)) continue;
+      const salt = p.tracks.indexOf(t) + 1;
       const a = Math.max(lo, it.start), b = Math.min(hi, it.start + it.len);
       if (b <= a + EPS) continue;
       const L = patternBeats(pat), clipEnd = it.start + it.len, off = it.off || 0;
@@ -396,9 +412,10 @@ BDJ.Project = (() => {
         for (let s = Math.ceil((a - org - EPS) * 4); (org + s / 4) < b - EPS; s++) {
           const local = ((s % N) + N) % N;
           const at = org + s / 4 + (local % 2 ? (t.swing || 0) * 0.125 : 0);
-          for (const k of t.kit) {
-            const v = (pat.steps[k.id] || [])[local];
+          for (let ki = 0; ki < t.kit.length; ki++) {
+            const k = t.kit[ki], v = (pat.steps[k.id] || [])[local];
             if (!v || k.mute || (anySolo && !k.solo)) continue;
+            if (!opt.all && pat.chance && pat.chance[k.id] && !plays(pat.chance[k.id][local], salt, 200 + ki, at + shift)) continue;
             const r = pat.rolls && pat.rolls[k.id] ? pat.rolls[k.id][local] || 0 : 0;
             if (r > 1) {
               // a roll: r even hits inside the step, the later ones a little softer
@@ -418,6 +435,7 @@ BDJ.Project = (() => {
           for (const n of pat.notes) {
             const at = base + n.start;
             if (at < a - EPS || at >= b - EPS || at >= clipEnd - EPS) continue;
+            if (!opt.all && n.chance && !plays(n.chance, salt, n.pitch, at + shift)) continue;
             const ev = { track: t, pattern: pat, item: it, kind: 'note', at, len: Math.min(n.len, clipEnd - at), pitch: n.pitch, vel: n.vel };
             if (from && from.has(n)) ev.glideFrom = from.get(n);
             fn(ev);
@@ -492,6 +510,7 @@ BDJ.Project = (() => {
       pitch: num(n && n.pitch, 60, 0, 127) | 0,
       vel: num(n && n.vel, 100, 1, 127) | 0,
       ...(n && n.slide ? { slide: true } : {}), // glide in from the note before
+      ...(n && +n.chance >= 1 && +n.chance < 100 ? { chance: Math.round(+n.chance) } : {}), // plays this often (%)
     }));
   }
 
@@ -632,6 +651,13 @@ BDJ.Project = (() => {
           const row = Array.from({ length: n }, (_, i) => ([2, 3, 4].includes(+ro[d.id][i]) ? +ro[d.id][i] : 0));
           if (row.some((v) => v)) (np.rolls = np.rolls || {})[d.id] = row;
         }
+        // chance: how often a step plays (1-99 %; 0 = always); kept only for rows that have one
+        const ch = x.chance && typeof x.chance === 'object' ? x.chance : {};
+        for (const d of BDJ.Sound.DRUMS) {
+          if (!Array.isArray(ch[d.id])) continue;
+          const row = Array.from({ length: n }, (_, i) => { const v = Math.round(+ch[d.id][i]); return v >= 1 && v < 100 ? v : 0; });
+          if (row.some((v) => v)) (np.chance = np.chance || {})[d.id] = row;
+        }
       } else {
         np.bars = num(x.bars, 2, 1, 128) | 0;
         np.notes = normNotes(x.notes, p);
@@ -739,6 +765,6 @@ BDJ.Project = (() => {
     blank, example, normalize, serialize,
     addTrack, addPattern, clonePattern, deletePattern, deleteTrack, addClip, uniqueName,
     applyPreset, setDrumBars, clipOff, splitClip, insertTime, deleteTime, notesEnd, patternBeats, syncAudio, isAudio, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, tempoAt, nextTempo, tempoMap, songSecs, sortTempo, autoValue, autoParams, sortAuto,
-    deriveFromTake, detectKey, midiTracks, History, slideFrom,
+    deriveFromTake, detectKey, midiTracks, History, slideFrom, chanceRoll,
   };
 })();

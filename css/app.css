@@ -163,6 +163,8 @@ input[type="range"].vol { width: 84px; }
 .step.now { border-color: var(--trace); }
 .step.now:not(.on) { background: color-mix(in srgb, var(--trace) 22%, var(--panel-2)); }
 .step.on.now { filter: brightness(1.2); }
+/* a step left to chance: filled from the bottom as far as it is likely to play */
+.step.on[data-c] { background: linear-gradient(to top, var(--note) calc(var(--c) * 1%), color-mix(in srgb, var(--note) 22%, var(--panel-2)) 0); outline: 1px dashed color-mix(in srgb, var(--note) 70%, transparent); outline-offset: -3px; }
 
 /* mode switch */
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
