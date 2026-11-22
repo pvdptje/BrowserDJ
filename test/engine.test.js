@@ -766,6 +766,21 @@ test('every instrument comes back from a MIDI file as itself; General MIDI famil
   for (const [p, id] of Object.entries(fam)) assert.strictEqual(MI.instrumentFor(+p), id, 'program ' + p);
 });
 
+test('track EQ: kept in dB, clamped, rounded to half a dB, dropped when flat', () => {
+  const p = PJ.blank ? PJ.blank() : PJ.normalize({ tracks: [] });
+  const raw = JSON.parse(JSON.stringify(p));
+  raw.tracks = [
+    { type: 'synth', name: 'a', eq: { low: 3.26, mid: -40, high: 'x' } },
+    { type: 'drums', name: 'b', eq: { low: 0, mid: 0 } },
+    { type: 'synth', name: 'c' },
+  ];
+  const back = PJ.normalize(raw);
+  eq(back.tracks[0].eq, { low: 3.5, mid: -12 });
+  assert.strictEqual(back.tracks[1].eq, undefined);
+  assert.strictEqual(back.tracks[2].eq, undefined);
+  eq(PJ.normalize(JSON.parse(JSON.stringify(back))).tracks[0].eq, { low: 3.5, mid: -12 });
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

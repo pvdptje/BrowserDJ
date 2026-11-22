@@ -14,7 +14,7 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 | `js/pianoroll.js` | Canvas piano roll editor. |
 | `js/drums.js` | Step sequencer UI. |
 | `js/playlist.js` | Song timeline: track headers, clips, loop region and markers. |
-| `js/mixer.js` | Mixer strips: volume, DJ filter, pan, drive, echo send, mute/solo, level meters, master. |
+| `js/mixer.js` | Mixer strips: volume, DJ filter, 3-band EQ, pan, drive, echo send, mute/solo, level meters, master. |
 | `js/beatbox.js` | Beatbox to drums: onsets, spectral centroid, grouping into kick / snare / hi-hat. Also loads in Node. |
 | `js/share.js` | Share links: the song compressed into the link after `#s=`. Also loads in Node. |
 | `js/library.js` | My songs: every song you work on, kept in IndexedDB. |
@@ -42,6 +42,7 @@ The **Examples** button opens the songs in `examples/`. First-time visitors star
 - **Ghost notes**: the piano roll faintly shows what the other synth tracks play at the same point in the song (the pass of the pattern under the playhead or song marker). The Ghosts button turns them off; the choice is kept in this browser.
 - **Splitting**: a clip can start part-way into its pattern (`off`, in beats). Double-click a clip, or Split / K at the song marker, cuts it in two; dragging a clip's left edge trims its start while the music stays where it is. For an audio take the offset is how far into the recording the clip begins.
 - **Pattern / Song** in the transport picks what Play (and export) plays. In Song mode with Loop on, a loop region (drag on the playlist ruler) limits the loop.
+- **EQ**: every mixer strip has a low shelf (180 Hz), a broad mid bell (1.1 kHz) and a high shelf (3.5 kHz), each ±12 dB in half-dB steps, after the DJ filter. A track's `eq` is `{low, mid, high}` in dB and is only saved when not flat.
 - **Automation** lanes (the A button on a track) draw volume, filter, pan, drive, echo and reverb over the song; they play in Song mode and export to MIDI as controllers 7, 74, 10, 94 and 91.
 - **Tempo changes**: the Tempo lane at the top of the playlist changes the tempo from any bar on. Playback, loops, WAV export, the echo and LFOs all follow it; MIDI export writes the changes and MIDI import reads them. Audio takes keep their own speed (they are not stretched).
 - **Export**: Download MIDI (one track per instrument, with markers and controllers), Export WAV (a limiter keeps it under full scale; the master Loud knob pushes into it), or Stems (one WAV per track, all the same length).

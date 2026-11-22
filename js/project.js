@@ -509,6 +509,12 @@ BDJ.Project = (() => {
         // older saves had echo on/off for synths
         echoSend: t.echoSend != null ? num(t.echoSend, 0, 0, 1) : t.type === 'synth' && t.echo !== false ? 1 : 0,
       };
+      // EQ in dB, only kept when something is boosted or cut
+      if (t.eq && typeof t.eq === 'object') {
+        const eq = {};
+        for (const b of ['low', 'mid', 'high']) { const g = Math.round(num(t.eq[b], 0, -12, 12) * 2) / 2; if (g) eq[b] = g; }
+        if (Object.keys(eq).length) nt.eq = eq;
+      }
       if (t.type === 'drums') {
         nt.swing = num(t.swing, 0, 0, 0.6);
         nt.kitStyle = BDJ.Sound.KITS.some((x) => x.id === t.kitStyle) ? t.kitStyle : 'classic';

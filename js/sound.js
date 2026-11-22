@@ -181,6 +181,34 @@ BDJ.Sound = (() => {
   /* Loud 0..1 -> up to +12 dB pushed into the compressor and limiter */
   const pushGain = (loud) => Math.pow(10, (12 * Math.max(0, Math.min(1, loud || 0))) / 20);
 
+  /* ---------- EQ ----------
+     track.eq = {low, mid, high} in dB (-12..+12): a low shelf, a broad bell and a high shelf */
+  const EQ_BANDS = [
+    { id: 'low', name: 'Low', type: 'lowshelf', freq: 180, q: 0.7 },
+    { id: 'mid', name: 'Mid', type: 'peaking', freq: 1100, q: 0.8 },
+    { id: 'high', name: 'High', type: 'highshelf', freq: 3500, q: 0.7 },
+  ];
+  const EQ_MAX = 12;
+  const eqGain = (eq, id) => Math.max(-EQ_MAX, Math.min(EQ_MAX, (eq && +eq[id]) || 0));
+  /* the EQ's response in dB at each frequency (for drawing it), worked out by a throwaway context's filters */
+  let eqCtx = null;
+  function eqResponse(eq, freqs) {
+    const out = new Float32Array(freqs.length);
+    try {
+      if (!eqCtx) eqCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, 128, 44100);
+      const mag = new Float32Array(freqs.length), ph = new Float32Array(freqs.length), f = Float32Array.from(freqs);
+      for (const b of EQ_BANDS) {
+        const g = eqGain(eq, b.id);
+        if (!g) continue;
+        const n = eqCtx.createBiquadFilter();
+        n.type = b.type; n.frequency.value = b.freq; n.Q.value = b.q; n.gain.value = g;
+        n.getFrequencyResponse(f, mag, ph);
+        for (let i = 0; i < out.length; i++) out[i] += 20 * Math.log10(Math.max(1e-6, mag[i]));
+      }
+    } catch (err) { /* no audio: a flat line */ }
+    return out;
+  }
+
   /* ---------- movement (LFO) ----------
      track.lfo = {target: 'off'|'filter'|'volume'|'pan', rate, depth 0..1}; rate is a note length, cycles lock to the beat */
   const LFO_RATES = { '1/1': 4, '1/2': 2, '1/4': 1, '1/8': 0.5, '1/16': 0.25, '1/4T': 2 / 3, '1/8T': 1 / 3 };
@@ -234,7 +262,7 @@ BDJ.Sound = (() => {
 
     const channels = new Map();
     /* track: {id, volume, pan, echoSend, drive, filter} -> the node to play into.
-       input -> drive (pre gain, waveshaper, makeup) -> DJ filter (low-pass, high-pass) -> wobble filter -> pump (duck) -> tremolo -> fader -> panner
+       input -> drive (pre gain, waveshaper, makeup) -> DJ filter (low-pass, high-pass) -> EQ (3 bands) -> wobble filter -> pump (duck) -> tremolo -> fader -> panner
        -> master, with post-fader echo and reverb sends and a meter tap.
        `auto` (a Set of parameter ids) marks parameters an automation lane drives; static updates leave those alone. */
     function channel(track) {
@@ -243,13 +271,14 @@ BDJ.Sound = (() => {
         const pre = ac.createGain(), shaper = ac.createWaveShaper(), post = ac.createGain();
         const lp = ac.createBiquadFilter(), hp = ac.createBiquadFilter();
         const gain = ac.createGain(), send = ac.createGain(), rsend = ac.createGain(), duck = ac.createGain(), trem = ac.createGain(), tap = ac.createAnalyser();
+        const eq = EQ_BANDS.map((b) => { const n = ac.createBiquadFilter(); n.type = b.type; n.frequency.value = b.freq; n.Q.value = b.q; n.gain.value = eqGain(track.eq, b.id); return n; });
         const wob = ac.createBiquadFilter(); // the Wobble filter: wide open (and flat) until Movement uses it
         wob.type = 'lowpass'; wob.frequency.value = ac.sampleRate / 2; wob.Q.value = 0;
         const pan = ac.createStereoPanner ? ac.createStereoPanner() : null;
         shaper.oversample = '2x';
         lp.type = 'lowpass'; hp.type = 'highpass';
         lp.Q.value = 1.4; hp.Q.value = 1.4; // a little resonance makes sweeps sing
-        pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(wob); wob.connect(duck); duck.connect(trem); trem.connect(gain);
+        pre.connect(shaper); shaper.connect(post); post.connect(lp); lp.connect(hp); hp.connect(eq[0]); eq[0].connect(eq[1]); eq[1].connect(eq[2]); eq[2].connect(wob); wob.connect(duck); duck.connect(trem); trem.connect(gain);
         tap.fftSize = 512;
         const out = heard(track) ? master : sink;
         if (pan) { gain.connect(pan); pan.connect(out); pan.connect(tap); }
@@ -257,7 +286,7 @@ BDJ.Sound = (() => {
         gain.connect(send);
         gain.connect(rsend);
         if (heard(track)) { send.connect(echoIn); rsend.connect(revIn); }
-        ch = { pre, shaper, post, lp, hp, wob, duck, trem, gain, send, rsend, pan, tap, lfo: null, lfoKey: '', buf: new Float32Array(512), auto: new Set(), pump: track.pump || 0 };
+        ch = { pre, shaper, post, lp, hp, eq, wob, duck, trem, gain, send, rsend, pan, tap, lfo: null, lfoKey: '', buf: new Float32Array(512), auto: new Set(), pump: track.pump || 0 };
         channels.set(track.id, ch);
         for (const prm of PARAMS) setParam(ch, prm.id, trackParam(track, prm.id), null);
         setLfo(ch, track.lfo);
@@ -357,6 +386,7 @@ BDJ.Sound = (() => {
         if (!ch) return;
         for (const prm of PARAMS) if (!ch.auto.has(prm.id)) setParam(ch, prm.id, trackParam(track, prm.id), ac.currentTime);
         ch.pump = track.pump || 0;
+        EQ_BANDS.forEach((b, i) => ch.eq[i].gain.setTargetAtTime(eqGain(track.eq, b.id), ac.currentTime, 0.02));
         setLfo(ch, track.lfo);
         if (!ch.pump) { ch.duck.gain.cancelScheduledValues(ac.currentTime); ch.duck.gain.setTargetAtTime(1, ac.currentTime, 0.02); }
       },
@@ -871,5 +901,5 @@ BDJ.Sound = (() => {
     return new Blob([data], { type: 'audio/wav' });
   }
 
-  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, KITS, PARAMS, SHAPE, attackTime, releaseTime, glideTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, audioClip, encodeWav, midiToHz };
+  return { LFO_RATES, LFO_TARGETS, INSTRUMENTS, DRUMS, KITS, PARAMS, EQ_BANDS, EQ_MAX, eqResponse, SHAPE, attackTime, releaseTime, glideTime, trackParam, filterFreqs, createMixer, melodyNote, voiceStart, drumHit, audioClip, encodeWav, midiToHz };
 })();

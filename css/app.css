@@ -265,6 +265,17 @@ button.sname:hover { background: rgba(255,255,255,0.06); }
 .knob output { text-align: right; font-family: var(--font-mono); }
 .knob.drive input { accent-color: var(--rec); }
 .ms { display: flex; gap: 6px; }
+.eq { width: 100%; display: flex; flex-direction: column; gap: 3px; }
+.eqcurve { width: 100%; height: 30px; display: block; background: #15131f; border-radius: 5px; }
+.eqcurve path { fill: none; vector-effect: non-scaling-stroke; }
+.eqmid { stroke: rgba(255,255,255,0.12); stroke-width: 1; }
+.eqline { stroke: var(--tc); stroke-width: 2; }
+.eq.flat .eqline { opacity: 0.5; }
+.eqbands { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 2px; }
+.eqb { display: flex; flex-direction: column; align-items: center; font-size: 10px; color: var(--muted); }
+.eqb input { writing-mode: vertical-lr; direction: rtl; width: 22px !important; min-width: 0 !important; height: 52px; margin: 0; accent-color: var(--tc); }
+.eqb output { font: 10px/1.2 var(--font-mono); font-variant-numeric: tabular-nums; }
+.strip.silent .eq { opacity: 0.45; }
 .mnote { margin: auto 0 0; font-size: 11px; color: var(--muted); text-align: center; line-height: 1.3; }
 
 .arpbox { display: inline-flex; align-items: center; gap: 4px; }

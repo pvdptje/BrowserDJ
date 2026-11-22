@@ -13,6 +13,13 @@ BDJ.Mixer = (() => {
     return (v < 0.5 ? 'LP ' : 'HP ') + (hz >= 1000 ? (hz / 1000).toFixed(1) + 'k' : Math.round(hz));
   };
   const AUTO_TIP = ' (automated in the song: its playlist lane sets this while the song plays)';
+  const dbShort = (g) => (Math.abs(g) < 0.05 ? '0' : (g > 0 ? '+' : '\u2212') + Math.abs(g).toFixed(Math.abs(g) % 1 ? 1 : 0));
+  /* the EQ curve: log frequency 30 Hz..16 kHz across, -12..+12 dB up */
+  const EQW = 88, EQH = 30, EQF = Array.from({ length: EQW }, (_, i) => 30 * Math.pow(16000 / 30, i / (EQW - 1)));
+  function eqPath(eq) {
+    const r = BDJ.Sound.eqResponse(eq || {}, EQF), max = BDJ.Sound.EQ_MAX;
+    return Array.from(r, (db, i) => (i ? 'L' : 'M') + i + ' ' + (EQH / 2 - (clamp(db, -max, max) / max) * (EQH / 2 - 2)).toFixed(1)).join('');
+  }
   const meterH = (pk) => (pk <= 0.00001 ? 0 : clamp((20 * Math.log10(pk) + 48) / 48, 0, 1));
 
   class Mixer {
@@ -41,6 +48,7 @@ BDJ.Mixer = (() => {
         html.push(`<button type="button" class="sname" data-act="sel" title="Edit ${esc(t.name)}">${esc(t.name)}</button>`);
         html.push(this.faderHtml(t.volume, t.name, au.has('volume')));
         html.push(`<label class="knob filter${ac('filter')}" title="DJ filter: left closes a low-pass, right opens a high-pass (double-click to open)${tip('filter')}"><span>Filter</span><input type="range" class="flt" min="0" max="100" value="${Math.round(fv * 100)}" aria-label="${esc(t.name)} filter"><output>${filterText(fv)}</output></label>`);
+        html.push(this.eqHtml(t));
         html.push(`<label class="knob${ac('pan')}"${au.has('pan') ? ` title="Pan${AUTO_TIP}"` : ''}><span>Pan</span><input type="range" class="pan" min="-100" max="100" value="${Math.round((t.pan || 0) * 100)}" aria-label="${esc(t.name)} pan" title="Pan (double-click to centre)"><output>${panText(t.pan || 0)}</output></label>`);
         html.push(`<label class="knob drive${ac('drive')}" title="Distortion${tip('drive')}"><span>Drive</span><input type="range" class="drv" min="0" max="100" value="${Math.round((t.drive || 0) * 100)}" aria-label="${esc(t.name)} distortion" title="Distortion (double-click for none)"><output>${Math.round((t.drive || 0) * 100)}</output></label>`);
         html.push(`<label class="knob${ac('echo')}"${au.has('echo') ? ` title="Echo${AUTO_TIP}"` : ''}><span>Echo</span><input type="range" class="send" min="0" max="100" value="${Math.round((t.echoSend || 0) * 100)}" aria-label="${esc(t.name)} echo send" title="How much of this track goes into the echo"><output>${Math.round((t.echoSend || 0) * 100)}</output></label>`);
@@ -57,6 +65,16 @@ BDJ.Mixer = (() => {
       html.push('</div>');
       this.el.innerHTML = html.join('');
       this.meters = new Map([...this.el.querySelectorAll('.strip')].map((s) => [s.dataset.id, s.querySelector('.mfill')]));
+    }
+
+    eqHtml(t) {
+      const eq = t.eq || {}, flat = !BDJ.Sound.EQ_BANDS.some((b) => eq[b.id]);
+      return `<div class="eq${flat ? ' flat' : ''}" title="EQ: boost or cut the lows, mids and highs (double-click a slider for flat)">` +
+        `<svg class="eqcurve" viewBox="0 0 ${EQW} ${EQH}" preserveAspectRatio="none" aria-hidden="true"><path class="eqmid" d="M0 ${EQH / 2}H${EQW}"/><path class="eqline" d="${eqPath(eq)}"/></svg>` +
+        '<div class="eqbands">' + BDJ.Sound.EQ_BANDS.map((b) => {
+          const g = eq[b.id] || 0;
+          return `<label class="eqb"><input type="range" class="eqs" data-band="${b.id}" min="-12" max="12" step="0.5" value="${g}" aria-label="${esc(t.name)} EQ ${b.name.toLowerCase()}"><span>${b.name}</span><output>${dbShort(g)}</output></label>`;
+        }).join('') + '</div></div>';
     }
 
     faderHtml(v, name, automated) {
@@ -92,6 +110,15 @@ BDJ.Mixer = (() => {
       else if (e.target.classList.contains('pmp')) { t.pump = v; if (out) out.textContent = Math.round(v * 100); }
       else if (e.target.classList.contains('drv')) { t.drive = v; if (out) out.textContent = Math.round(v * 100); }
       else if (e.target.classList.contains('flt')) { t.filter = v; if (out) out.textContent = filterText(v); }
+      else if (e.target.classList.contains('eqs')) {
+        const g = +e.target.value, band = e.target.dataset.band, eq = Object.assign({}, t.eq);
+        if (g) eq[band] = g; else delete eq[band];
+        if (Object.keys(eq).length) t.eq = eq; else delete t.eq;
+        if (out) out.textContent = dbShort(g);
+        const box = e.target.closest('.eq');
+        box.querySelector('.eqline').setAttribute('d', eqPath(t.eq));
+        box.classList.toggle('flat', !t.eq);
+      }
       this.host.trackChanged(t);
     }
 
@@ -107,7 +134,7 @@ BDJ.Mixer = (() => {
       const id = this.stripOf(e.target);
       if (!id || e.target.tagName !== 'INPUT') return;
       const c = e.target.classList;
-      const value = c.contains('flt') ? 50 : c.contains('pan') || c.contains('drv') || c.contains('rvb') || c.contains('pmp') || c.contains('lud') ? 0 : c.contains('fader') ? (id === 'master' ? 85 : 80) : null;
+      const value = c.contains('eqs') ? 0 : c.contains('flt') ? 50 : c.contains('pan') || c.contains('drv') || c.contains('rvb') || c.contains('pmp') || c.contains('lud') ? 0 : c.contains('fader') ? (id === 'master' ? 85 : 80) : null;
       if (value == null) return;
       e.target.value = value;
       this.input({ target: e.target });
