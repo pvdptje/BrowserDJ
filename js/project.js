@@ -3,7 +3,8 @@
 
    tracks    instruments: a synth (piano roll) or a drum kit (step sequencer)
    patterns  belong to one track: notes for a synth, steps per drum for a kit
-   clips     place a pattern on its track's lane in the playlist; the pattern repeats to fill the clip */
+   clips     place a pattern on its track's lane in the playlist; the pattern repeats to fill the clip.
+             off (optional, beats): where in the pattern the clip begins, after a split or a trimmed start */
 window.BDJ = window.BDJ || {};
 BDJ.Project = (() => {
   'use strict';
@@ -132,6 +133,28 @@ BDJ.Project = (() => {
     return c;
   }
 
+  /* Where clip c begins inside its pattern, in beats. A looping pattern wraps; a take (plays once) does not. */
+  function clipOff(p, c, off = c.off) {
+    const pat = pattern(p, c.patternId), r = (v) => Math.round(v * 10000) / 10000;
+    if (!off || !pat) return 0;
+    if (pat.audio) return Math.max(0, r(off));
+    const L = patternBeats(pat), m = r(((off % L) + L) % L);
+    return m >= L - 1e-6 ? 0 : m;
+  }
+  /* Cuts clip c in two at song beat `at`. Returns the new right-hand clip, or null when `at` is not inside it. */
+  function splitClip(p, c, at) {
+    if (!(at > c.start + 1e-6 && at < c.start + c.len - 1e-6)) return null;
+    const pat = pattern(p, c.patternId);
+    const right = { ...c, id: p.nextId++, start: at, len: c.start + c.len - at };
+    const off = clipOff(p, c, (c.off || 0) + (at - c.start));
+    if (off) right.off = off; else delete right.off;
+    c.len = at - c.start;
+    // a take that has finished before the cut leaves nothing on the right
+    if (pat && pat.audio && off >= patternBeats(pat) - 1e-6) return null;
+    p.clips.push(right);
+    return right;
+  }
+
   /* ---------- drums ---------- */
   function applyPreset(p, pat, key) {
     const pre = PRESETS[key] || PRESETS.empty;
@@ -256,7 +279,7 @@ BDJ.Project = (() => {
     const items = [];
     for (const c of p.clips) {
       const t = track(p, c.trackId), pat = pattern(p, c.patternId);
-      if (t && pat) items.push({ track: t, pattern: pat, start: c.start, len: c.len, clip: c });
+      if (t && pat) items.push({ track: t, pattern: pat, start: c.start, len: c.len, off: clipOff(p, c), clip: c });
     }
     return { items, length: songBeats(p) };
   }
@@ -286,20 +309,23 @@ BDJ.Project = (() => {
       if (!audible(p, t) || (opt.skipTrack && opt.skipTrack === t.id)) continue;
       const a = Math.max(lo, it.start), b = Math.min(hi, it.start + it.len);
       if (b <= a + EPS) continue;
-      const L = patternBeats(pat), clipEnd = it.start + it.len;
+      const L = patternBeats(pat), clipEnd = it.start + it.len, off = it.off || 0;
+      // org: the song beat where the pattern (or take) itself would begin; the clip shows it from `off` on
+      const org = it.start - off;
       if (t.type === 'audio') {
-        // a take plays once from the clip start; the clip can cut it short. catchUp: also one already under way at lo
+        // a take plays once from the clip start (from `off` into it); the clip can cut it short. catchUp: also one already under way at lo
         if (!pat.audio) continue;
-        const end = it.start + Math.min(it.len, L);
-        if (it.start >= lo - EPS && it.start < hi - EPS) fn({ track: t, pattern: pat, item: it, kind: 'audio', at: it.start, len: end - it.start, offset: 0 });
-        else if (opt.catchUp && it.start < lo - EPS && end > lo + 0.01) fn({ track: t, pattern: pat, item: it, kind: 'audio', at: lo, len: end - lo, offset: lo - it.start });
+        const end = it.start + Math.min(it.len, L - off);
+        if (end <= it.start + EPS) continue;
+        if (it.start >= lo - EPS && it.start < hi - EPS) fn({ track: t, pattern: pat, item: it, kind: 'audio', at: it.start, len: end - it.start, offset: off });
+        else if (opt.catchUp && it.start < lo - EPS && end > lo + 0.01) fn({ track: t, pattern: pat, item: it, kind: 'audio', at: lo, len: end - lo, offset: off + lo - it.start });
       } else if (t.type === 'drums') {
         const N = pat.bars * STEPS_PER_BAR;
         const anySolo = t.kit.some((k) => k.solo);
         // same window rule as notes: include at >= a - EPS, exclude at >= b - EPS, so windows never overlap or leave gaps
-        for (let s = Math.ceil((a - it.start - EPS) * 4); (it.start + s / 4) < b - EPS; s++) {
+        for (let s = Math.ceil((a - org - EPS) * 4); (org + s / 4) < b - EPS; s++) {
           const local = ((s % N) + N) % N;
-          const at = it.start + s / 4 + (local % 2 ? (t.swing || 0) * 0.125 : 0);
+          const at = org + s / 4 + (local % 2 ? (t.swing || 0) * 0.125 : 0);
           for (const k of t.kit) {
             const v = (pat.steps[k.id] || [])[local];
             if (!v || k.mute || (anySolo && !k.solo)) continue;
@@ -315,10 +341,10 @@ BDJ.Project = (() => {
           }
         }
       } else {
-        const k0 = Math.floor((a - it.start) / L), k1 = Math.floor((b - it.start - EPS) / L);
+        const k0 = Math.floor((a - org) / L), k1 = Math.floor((b - org - EPS) / L);
         const from = slideFrom(pat);
         for (let k = k0; k <= k1; k++) {
-          const base = it.start + k * L;
+          const base = org + k * L;
           for (const n of pat.notes) {
             const at = base + n.start;
             if (at < a - EPS || at >= b - EPS || at >= clipEnd - EPS) continue;
@@ -544,7 +570,10 @@ BDJ.Project = (() => {
     for (const c of (Array.isArray(o.clips) ? o.clips : []).slice(0, 4000)) {
       const pat = c && pMap.get(c.patternId);
       if (!pat) continue;
-      p.clips.push({ id: p.nextId++, trackId: pat.trackId, patternId: pat.id, start: num(c.start, 0, 0, 100000), len: num(c.len, 4, 0.25, 100000) });
+      const nc = { id: p.nextId++, trackId: pat.trackId, patternId: pat.id, start: num(c.start, 0, 0, 100000), len: num(c.len, 4, 0.25, 100000) };
+      const off = Math.round(num(c.off, 0, 0, 100000) * 10000) / 10000;
+      if (off) nc.off = off;
+      p.clips.push(nc);
     }
     syncAudio(p);
     const sel = o.sel || {};
@@ -633,7 +662,7 @@ BDJ.Project = (() => {
     track, pattern, patternsOf, selTrack, selPattern, select,
     blank, example, normalize, serialize,
     addTrack, addPattern, clonePattern, deletePattern, deleteTrack, addClip, uniqueName,
-    applyPreset, setDrumBars, notesEnd, patternBeats, syncAudio, isAudio, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, tempoAt, nextTempo, tempoMap, songSecs, sortTempo, autoValue, autoParams, sortAuto,
+    applyPreset, setDrumBars, clipOff, splitClip, notesEnd, patternBeats, syncAudio, isAudio, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, tempoAt, nextTempo, tempoMap, songSecs, sortTempo, autoValue, autoParams, sortAuto,
     deriveFromTake, detectKey, midiTracks, History, slideFrom,
   };
 })();

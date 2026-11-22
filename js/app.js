@@ -543,7 +543,7 @@
     if (T.mode === 'pattern') return b;
     const pat = curPat(), PL = PJ.patternBeats(pat);
     const c = P.clips.find((x) => x.patternId === pat.id && b >= x.start && b < x.start + x.len);
-    return c ? (b - c.start) % PL : null;
+    return c ? (b - c.start + PJ.clipOff(P, c)) % PL : null;
   }
   function songPlayhead() {
     if (!T.on || T.mode !== 'song') return null;
@@ -1534,13 +1534,23 @@
     PJ.syncAudio(P);
     const db = ((au.start - o.start) * P.bpm) / 60;
     for (const x of o.clips) {
-      x.c.start = Math.max(0, x.start + db);
-      x.c.len = x.full ? au.beats : Math.max(0.25, x.len - db);
+      // org: where the take's start sits in the song; it moves with the trimmed start, so the sound stays put.
+      // A clip that begins part-way into the take (after a split) keeps its start unless the trim reaches past it.
+      const org = x.start - x.off + db;
+      let off = x.off > 0 ? Math.max(0, x.off - db) : 0;
+      if (org + off < 0) off = -org; // nothing before the song start
+      x.c.start = org + off;
+      if (off) x.c.off = Math.round(off * 10000) / 10000; else delete x.c.off;
+      const end = x.full ? org + au.beats : x.start + x.len;
+      x.c.len = Math.max(0.25, end - x.c.start);
     }
   }
   function trimState(pat) {
     const au = pat.audio;
-    return { start: au.start, end: au.end, clips: P.clips.filter((c) => c.patternId === pat.id).map((c) => ({ c, start: c.start, len: c.len, full: c.len >= au.beats - 1e-6 })) };
+    return { start: au.start, end: au.end, clips: P.clips.filter((c) => c.patternId === pat.id).map((c) => {
+      const off = PJ.clipOff(P, c);
+      return { c, start: c.start, len: c.len, off, full: off + c.len >= au.beats - 1e-6 };
+    }) };
   }
 
   var aview = $('audioView'), ag = aview.getContext('2d'), audDrag = null;
@@ -1972,6 +1982,7 @@
   });
   on('plFit', 'click', () => playlist.fit());
   on('makeUnique', 'click', () => playlist.makeUnique());
+  on('splitClips', 'click', () => playlist.splitAtMarker());
   // touchscreens have no right-click and no Delete key: these buttons are the way to delete there
   on('delClipsBtn', 'click', () => {
     const n = playlist.sel.size;

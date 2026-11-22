@@ -679,6 +679,55 @@ test('Sampler sound reference: kept when valid, cleaned up, dropped when not', (
   eq(back.sampler, { hash: 'abcdef012345', name: 'sound', root: 127, gain: 0.05 });
 });
 
+test('split clips play exactly what the whole clips played', () => {
+  const dir = path.join(__dirname, '..', 'examples');
+  // note and hit starts per track (a note held across a cut ends at the cut, so lengths are left out)
+  const starts = (p) => {
+    const { items, length } = PJ.playItems(p, 'song'), out = [];
+    PJ.eventsIn(p, items, 0, length, (ev) => out.push(ev.track.id + ':' + Math.round(ev.at * 1000) + ':' + (ev.kind === 'note' ? ev.pitch : ev.drum) + ':' + ev.vel));
+    return out.sort();
+  };
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'catalog.json')) {
+    const p = PJ.normalize(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')));
+    const before = starts(p);
+    // cut every clip on every bar and on an odd beat inside it, then load it back
+    for (const c of p.clips.slice()) {
+      let cur = c;
+      for (let at = c.start + 3; at < c.start + c.len; at += 4) { const r = PJ.splitClip(p, cur, at); if (r) cur = PJ.splitClip(p, r, Math.ceil((at + 0.5) / 4) * 4) || r; }
+    }
+    assert.ok(p.clips.some((c) => c.off), f + ': some clips start part-way into their pattern');
+    const back = PJ.normalize(JSON.parse(PJ.serialize(p)));
+    assert.strictEqual(back.clips.length, p.clips.length);
+    eq(starts(back), before);
+  }
+  // splitting outside a clip does nothing
+  const p = PJ.blank(), c = PJ.addClip(p, p.patterns[0], 4, 8);
+  assert.strictEqual(PJ.splitClip(p, c, c.start), null);
+  assert.strictEqual(PJ.splitClip(p, c, c.start + c.len), null);
+  // a looping pattern's offset wraps; a take's does not
+  assert.strictEqual(PJ.clipOff(p, c, PJ.patternBeats(PJ.pattern(p, c.patternId)) + 1), 1);
+});
+
+test('a split take picks up the recording part-way through', () => {
+  const p = PJ.blank();
+  const t = { id: p.nextId++, type: 'audio', name: 'Voice', mute: false, solo: false };
+  p.tracks.push(t);
+  const pat = { id: p.nextId++, trackId: t.id, name: 'Take', bars: 1, audio: { hash: 'h', name: 'v', secs: 8, start: 0, end: 8, gain: 1, beats: 16 } };
+  p.patterns.push(pat);
+  const c = PJ.addClip(p, pat, 8, 16);
+  p.clips = [c];
+  const r = PJ.splitClip(p, c, 14);
+  assert.strictEqual(r.off, 6);
+  assert.strictEqual(PJ.clipOff(p, r, 30), 30);
+  const evs = [];
+  PJ.eventsIn(p, PJ.playItems(p, 'song').items, 0, 100, (ev) => evs.push([ev.at, ev.len, ev.offset]));
+  eq(evs.sort((a, b) => a[0] - b[0]), [[8, 6, 0], [14, 10, 6]]);
+  // starting playback inside the right piece: it starts from there
+  const late = [];
+  PJ.eventsIn(p, PJ.playItems(p, 'song').items, 20, 100, (ev) => late.push([ev.at, ev.offset]), { catchUp: true });
+  eq(late, [[20, 12]]);
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

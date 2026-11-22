@@ -38,6 +38,7 @@ The **Examples** button opens the songs in `examples/`. First-time visitors star
 
 - **Tracks** are instruments: a synth (piano roll) or a drum kit (step sequencer).
 - **Patterns** belong to a track. Clips in the playlist are links to a pattern, so editing it changes every clip.
+- **Splitting**: a clip can start part-way into its pattern (`off`, in beats). Double-click a clip, or Split / K at the song marker, cuts it in two; dragging a clip's left edge trims its start while the music stays where it is. For an audio take the offset is how far into the recording the clip begins.
 - **Pattern / Song** in the transport picks what Play (and export) plays. In Song mode with Loop on, a loop region (drag on the playlist ruler) limits the loop.
 - **Automation** lanes (the A button on a track) draw volume, filter, pan, drive, echo and reverb over the song; they play in Song mode and export to MIDI as controllers 7, 74, 10, 94 and 91.
 - **Tempo changes**: the Tempo lane at the top of the playlist changes the tempo from any bar on. Playback, loops, WAV export, the echo and LFOs all follow it; MIDI export writes the changes and MIDI import reads them. Audio takes keep their own speed (they are not stretched).

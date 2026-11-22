@@ -1,6 +1,6 @@
 /* BrowserDJ playlist: one lane per track, clips place patterns on the song timeline.
    Click a lane to place the track's current pattern, drag a clip to move it (Shift/Ctrl+drag copies),
-   drag its right edge to repeat the pattern, right-click to delete. Times are in beats; snapping is per bar (Alt: per beat). */
+   drag its right edge to repeat the pattern, its left edge to trim the start, double-click to split, right-click to delete. Times are in beats; snapping is per bar (Alt: per beat). */
 window.BDJ = window.BDJ || {};
 BDJ.Playlist = (() => {
   'use strict';
@@ -98,8 +98,8 @@ BDJ.Playlist = (() => {
       for (let i = cs.length - 1; i >= 0; i--) {
         const c = cs[i];
         if (b >= c.start && b <= c.start + c.len) {
-          const x1 = this.x(c.start + c.len);
-          return { clip: c, edge: px >= x1 - Math.min(EDGE, (c.len * this.view.ppb) / 3) };
+          const x0 = this.x(c.start), x1 = this.x(c.start + c.len), zone = Math.min(EDGE, (c.len * this.view.ppb) / 3);
+          return { clip: c, edge: px >= x1 - zone ? 'end' : px <= x0 + zone ? 'start' : null };
         }
       }
       return null;
@@ -275,8 +275,8 @@ BDJ.Playlist = (() => {
           group = p.clips.filter((c) => this.sel.has(c.id)).map((c) => ({ id: c.id, start: c.start, len: c.len }));
           this.host.select(clip.trackId, clip.patternId);
           this.drag = {
-            mode: h && h.edge && !changed ? 'resize' : 'move', clip: clip.id, b0: this.beatAt(px),
-            start: clip.start, len: clip.len, group, before, changed,
+            mode: h && h.edge && !changed ? (h.edge === 'start' ? 'trim' : 'resize') : 'move', clip: clip.id, b0: this.beatAt(px),
+            start: clip.start, len: clip.len, off: PJ().clipOff(p, clip), group, before, changed,
           };
           if (changed) this.host.changed('live');
         }
@@ -549,6 +549,18 @@ BDJ.Playlist = (() => {
             const cl = this.p.clips.find((x) => x.id === g.id);
             if (cl && cl.start !== g.start + delta) { cl.start = g.start + delta; d.changed = true; }
           }
+        } else if (d.mode === 'trim') {
+          // the left edge: the clip starts later (or earlier) and the music stays where it is
+          const end = d.start + d.len, pat = PJ().pattern(this.p, c.patternId);
+          let ns = this.snap(d.start + db, free);
+          ns = Math.min(ns, end - (free ? 0.25 : Math.min(4, d.len)));
+          ns = Math.max(ns, 0, pat && pat.audio ? d.start - d.off : -Infinity); // a take has nothing before its start
+          const off = PJ().clipOff(this.p, c, d.off + ns - d.start);
+          if (ns !== c.start || off !== (c.off || 0)) {
+            c.start = ns; c.len = end - ns;
+            if (off) c.off = off; else delete c.off;
+            d.changed = true;
+          }
         } else {
           const end = this.snap(d.start + d.len + db, free);
           const len = Math.max(free ? 1 : 4, end - d.start);
@@ -576,6 +588,10 @@ BDJ.Playlist = (() => {
       const { px, py } = this.pos(e);
       const row = this.rowAt(py);
       if (row && row.kind === 'tempo') { this.tempoDbl(px); return; }
+      if (row && row.kind === 'track' && py >= RULER) {
+        const h = this.clipAt(px, py);
+        if (h) { this.splitAt([h.clip], this.snap(this.beatAt(px), e.altKey)); return; }
+      }
       if (py < RULER && !(py < MARK && this.markerAt(px))) this.addMarkerAt(this.snapFloor(this.beatAt(px), e.altKey));
     }
 
@@ -615,7 +631,7 @@ BDJ.Playlist = (() => {
       const cs = this.selected();
       if (!cs.length) return false;
       const s0 = Math.min(...cs.map((c) => c.start));
-      this.clip = cs.map((c) => ({ trackId: c.trackId, patternId: c.patternId, d: c.start - s0, len: c.len }));
+      this.clip = cs.map((c) => ({ trackId: c.trackId, patternId: c.patternId, d: c.start - s0, len: c.len, off: c.off }));
       return true;
     }
     paste() {
@@ -624,11 +640,38 @@ BDJ.Playlist = (() => {
       if (!list.length) return;
       const at = this.host.cursor();
       this.edit(() => {
-        const made = list.map((c) => ({ id: p.nextId++, trackId: c.trackId, patternId: c.patternId, start: at + c.d, len: c.len }));
+        const made = list.map((c) => ({ id: p.nextId++, trackId: c.trackId, patternId: c.patternId, start: at + c.d, len: c.len, ...(c.off ? { off: c.off } : {}) }));
         p.clips.push(...made);
         this.sel = new Set(made.map((c) => c.id));
       });
     }
+    /* Cuts clips at song beat `at`; the right-hand pieces become the selection. */
+    splitAt(cs, at) {
+      const p = this.p, cut = cs.filter((c) => at > c.start + 1e-6 && at < c.start + c.len - 1e-6);
+      if (!cut.length) return 0;
+      const made = [];
+      this.edit(() => {
+        for (const c of cut) { const r = PJ().splitClip(p, c, at); if (r) made.push(r); }
+        this.sel = new Set(made.map((c) => c.id));
+      });
+      this.host.status((cut.length === 1 ? 'Split the clip' : 'Split ' + cut.length + ' clips') + ' at ' + this.where(at)
+        + '. Drag either piece to move it, or right-click one to delete it. Ctrl+Z puts it back together.');
+      return cut.length;
+    }
+    /* the Split button: the selected clips at the song marker; with nothing selected, every clip under it */
+    splitAtMarker() {
+      const at = this.host.cursor();
+      const sel = this.selected(), cs = sel.length ? sel : this.p.clips;
+      if (this.splitAt(cs, at)) return;
+      this.host.status(sel.length
+        ? 'The marker is not inside the selected ' + (sel.length === 1 ? 'clip' : 'clips') + '. Click the ruler to put it where you want to cut, or double-click a clip to split it right there.'
+        : 'Put the song marker inside a clip first (click the ruler), or double-click a clip to split it right there.', 'warn');
+    }
+    where(b) {
+      const bar = Math.floor(b / 4 + 1e-9) + 1, beat = b - (bar - 1) * 4;
+      return 'bar ' + bar + (Math.abs(beat) > 1e-6 ? ', beat ' + (Math.round((beat + 1) * 100) / 100) : '');
+    }
+
     /* each selected clip gets its own copy of its pattern, so it can change without touching the others */
     makeUnique() {
       const cs = this.selected();
@@ -659,6 +702,7 @@ BDJ.Playlist = (() => {
       else if (ctrl && (k === 'v' || k === 'V')) this.paste();
       else if (ctrl && (k === 'a' || k === 'A')) { this.sel = new Set(this.p.clips.map((c) => c.id)); this.draw(); }
       else if (!ctrl && (k === 'u' || k === 'U')) this.makeUnique();
+      else if (!ctrl && (k === 'k' || k === 'K')) this.splitAtMarker();
       else if (k === 'Escape') { this.sel.clear(); this.draw(); }
       else used = false;
       if (used) e.preventDefault();
@@ -735,8 +779,8 @@ BDJ.Playlist = (() => {
         g.globalAlpha = t.mute ? 0.35 : 1;
         g.fillStyle = col; g.fillRect(x, y, w, 15);
         // pattern repeats
-        const PL = PJ().patternBeats(pat);
-        for (let r = PL; r < cl.len - 1e-6; r += PL) {
+        const PL = PJ().patternBeats(pat), off = t.type === 'audio' ? 0 : PJ().clipOff(p, cl);
+        for (let r = off ? PL - off : PL; r < cl.len - 1e-6; r += PL) {
           const rx = Math.round(x + r * v.ppb);
           g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(rx, y + 15, 1, h - 15);
         }
@@ -920,14 +964,15 @@ BDJ.Playlist = (() => {
     preview(t, pat, cl, x, y, h) {
       const g = this.g, v = this.view, PL = PJ().patternBeats(pat);
       g.fillStyle = 'rgba(255,255,255,0.75)';
+      const off = PJ().clipOff(this.p, cl);
       if (t.type === 'audio') {
         // the recording's waveform, once from the clip start (a take does not repeat)
         const au = pat.audio, pk = au && this.host.peaks && this.host.peaks(au.hash);
         if (!pk) return;
-        const spb = 60 / this.p.bpm, w = Math.min(cl.len, PL) * v.ppb, mid = y + h / 2;
+        const spb = 60 / this.p.bpm, w = Math.min(cl.len, PL - off) * v.ppb, mid = y + h / 2;
         const cw = this.c.width / (window.devicePixelRatio || 1), x0 = Math.max(0, -x), x1 = Math.min(w, cw - x);
         for (let px = Math.floor(x0); px < x1; px++) {
-          const a = au.start + (px / v.ppb) * spb, z = au.start + ((px + 1) / v.ppb) * spb;
+          const a = au.start + (off + px / v.ppb) * spb, z = au.start + (off + (px + 1) / v.ppb) * spb;
           let m = 0;
           for (let i = Math.floor(a * pk.rate), e = Math.min(pk.data.length, Math.ceil(z * pk.rate)); i < e; i++) m = Math.max(m, pk.data[i]);
           const hh = Math.max(0.5, Math.min(1, m * (au.gain || 1)) * h / 2);
@@ -939,8 +984,9 @@ BDJ.Playlist = (() => {
         const rh = Math.min(5, h / ids.length), N = pat.bars * 16;
         const total = Math.ceil(cl.len * 4);
         if (v.ppb / 4 < 1.2) return;
+        const s0 = Math.round(off * 4);
         for (let s = 0; s < total; s++) {
-          const st = s % N;
+          const st = (s + s0) % N;
           ids.forEach((id, r) => { if (pat.steps[id][st]) g.fillRect(x + (s / 4) * v.ppb, y + r * rh, Math.max(1, v.ppb / 4 - 1), Math.max(1, rh - 1)); });
         }
       } else {
@@ -949,9 +995,9 @@ BDJ.Playlist = (() => {
         let lo = 127, hi = 0;
         for (const n of ns) { lo = Math.min(lo, n.pitch); hi = Math.max(hi, n.pitch); }
         const span = Math.max(6, hi - lo + 1), rh = h / span;
-        for (let r = 0; r < cl.len - 1e-6; r += PL) {
+        for (let r = -off; r < cl.len - 1e-6; r += PL) {
           for (const n of ns) {
-            if (r + n.start >= cl.len) continue;
+            if (r + n.start >= cl.len || r + n.start < -1e-6) continue;
             const nx = x + (r + n.start) * v.ppb, nw = Math.max(1, Math.min(n.len, cl.len - r - n.start) * v.ppb - 1);
             g.fillRect(nx, y + (hi - n.pitch + (span - (hi - lo + 1)) / 2) * rh, nw, Math.max(1.5, rh - 0.5));
           }
