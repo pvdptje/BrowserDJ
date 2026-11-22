@@ -2,6 +2,7 @@
   { "id":"firstlight", "file":"first-light.browserdj.json", "title":"First Light", "style":"Melodic house", "blurb":"Warm chords, a rippling arp and a melody that opens up after the breakdown." },
   { "id":"tidewater", "file":"tidewater.browserdj.json", "title":"Tidewater", "style":"Neo-soul to drum & bass", "blurb":"Electric piano, marimba and flute at 86 BPM, then the tempo doubles into a drum & bass drop with a sliding Reese bass." },
   { "id":"nightbus", "file":"night-bus.browserdj.json", "title":"Night Bus", "style":"UK garage", "blurb":"A swung two-step with skipping organ stabs and bass, and a glassy pluck line left to chance, so no two passes are the same." },
+  { "id":"kitchenwindow", "file":"kitchen-window.browserdj.json", "title":"Kitchen Window", "style":"Acoustic folk-pop", "blurb":"A fingerpicked nylon guitar, a strummed one in the choruses, brushes and a flute tune." },
   { "id":"penrose", "file":"penrose-stairs.browserdj.json", "title":"Penrose Stairs", "style":"Disco house, as a round", "blurb":"Filter-house disco that changes key upward three times and lands exactly where it began, while the melody chases itself as a round." },
   { "id":"hemelhoog", "file":"hemelhoog.browserdj.json", "title":"Hemelhoog", "style":"Trance", "blurb":"Soaring leads, a rolling bass and two breakdowns that build back up." },
   { "id":"sera", "file":"sera-d-estate.browserdj.json", "title":"Sera d'Estate", "style":"Melodic house", "blurb":"A summer-evening pluck melody floating over strings." },

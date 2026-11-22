@@ -193,11 +193,13 @@
           }
           body = { bars: 4, steps, ...(rolls ? { rolls } : {}) };
         } else {
-          const notes = blocks.get(bi).map((n) => ({
-            start: Math.round((n.start - base) * 1000) / 1000,
-            len: Math.round(Math.min(n.len, BLOCK - (n.start - base)) * 1000) / 1000,
-            pitch: n.pitch, vel: n.vel,
-          })).sort((a, b) => a.start - b.start || a.pitch - b.pitch);
+          // round the start and the end (not the length), so a note that ends on the block's last beat
+          // never comes out a hair past it and stretches the pattern by a bar
+          const r3 = (x) => Math.round(x * 1000) / 1000;
+          const notes = blocks.get(bi).map((n) => {
+            const s = r3(n.start - base), e = r3(Math.min(n.start - base + n.len, BLOCK));
+            return { start: s, len: r3(Math.max(0.001, e - s)), pitch: n.pitch, vel: n.vel };
+          }).sort((a, b) => a.start - b.start || a.pitch - b.pitch);
           body = { bars: 4, notes };
         }
         const fp = JSON.stringify(body);
