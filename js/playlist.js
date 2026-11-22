@@ -672,6 +672,30 @@ BDJ.Playlist = (() => {
       return 'bar ' + bar + (Math.abs(beat) > 1e-6 ? ', beat ' + (Math.round((beat + 1) * 100) / 100) : '');
     }
 
+    /* Insert / Delete bars: on the loop region if there is one, else one bar at the song marker */
+    timeRange() {
+      const r = this.p.region;
+      if (r && r.end - r.start >= 0.25) return { at: r.start, len: r.end - r.start, region: true };
+      return { at: Math.floor(this.host.cursor() / 4 + 1e-9) * 4, len: 4, region: false };
+    }
+    insertBars() {
+      const { at, len, region } = this.timeRange();
+      this.edit(() => { PJ().insertTime(this.p, at, len); this.sel.clear(); }, 'all');
+      this.host.status('Inserted ' + this.span(len) + ' of silence at ' + this.where(at) + '; everything after it moved along'
+        + (region ? ' (the loop region now marks the old music, moved on; Clear loop to work by bars at the marker again).' : '. Use a loop region to insert more at once.') + ' Undo takes it out again.');
+    }
+    deleteBars() {
+      const { at, len, region } = this.timeRange();
+      const end = PJ().songBeats(this.p);
+      if (at >= end - 1e-6) { this.host.status('There is nothing at ' + this.where(at) + ' to delete. Put the song marker on a bar with music (click the ruler), or drag a loop region over the part to cut.', 'warn'); return; }
+      this.edit(() => { PJ().deleteTime(this.p, at, len); this.sel.clear(); }, 'all');
+      this.host.status('Deleted ' + this.span(len) + ' at ' + this.where(at) + (region ? ' (the loop region)' : '') + '; everything after it moved back. Undo brings it back.');
+    }
+    span(len) {
+      const bars = len / 4;
+      return Math.abs(bars - Math.round(bars)) < 1e-6 ? Math.round(bars) + (Math.round(bars) === 1 ? ' bar' : ' bars') : Math.round(len * 100) / 100 + ' beats';
+    }
+
     /* each selected clip gets its own copy of its pattern, so it can change without touching the others */
     makeUnique() {
       const cs = this.selected();

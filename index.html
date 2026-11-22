@@ -145,6 +145,8 @@
       <button id="addAudio" class="btn small" type="button" title="Record your voice or an instrument over the song, or bring in an audio file">+ Audio track</button>
       <button id="delClipsBtn" class="btn small" type="button" title="Delete the selected clips (Delete key, or right-click a clip)">Delete</button>
       <button id="splitClips" class="btn small" type="button" title="Cut the selected clips in two at the song marker (K), or every clip under it when none are selected. Double-click a clip to split it right there">Split</button>
+      <button id="insBars" class="btn small" type="button" title="Make room: insert an empty bar at the song marker, or as much as the loop region at its start. Everything after it moves along">+ Bars</button>
+      <button id="delBars" class="btn small" type="button" title="Cut out the bar at the song marker, or the whole loop region. Everything after it moves back">&minus; Bars</button>
       <button id="makeUnique" class="btn small" type="button" title="Give the selected clip(s) their own copy of the pattern, so you can change it in just that spot (U)">Make unique</button>
       <button id="plFit" class="btn small" type="button" title="Zoom to the whole song">Zoom to fit</button>
     </div>
@@ -354,6 +356,7 @@
           <li>On the selection: <b>Delete</b>, <b>Ctrl+D</b> duplicate after it, <b>Ctrl+C / X / V</b> copy, cut, paste at the marker, <b>Ctrl+A</b> all, <b>Esc</b> none</li>
           <li><b>Make unique</b> (or <b>U</b> when &ldquo;Keyboard plays&rdquo; is off): the selected clips get their own copy of the pattern, to make a variation in just that spot</li>
           <li><b>Double-click</b> a clip to split it in two at that bar (or press <b>Split</b> / <b>K</b> to cut at the song marker). Drag a clip&rsquo;s <b>left edge</b> to trim its start: the music stays where it is</li>
+          <li><b>+ Bars</b> inserts an empty bar at the song marker and <b>&minus; Bars</b> cuts that bar out; with a loop region they insert or cut that much instead. Everything after moves with it: clips, markers, automation and tempo changes</li>
           <li>Clips snap to bars. Hold <b>Alt</b> to snap to beats</li>
           <li>Clips are links: change the pattern once and every clip of it changes. Use <b>Clone</b> to make a variation</li>
           <li>Click the playlist&rsquo;s <b>ruler</b> to play the song from there, the piano roll&rsquo;s ruler to loop the pattern</li>

@@ -708,6 +708,65 @@ test('split clips play exactly what the whole clips played', () => {
   assert.strictEqual(PJ.clipOff(p, c, PJ.patternBeats(PJ.pattern(p, c.patternId)) + 1), 1);
 });
 
+test('inserting and deleting bars moves the whole song along (every example)', () => {
+  const dir = path.join(__dirname, '..', 'examples');
+  const evs = (p) => {
+    const { items, length } = PJ.playItems(p, 'song'), out = [];
+    PJ.eventsIn(p, items, 0, length, (ev) => out.push({ k: p.tracks.indexOf(ev.track) + ':' + (ev.kind === 'note' ? ev.pitch : ev.drum) + ':' + ev.vel, at: Math.round(ev.at * 1000) / 1000 }));
+    return out;
+  };
+  const key = (list) => list.map((e) => e.k + '@' + e.at.toFixed(3)).sort();
+  const near = (a, b, what) => assert.ok(Math.abs(a - b) < 1e-6, what + ': ' + a + ' vs ' + b);
+  const curves = (p) => p.tracks.flatMap((t, i) => PJ.autoParams(t).map((k) => [i + '.' + k, t.auto[k]]));
+  let checked = 0;
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('.json') && x !== 'catalog.json')) {
+    const raw = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    const orig = PJ.normalize(raw), before = evs(orig), len = PJ.songBeats(orig);
+    const at = Math.max(4, Math.floor(len / 8) * 4), n = 8;
+    if (len < at + n + 4) continue;
+    checked++;
+    // insert: everything from `at` on moves n beats later; the gap is silent
+    const ins = PJ.normalize(raw);
+    ins.region = { start: at - 4, end: at + 4 };
+    PJ.insertTime(ins, at, n);
+    eq(key(evs(ins)), key(before.map((e) => ({ k: e.k, at: e.at >= at - 1e-9 ? e.at + n : e.at }))));
+    eq(ins.markers.map((m) => m.beat), orig.markers.map((m) => (m.beat >= at ? m.beat + n : m.beat)));
+    eq(ins.region, { start: at - 4, end: at + 4 + n });
+    const oc = new Map(curves(orig));
+    for (const b of [0, at - 1.5, at - 0.25, at + 2, at + n, at + n + 3.5, len + n]) {
+      near(PJ.tempoAt(ins, b, 'song'), PJ.tempoAt(orig, b < at ? b : b < at + n ? at : b - n, 'song'), f + ' tempo at ' + b);
+      for (const [id, pts] of curves(ins)) near(PJ.autoValue(pts, b), PJ.autoValue(oc.get(id), b < at ? b : b < at + n ? at : b - n), f + ' ' + id + ' at ' + b);
+    }
+    // ...and deleting the same bars puts it all back
+    PJ.deleteTime(ins, at, n);
+    eq(key(evs(ins)), key(before));
+    eq(ins.markers.map((m) => m.beat), orig.markers.map((m) => m.beat));
+    for (const b of [0, at - 1, at, at + 1, at + 6, len]) {
+      near(PJ.tempoAt(ins, b, 'song'), PJ.tempoAt(orig, b, 'song'), f + ' tempo back at ' + b);
+      for (const [id, pts] of curves(ins)) near(PJ.autoValue(pts, b), PJ.autoValue(oc.get(id), b), f + ' ' + id + ' back at ' + b);
+    }
+    // delete from the original: those bars are gone, what came after moves back
+    const del = PJ.normalize(raw);
+    PJ.deleteTime(del, at, n);
+    eq(key(evs(del)), key(before.filter((e) => e.at < at - 1e-9 || e.at >= at + n - 1e-9).map((e) => ({ k: e.k, at: e.at >= at ? e.at - n : e.at }))));
+    assert.strictEqual(PJ.songBeats(del), len - n, f + ': the song is n beats shorter');
+    for (const b of [0, at - 2, at + 0.5, at + 3, len - n]) {
+      near(PJ.tempoAt(del, b, 'song'), PJ.tempoAt(orig, b < at ? b : b + n, 'song'), f + ' tempo after delete at ' + b);
+      for (const [id, pts] of curves(del)) assert.ok(Math.abs(PJ.autoValue(pts, b) - PJ.autoValue(oc.get(id), b < at ? b : b + n)) < 1e-4, f + ' ' + id + ' after delete at ' + b);
+    }
+    // it all survives a save
+    eq(key(evs(PJ.normalize(JSON.parse(PJ.serialize(del))))), key(evs(del)));
+  }
+  assert.ok(checked >= 3, checked + ' examples checked');
+  // a tempo change inside the cut carries on from where the cut ends; one at bar 1 changes the song tempo
+  const p = PJ.blank();
+  p.bpm = 100; p.tempo = [{ b: 8, bpm: 140 }];
+  PJ.deleteTime(p, 4, 8);
+  eq(p.tempo, [{ b: 4, bpm: 140 }]);
+  PJ.deleteTime(p, 0, 4);
+  assert.strictEqual(p.bpm, 140); eq(p.tempo, []);
+});
+
 test('a split take picks up the recording part-way through', () => {
   const p = PJ.blank();
   const t = { id: p.nextId++, type: 'audio', name: 'Voice', mute: false, solo: false };

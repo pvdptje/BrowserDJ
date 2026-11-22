@@ -2006,6 +2006,8 @@
   on('plFit', 'click', () => playlist.fit());
   on('makeUnique', 'click', () => playlist.makeUnique());
   on('splitClips', 'click', () => playlist.splitAtMarker());
+  on('insBars', 'click', () => playlist.insertBars());
+  on('delBars', 'click', () => playlist.deleteBars());
   // touchscreens have no right-click and no Delete key: these buttons are the way to delete there
   on('delClipsBtn', 'click', () => {
     const n = playlist.sel.size;

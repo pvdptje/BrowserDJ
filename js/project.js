@@ -155,6 +155,76 @@ BDJ.Project = (() => {
     return right;
   }
 
+  /* ---------- inserting and deleting time ----------
+     Everything at or after `at` moves: clips (one that runs across `at` is cut there), markers, tempo changes,
+     automation points and the loop region. Times are in beats. */
+  const EPS = 1e-6;
+  function insertTime(p, at, len) {
+    if (!(len > 0) || !(at >= 0)) return false;
+    for (const c of [...p.clips]) if (c.start < at - EPS && c.start + c.len > at + EPS) splitClip(p, c, at);
+    for (const c of p.clips) if (c.start >= at - EPS) c.start += len;
+    for (const m of p.markers) if (m.beat >= at - EPS) m.beat += len;
+    for (const c of p.tempo) if (c.b >= at - EPS) c.b += len;
+    for (const t of p.tracks) {
+      for (const k of autoParams(t)) {
+        const pts = t.auto[k], v = autoValue(pts, at);
+        // the gap holds the value the line had at `at`
+        for (const q of pts) if (q.b >= at - EPS) q.b += len;
+        if (pts.some((q) => q.b < at - EPS) && pts.some((q) => q.b >= at + len - EPS)) pts.push({ b: at, v }, { b: at + len, v });
+        sortAuto(pts);
+        t.auto[k] = dedupeAuto(pts);
+      }
+    }
+    if (p.region) {
+      if (p.region.start >= at - EPS) { p.region.start += len; p.region.end += len; }
+      else if (p.region.end > at + EPS) p.region.end += len;
+    }
+    return true;
+  }
+  /* Removes [at, at + len): what is inside goes, what comes after moves back. The tempo and automation carry on
+     from where the removed part ended. */
+  function deleteTime(p, at, len) {
+    if (!(len > 0) || !(at >= 0)) return false;
+    const end = at + len;
+    const back = (b) => (b < at ? b : b < end ? at : b - len);
+    for (const c of [...p.clips]) if (c.start < at - EPS && c.start + c.len > at + EPS) splitClip(p, c, at);
+    for (const c of [...p.clips]) if (c.start < end - EPS && c.start + c.len > end + EPS) splitClip(p, c, end);
+    p.clips = p.clips.filter((c) => !(c.start >= at - EPS && c.start < end - EPS));
+    for (const c of p.clips) if (c.start >= end - EPS) c.start -= len;
+    p.markers = p.markers.filter((m) => !(m.beat >= at - EPS && m.beat < end - EPS));
+    for (const m of p.markers) if (m.beat >= end - EPS) m.beat -= len;
+    // tempo: whatever was playing at the end of the cut plays from `at` on
+    const bpmEnd = tempoAt(p, end, 'song');
+    p.tempo = p.tempo.filter((c) => !(c.b > at - EPS && c.b < end + EPS));
+    for (const c of p.tempo) if (c.b >= end - EPS) c.b -= len;
+    if (Math.abs(tempoAt(p, at, 'song') - bpmEnd) > 1e-6) {
+      if (at < EPS) p.bpm = bpmEnd; else p.tempo.push({ b: Math.round(at * 1000) / 1000, bpm: bpmEnd });
+    }
+    sortTempo(p);
+    for (const t of p.tracks) {
+      for (const k of autoParams(t)) {
+        const pts = t.auto[k], vAt = autoValue(pts, at), vEnd = autoValue(pts, end);
+        const keep = pts.filter((q) => q.b < at - EPS || q.b > end + EPS).map((q) => ({ b: q.b > end ? q.b - len : q.b, v: q.v }));
+        // the line up to `at` stays as it was, then picks up where it was at the end of the cut
+        if (keep.some((q) => q.b < at - EPS)) keep.push({ b: at, v: vAt });
+        if (keep.some((q) => q.b > at + EPS) || !keep.length || Math.abs(vEnd - vAt) > 1e-6) keep.push({ b: at + (keep.some((q) => q.b < at - EPS) && Math.abs(vEnd - vAt) > 1e-6 ? 0.001 : 0), v: vEnd });
+        sortAuto(keep);
+        t.auto[k] = dedupeAuto(keep);
+      }
+    }
+    if (p.region) {
+      const s = back(p.region.start), e = back(p.region.end);
+      if (e - s >= 0.25) p.region = { start: s, end: e }; else delete p.region;
+    }
+    return true;
+  }
+  /* points at the same beat with the same value are one point */
+  function dedupeAuto(pts) {
+    const out = [];
+    for (const q of pts) { const l = out[out.length - 1]; if (!l || Math.abs(l.b - q.b) > EPS || Math.abs(l.v - q.v) > 1e-6) out.push(q); }
+    return out;
+  }
+
   /* ---------- drums ---------- */
   function applyPreset(p, pat, key) {
     const pre = PRESETS[key] || PRESETS.empty;
@@ -668,7 +738,7 @@ BDJ.Project = (() => {
     track, pattern, patternsOf, selTrack, selPattern, select,
     blank, example, normalize, serialize,
     addTrack, addPattern, clonePattern, deletePattern, deleteTrack, addClip, uniqueName,
-    applyPreset, setDrumBars, clipOff, splitClip, notesEnd, patternBeats, syncAudio, isAudio, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, tempoAt, nextTempo, tempoMap, songSecs, sortTempo, autoValue, autoParams, sortAuto,
+    applyPreset, setDrumBars, clipOff, splitClip, insertTime, deleteTime, notesEnd, patternBeats, syncAudio, isAudio, songBeats, snapBeats, playItems, eventsIn, audible, loopRange, addMarker, tempoAt, nextTempo, tempoMap, songSecs, sortTempo, autoValue, autoParams, sortAuto,
     deriveFromTake, detectKey, midiTracks, History, slideFrom,
   };
 })();
