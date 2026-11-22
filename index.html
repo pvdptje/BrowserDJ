@@ -230,6 +230,7 @@
         </select>
         <label class="shp" title="How strong the movement is"><span>Depth</span><input id="lfoDepth" type="range" min="0" max="100" value="60"><output id="lfoDepthOut">60</output></label>
       </span>
+      <label class="shp" title="Off-beat 16th notes come a little late, for a shuffled groove (double-click to match the drums)"><span>Swing</span><input id="synSwing" type="range" min="0" max="60" value="0"><output id="synSwingOut">straight</output></label>
       <button id="shReset" class="btn small" type="button">Reset</button>
       <span class="hint">Shapes the instrument for this track. Hold a key to hear it as you go.</span>
       <div id="samplerBox" class="samplerbox" hidden>
@@ -335,6 +336,7 @@
           <li>Hold <b>Alt</b> while dragging to ignore the snap grid</li>
           <li><b>Ghosts</b> shows what the other tracks play at the same point in the song, faintly and in their colours, so a bass line or melody fits the chords. It follows the playhead in Song mode; click the playlist ruler to look at another spot</li>
           <li><b>Draw</b> picks what a click places: a note, or a <b>triad</b>, <b>seventh</b>, <b>power</b> chord or <b>octave</b>, built in the song&rsquo;s key</li>
+          <li><b>Swing</b> shuffles the off-beat 16th notes, like the drums' Swing; double-click it to match the drum track</li>
           <li><b>Movement</b> makes a sound move with the beat: <b>Wobble</b> sweeps the filter (great on bass), <b>Tremolo</b> pulses the volume, <b>Auto-pan</b> swings it left and right. Speed is a note length, so it always stays on the tempo</li>
           <li>Pick <b>Sampler</b> as the sound to play <b>your own sound</b>: load any audio file or press <b>Record a sound</b> and sing one note. BrowserDJ finds its pitch, so every key plays it in tune</li>
           <li><b>Chords&hellip;</b> fills the pattern with a chord progression in the song&rsquo;s key, one chord per bar (shorter patterns get quicker changes). On a Bass or Acid track it writes the root notes instead, so one progression gives you both parts. Change the Key first to hear it elsewhere</li>

@@ -1474,7 +1474,10 @@
     $('lfoDepth').value = Math.round(lfo.depth * 100);
     $('lfoDepthOut').textContent = Math.round(lfo.depth * 100);
     $('lfoRate').disabled = $('lfoDepth').disabled = lfo.target === 'off';
+    $('synSwing').value = Math.round((curTrack().swing || 0) * 100);
+    $('synSwingOut').textContent = swingText(curTrack().swing || 0);
   }
+  const swingText = (v) => (v > 0.004 ? Math.round(v * 100) + '%' : 'straight');
 
   function renderEditor() {
     const type = curTrack().type, synth = type === 'synth';
@@ -2178,6 +2181,24 @@
       $(id).dispatchEvent(new Event('change'));
     });
   }
+  // swing on a synth track: off-beat 16ths late, as on the drums
+  let synSwingBefore = null;
+  on('synSwing', 'input', () => {
+    const t = curTrack();
+    if (t.type !== 'synth') return;
+    if (synSwingBefore == null) synSwingBefore = begin();
+    const v = +$('synSwing').value / 100;
+    if (v > 0) t.swing = v; else delete t.swing;
+    $('synSwingOut').textContent = swingText(v);
+  });
+  on('synSwing', 'change', () => { if (synSwingBefore != null) { end(synSwingBefore); synSwingBefore = null; autosave(); } });
+  on('synSwing', 'dblclick', () => {
+    const d = P.tracks.find((x) => x.type === 'drums' && x.swing > 0) || P.tracks.find((x) => x.type === 'drums');
+    $('synSwing').value = Math.round(((d && d.swing) || 0) * 100);
+    $('synSwing').dispatchEvent(new Event('input'));
+    $('synSwing').dispatchEvent(new Event('change'));
+    say(d && d.swing > 0 ? 'Swing set to match ' + d.name + ' (' + Math.round(d.swing * 100) + '%).' : 'The drums play straight, so this track does too now.');
+  });
   on('smpLoad', 'click', () => $('samplerInput').click());
   on('samplerInput', 'change', async (e) => {
     const f = e.target.files[0];

@@ -206,8 +206,10 @@ BDJ.Project = (() => {
         const pts = t.auto[k], vAt = autoValue(pts, at), vEnd = autoValue(pts, end);
         const keep = pts.filter((q) => q.b < at - EPS || q.b > end + EPS).map((q) => ({ b: q.b > end ? q.b - len : q.b, v: q.v }));
         // the line up to `at` stays as it was, then picks up where it was at the end of the cut
-        if (keep.some((q) => q.b < at - EPS)) keep.push({ b: at, v: vAt });
-        if (keep.some((q) => q.b > at + EPS) || !keep.length || Math.abs(vEnd - vAt) > 1e-6) keep.push({ b: at + (keep.some((q) => q.b < at - EPS) && Math.abs(vEnd - vAt) > 1e-6 ? 0.001 : 0), v: vEnd });
+        // (with no points before the cut the line held vAt there too, so that is kept when the value jumps)
+        const jump = Math.abs(vEnd - vAt) > 1e-6;
+        if (keep.some((q) => q.b < at - EPS) || jump) keep.push({ b: at, v: vAt });
+        if (keep.some((q) => q.b > at + EPS) || !keep.length || jump) keep.push({ b: at + (jump ? 0.001 : 0), v: vEnd });
         sortAuto(keep);
         t.auto[k] = dedupeAuto(keep);
       }
@@ -384,6 +386,9 @@ BDJ.Project = (() => {
   }
   const plays = (pct, a, b, beat) => !(pct > 0 && pct < 100) || chanceRoll(a, b, beat) * 100 < pct;
 
+  /* a start on the second or fourth 16th of a beat: the ones swing delays */
+  const isOffSixteenth = (b) => { const q = b * 4, r = Math.round(q); return Math.abs(q - r) < 1e-4 && ((r % 2) + 2) % 2 === 1; };
+
   /* Calls fn(event) for every note/hit of the items that starts in [lo, hi) song beats.
      event: {track, pattern, item, kind:'note'|'drum', at (beats), len (beats), pitch | drum, vel}
      opt.shift: beats added to `at` for the chance dice (a loop's later passes roll again); opt.all: ignore chance. */
@@ -429,14 +434,17 @@ BDJ.Project = (() => {
         }
       } else {
         const k0 = Math.floor((a - org) / L), k1 = Math.floor((b - org - EPS) / L);
-        const from = slideFrom(pat);
+        const from = slideFrom(pat), sw = (t.swing || 0) * 0.125;
         for (let k = k0; k <= k1; k++) {
           const base = org + k * L;
           for (const n of pat.notes) {
-            const at = base + n.start;
-            if (at < a - EPS || at >= b - EPS || at >= clipEnd - EPS) continue;
+            // swing, as on the drums: a start or an end on an off-beat 16th comes a little late (the window goes by where
+            // the note is written), so a line of 16ths stays legato and never runs into the next note
+            const u = base + n.start;
+            if (u < a - EPS || u >= b - EPS || u >= clipEnd - EPS) continue;
+            const at = sw && isOffSixteenth(n.start) ? u + sw : u, end = u + n.len + (sw && isOffSixteenth(n.start + n.len) ? sw : 0);
             if (!opt.all && n.chance && !plays(n.chance, salt, n.pitch, at + shift)) continue;
-            const ev = { track: t, pattern: pat, item: it, kind: 'note', at, len: Math.min(n.len, clipEnd - at), pitch: n.pitch, vel: n.vel };
+            const ev = { track: t, pattern: pat, item: it, kind: 'note', at, len: Math.max(1 / 64, Math.min(end, clipEnd) - at), pitch: n.pitch, vel: n.vel };
             if (from && from.has(n)) ev.glideFrom = from.get(n);
             fn(ev);
           }
@@ -604,8 +612,10 @@ BDJ.Project = (() => {
         for (const b of ['low', 'mid', 'high']) { const g = Math.round(num(t.eq[b], 0, -12, 12) * 2) / 2; if (g) eq[b] = g; }
         if (Object.keys(eq).length) nt.eq = eq;
       }
+      // swing (0..0.6 of a 16th): drums and synths; a synth track only keeps it when it has some
+      if (t.type === 'drums') nt.swing = num(t.swing, 0, 0, 0.6);
+      else if (t.type === 'synth' && num(t.swing, 0, 0, 0.6) > 0) nt.swing = num(t.swing, 0, 0, 0.6);
       if (t.type === 'drums') {
-        nt.swing = num(t.swing, 0, 0, 0.6);
         nt.kitStyle = BDJ.Sound.KITS.some((x) => x.id === t.kitStyle) ? t.kitStyle : 'classic';
         const k = Array.isArray(t.kit) ? t.kit : [];
         nt.kit = kit().map((d) => {

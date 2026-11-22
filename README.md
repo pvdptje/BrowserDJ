@@ -53,6 +53,7 @@ The **Examples** button opens the songs in `examples/`. First-time visitors star
 - **Movement**: every synth track has a tempo-locked LFO: Wobble (filter), Tremolo (volume) or Auto-pan, from 1/1 to 1/16 including triplets, with a depth control. It stays on the beat through tempo changes and in exports.
 - **Sampler**: a synth track can play your own sound (a file, or recorded with the mic); its pitch is found with the hum tracker so it plays in tune across the keyboard.
 - **Chance**: a note's `chance` (1–99, percent) or a drum pattern's `chance[drum][step]` (0 = always) makes it play only some of the time. The dice (`chanceRoll`) hash the track, the sound and the beat it lands on, so a song plays and exports the same way every time, while each pass of a loop rolls again.
+- **Swing**: a track's `swing` (0–0.6 of a 16th) delays the off-beat 16ths, on drum tracks (the step's position) and on synth tracks (notes that start exactly on the second or fourth 16th of a beat).
 - **Markers** name song sections and are written into the MIDI file. Track volume and pan go in as controller 7 and 10.
 
 ## Tests

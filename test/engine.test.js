@@ -617,7 +617,9 @@ test('MIDI import: every example survives export -> import, note for note', () =
     const a = playing(orig), b = playing(back);
     for (const name of Object.keys(a)) {
       assert.ok(b[name], f + ': track "' + name + '" is missing');
-      eq(b[name], a[name]);
+      // MIDI keeps time in ticks: a swung note can come back a millisecond or two off
+      const near = (x, y) => x.length === y.length && x.every((e, i) => e.length === y[i].length && e.every((v, j) => (typeof v === 'number' ? Math.abs(v - y[i][j]) <= 2 : v === y[i][j])));
+      if (!near(b[name], a[name])) eq(b[name], a[name]);
     }
     for (const t of orig.tracks.filter((x) => x.type === 'synth' && a[x.name])) assert.strictEqual(back.tracks.find((x) => x.name === t.name).instrument, t.instrument, f + ': instrument of ' + t.name);
     eq(back.markers.map((m) => [m.beat, m.name]), orig.markers.map((m) => [m.beat, m.name]));
@@ -714,7 +716,7 @@ test('inserting and deleting bars moves the whole song along (every example)', (
   const dir = path.join(__dirname, '..', 'examples');
   const evs = (p) => {
     const { items, length } = PJ.playItems(p, 'song'), out = [];
-    PJ.eventsIn(p, items, 0, length, (ev) => out.push({ k: p.tracks.indexOf(ev.track) + ':' + (ev.kind === 'note' ? ev.pitch : ev.drum) + ':' + ev.vel, at: Math.round(ev.at * 1000) / 1000 }));
+    PJ.eventsIn(p, items, 0, length, (ev) => out.push({ k: p.tracks.indexOf(ev.track) + ':' + (ev.kind === 'note' ? ev.pitch : ev.drum) + ':' + ev.vel, at: Math.round(ev.at * 1000) / 1000 }), { all: true }); // every note, chance aside: the dice go by song position
     return out;
   };
   const key = (list) => list.map((e) => e.k + '@' + e.at.toFixed(3)).sort();
@@ -889,6 +891,30 @@ test('chance: notes and drum steps play about as often as asked, the same way ev
   assert.strictEqual(beat.chance.chat[17], 50);
   PJ.applyPreset(p, beat, 'house');
   assert.strictEqual(beat.chance, undefined);
+});
+
+test('swing on a synth track: off-beat 16ths come late, nothing else moves, kept only when set', () => {
+  const p = PJ.blank();
+  const syn = p.tracks.find((t) => t.type === 'synth'), mel = PJ.patternsOf(p, syn.id)[0];
+  mel.bars = 1;
+  mel.notes = [0, 0.25, 0.5, 0.75, 1.25, 1.3, 3.75].map((s, i) => ({ id: i + 1, start: s, len: 0.2, pitch: 60 + i, vel: 100 }));
+  p.clips = []; PJ.addClip(p, mel, 0, 8);
+  const ats = () => { const o = []; PJ.eventsIn(p, PJ.playItems(p, 'song').items, 0, 8, (ev) => ev.kind === 'note' && o.push(+ev.at.toFixed(4))); return o.sort((a, b) => a - b); };
+  eq(ats(), [0, 0.25, 0.5, 0.75, 1.25, 1.3, 3.75, 4, 4.25, 4.5, 4.75, 5.25, 5.3, 7.75]);
+  syn.swing = 0.4; // 0.4 of an eighth of a beat: 0.05 beats
+  eq(ats(), [0, 0.3, 0.5, 0.8, 1.3, 1.3, 3.8, 4, 4.3, 4.5, 4.8, 5.3, 5.3, 7.8]);
+  // ends move too: a 16th from 0 to 0.25 gets longer, one from 0.25 to 0.5 shorter, so they still touch
+  mel.notes = [{ id: 1, start: 0, len: 0.25, pitch: 60, vel: 100 }, { id: 2, start: 0.25, len: 0.25, pitch: 60, vel: 100 }, { id: 3, start: 0.5, len: 1, pitch: 62, vel: 100 }];
+  const evs = []; PJ.eventsIn(p, PJ.playItems(p, 'song').items, 0, 4, (ev) => evs.push([+ev.at.toFixed(4), +ev.len.toFixed(4)]));
+  eq(evs, [[0, 0.3], [0.3, 0.2], [0.5, 1]]);
+  mel.notes = [0, 0.25, 0.5, 0.75, 1.25, 1.3, 3.75].map((s, i) => ({ id: i + 1, start: s, len: 0.2, pitch: 60 + i, vel: 100 }));
+  // windows that split the song still find every note once
+  const parts = []; for (let b = 0; b < 8; b += 0.27) PJ.eventsIn(p, PJ.playItems(p, 'song').items, b, Math.min(8, b + 0.27), (ev) => ev.kind === 'note' && parts.push(+ev.at.toFixed(4)));
+  eq(parts.sort((a, b) => a - b), ats());
+  const back = PJ.normalize(JSON.parse(JSON.stringify(p)));
+  assert.strictEqual(back.tracks.find((t) => t.name === syn.name).swing, 0.4);
+  syn.swing = 0;
+  assert.strictEqual(PJ.normalize(JSON.parse(JSON.stringify(p))).tracks.find((t) => t.name === syn.name).swing, undefined);
 });
 
 test('history undo/redo', () => {
