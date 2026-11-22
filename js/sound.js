@@ -17,6 +17,13 @@ BDJ.Sound = (() => {
     { id: 'supersaw', name: 'Supersaw', program: 82 },
     { id: 'acid', name: 'Acid', program: 39 },
     { id: 'organ', name: 'Organ', program: 17 },
+    { id: 'ep', name: 'Electric piano', program: 5 },
+    { id: 'marimba', name: 'Marimba', program: 12 },
+    { id: 'strings', name: 'Strings', program: 48 },
+    { id: 'brass', name: 'Brass', program: 61 },
+    { id: 'flute', name: 'Flute', program: 73 },
+    { id: 'sub', name: 'Sub bass', program: 32 },
+    { id: 'reese', name: 'Reese bass', program: 87 },
     { id: 'sampler', name: 'Sampler (your sound)', program: 52 },
   ];
 
@@ -430,6 +437,26 @@ BDJ.Sound = (() => {
       return o;
     };
     let att = 0.01, rel = 0.09, peak = v, decayTo = null, decayT = 0.16;
+    // a slow vibrato that fades in after the note has started, on every oscillator so far
+    const vibrato = (rate, cents, delay) => {
+      const lfo = ac.createOscillator(), lg = ac.createGain();
+      lfo.frequency.value = rate;
+      lg.gain.setValueAtTime(0, a);
+      lg.gain.setValueAtTime(0, a + delay);
+      lg.gain.linearRampToValueAtTime(cents, a + delay + 0.5);
+      lfo.connect(lg);
+      for (const o of mine) if (o.detune) lg.connect(o.detune);
+      mine.push(lfo);
+    };
+    // an extra partial with its own fast decay (mallets, tines)
+    const partial = (mult, level, decay) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.frequency.value = f * mult;
+      g.gain.setValueAtTime(level, a);
+      g.gain.setTargetAtTime(0, a + 0.002, decay);
+      o.connect(g); g.connect(filt);
+      mine.push(o);
+    };
     if (preset === 'lead') {
       osc('sawtooth', -9, 0.6); osc('sawtooth', 9, 0.6);
       filt.Q.value = 1.5; filt.frequency.value = Math.min(9000, f * 5); att = 0.012; peak = v * 0.75;
@@ -481,6 +508,61 @@ BDJ.Sound = (() => {
       src.connect(g); g.connect(filt);
       mine.push(src);
       filt.frequency.value = 18000; att = 0.004; rel = 0.12; peak = v * 2.4;
+    } else if (preset === 'ep') {
+      // FM tine: a sine bent by a sine at the same pitch, bright at the strike and mellowing out; harder notes bark
+      const car = osc('sine', 0, 1);
+      const mod = ac.createOscillator(), mg = ac.createGain(), hard = note.vel / 127;
+      mod.frequency.value = f;
+      mg.gain.setValueAtTime(f * (0.8 + 1.6 * hard), a);
+      mg.gain.setTargetAtTime(f * 0.15, a + 0.005, 0.35);
+      mod.connect(mg); mg.connect(car.frequency);
+      mine.push(mod);
+      partial(14, 0.05 + 0.1 * hard, 0.03);
+      filt.frequency.value = 7000; att = 0.003; rel = 0.3; decayTo = 0.35; decayT = 0.9; peak = v * 1.25;
+    } else if (preset === 'marimba') {
+      // a wooden bar: the fundamental and its fourth harmonic, both dying away; low notes ring longer
+      const ring = 0.12 + 0.4 * Math.max(0, Math.min(1, (84 - note.pitch) / 48));
+      osc('sine', 0, 1);
+      partial(4, 0.35, ring * 0.25);
+      partial(9.8, 0.08, 0.012);
+      filt.frequency.value = 9000; att = 0.002; rel = 0.15; decayTo = 0; decayT = ring; peak = v * 1.5;
+    } else if (preset === 'strings') {
+      // a small ensemble of saws, a soft filter, a bow that takes its time, vibrato once the note has settled
+      for (const [d, l] of [[-15, 0.22], [-6, 0.26], [6, 0.26], [15, 0.22]]) osc('sawtooth', d, l);
+      filt.Q.value = 0.5; filt.frequency.value = Math.min(6000, f * 4);
+      vibrato(5.2, 14, 0.3);
+      att = 0.16; rel = 0.45; peak = v * 1.35;
+    } else if (preset === 'brass') {
+      // saws whose filter swells open at the start of every note, with a little scoop up into the pitch
+      osc('sawtooth', -5, 0.5); osc('sawtooth', 5, 0.5); osc('square', 0, 0.12, -1);
+      filt.Q.value = 1.2;
+      const hard = note.vel / 127;
+      filt.frequency.setValueAtTime(Math.max(200, f * 1.2), a);
+      filt.frequency.exponentialRampToValueAtTime(Math.min(9000, f * (4 + 6 * hard)), a + 0.07);
+      filt.frequency.exponentialRampToValueAtTime(Math.min(6000, f * 3.5), a + 0.35);
+      if (note.glideFrom == null) for (const o of mine) { o.detune.setValueAtTime(o.detune.value - 35, a); o.detune.linearRampToValueAtTime(o.detune.value, a + 0.06); }
+      vibrato(5.5, 10, 0.4);
+      att = 0.03; rel = 0.12; peak = v * 0.8;
+    } else if (preset === 'flute') {
+      // a near-sine tone with breath noise around its pitch and a gentle vibrato
+      osc('sine', 0, 1); osc('triangle', 0, 0.08, 1);
+      const br = ac.createBufferSource(), bp = ac.createBiquadFilter(), bg = ac.createGain();
+      br.buffer = noise(ac); br.loop = true;
+      bp.type = 'bandpass'; bp.frequency.value = Math.min(9000, f * 2); bp.Q.value = 1.5;
+      bg.gain.setValueAtTime(0.12, a); bg.gain.setTargetAtTime(0.04, a + 0.05, 0.1);
+      br.connect(bp); bp.connect(bg); bg.connect(filt);
+      vibrato(5, 16, 0.25);
+      mine.push(br);
+      filt.frequency.value = 6000; att = 0.06; rel = 0.12; peak = v * 0.95;
+    } else if (preset === 'sub') {
+      // a clean sine with a touch of its octave, so it still shows up on small speakers
+      osc('sine', 0, 1); osc('sine', 0, 0.12, 1);
+      filt.frequency.value = 2000; att = 0.006; rel = 0.08; peak = v * 1.35;
+    } else if (preset === 'reese') {
+      // two saws detuned against each other until they phase and growl, kept dark, over a sine sub
+      osc('sawtooth', -18, 0.5); osc('sawtooth', 18, 0.5); osc('sawtooth', -7, 0.25); osc('sine', 0, 0.5, -1);
+      filt.Q.value = 2; filt.frequency.value = Math.min(2200, f * 4);
+      att = 0.01; rel = 0.12; peak = v * 0.85;
     } else if (preset === 'organ') {
       // drawbar-style stack of sine harmonics
       for (const [h, l] of [[1, 0.5], [2, 0.32], [3, 0.22], [4, 0.14], [6, 0.08], [8, 0.06]]) {

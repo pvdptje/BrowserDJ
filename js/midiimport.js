@@ -50,17 +50,21 @@
 
   /* ---------- sounds ---------- */
   // BrowserDJ's own exports first (so a round trip comes back exactly), then General MIDI families
-  const OWN = { 45: 'pluck', 81: 'lead', 4: 'soft', 80: 'chip', 38: 'bass', 14: 'bell', 89: 'pad', 82: 'supersaw', 39: 'acid', 17: 'organ' };
+  const OWN = { 45: 'pluck', 81: 'lead', 4: 'soft', 80: 'chip', 38: 'bass', 14: 'bell', 89: 'pad', 82: 'supersaw', 39: 'acid', 17: 'organ',
+    5: 'ep', 12: 'marimba', 48: 'strings', 61: 'brass', 73: 'flute', 32: 'sub', 87: 'reese' };
   function instrumentFor(program) {
     if (program == null) return 'pluck';
     if (OWN[program]) return OWN[program];
     if (program < 8) return 'soft';      // pianos
+    if (program >= 11 && program <= 13) return 'marimba'; // vibraphone, marimba, xylophone
     if (program < 16) return 'bell';     // chromatic percussion
     if (program < 24) return 'organ';
     if (program < 32) return 'pluck';    // guitars
     if (program < 40) return 'bass';
-    if (program < 56) return 'pad';      // strings, ensembles
-    if (program < 80) return 'lead';     // brass, reeds, pipes
+    if (program < 52) return 'strings';  // strings, string ensembles
+    if (program < 56) return 'pad';      // choirs
+    if (program < 72) return 'brass';    // brass, saxes and other reeds
+    if (program < 80) return 'flute';    // pipes
     if (program < 88) return 'lead';     // synth leads
     if (program < 96) return 'pad';      // synth pads
     return 'pluck';

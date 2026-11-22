@@ -752,6 +752,20 @@ test('chord progressions: numerals, voicing, the right chords for each key', () 
   }
 });
 
+test('every instrument comes back from a MIDI file as itself; General MIDI families map sensibly', () => {
+  const MI = require('../js/midiimport.js');
+  const SND = ctx.BDJ.Sound;
+  const programs = new Set();
+  for (const ins of SND.INSTRUMENTS) {
+    if (ins.id === 'sampler') continue;
+    assert.ok(!programs.has(ins.program), 'program ' + ins.program + ' used twice');
+    programs.add(ins.program);
+    assert.strictEqual(MI.instrumentFor(ins.program), ins.id, ins.id);
+  }
+  const fam = { 0: 'soft', 13: 'marimba', 40: 'strings', 52: 'pad', 56: 'brass', 66: 'brass', 74: 'flute', 33: 'bass', 34: 'bass' };
+  for (const [p, id] of Object.entries(fam)) assert.strictEqual(MI.instrumentFor(+p), id, 'program ' + p);
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

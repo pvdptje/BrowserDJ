@@ -2099,7 +2099,7 @@
   on('humanBtn', 'click', () => { roll.humanize(); say('Velocities loosened up a little. Do it again for more.'); });
 
   /* Chord progressions: the list follows the song's key; picking one fills the pattern (a bass track gets roots). */
-  const isBassy = (t) => t && (t.instrument === 'bass' || t.instrument === 'acid');
+  const isBassy = (t) => t && ['bass', 'acid', 'sub', 'reese'].includes(t.instrument);
   function fillProgressions() {
     const sel = $('progSel'), key = E.NOTE_NAMES[P.root] + ' ' + P.scale + (isBassy(curTrack()) ? ' bass' : '');
     if (sel.dataset.key === key) return;
