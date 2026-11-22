@@ -271,6 +271,8 @@
   /* ---------- live playing (computer keyboard, MIDI) and recording it ---------- */
   const held = new Map();   // pitch -> {voice, start (pattern beat or null), vel}
   let recArmed = false, recBefore = null, recCount = 0;
+  let ghostsOn = true;           // the piano roll shows the other tracks' notes faintly
+  try { ghostsOn = localStorage.getItem('browserdj.ui.ghosts') !== '0'; } catch (err) { /* storage blocked */ }
   let keysOn = true;
   try { keysOn = localStorage.getItem('browserdj.ui.keys') !== '0'; } catch (err) { /* storage blocked */ }
 
@@ -544,6 +546,25 @@
     const pat = curPat(), PL = PJ.patternBeats(pat);
     const c = P.clips.find((x) => x.patternId === pat.id && b >= x.start && b < x.start + x.len);
     return c ? (b - c.start + PJ.clipOff(P, c)) % PL : null;
+  }
+  /* Ghost notes: what the other synth tracks play at the same point in the song as the pattern in the editor,
+     in pattern beats. The pass of the pattern under the playhead (Song mode) or the song marker, else its first. */
+  function ghostNotes() {
+    const pat = curPat();
+    if (!ghostsOn || !pat || !pat.notes) return null;
+    const cs = P.clips.filter((c) => c.patternId === pat.id).sort((a, b) => a.start - b.start);
+    if (!cs.length) return null;
+    const pos = T.on && T.mode === 'song' ? transportPos() : null, at = pos == null ? songCursor : pos;
+    const c = cs.find((x) => at >= x.start && at < x.start + x.len) || cs[0];
+    const L = PJ.patternBeats(pat), off = PJ.clipOff(P, c);
+    const inside = at >= c.start && at < c.start + c.len;
+    const org = c.start - off + (inside ? Math.floor((at - c.start + off) / L) * L : 0);
+    // muted and un-soloed tracks show too: this is about seeing the parts, not hearing them
+    const items = PJ.playItems(P, 'song').items.filter((it) => it.track.type === 'synth' && it.track.id !== pat.trackId)
+      .map((it) => ({ ...it, track: { ...it.track, mute: false, solo: false } }));
+    const out = [];
+    PJ.eventsIn({ tracks: [] }, items, org, org + L, (ev) => out.push({ start: ev.at - org, len: ev.len, pitch: ev.pitch, color: ev.track.color }));
+    return out;
   }
   function songPlayhead() {
     if (!T.on || T.mode !== 'song') return null;
@@ -1654,6 +1675,7 @@
       if (T.on && !T.rec) play();
     },
     trace: hostTrace,
+    ghosts: ghostNotes,
     held: () => held,
     chord: () => $('chordType').value,
   });
@@ -1678,7 +1700,7 @@
     setCursor: (b) => {
       songCursor = Math.max(0, b);
       setMode('song', false);
-      showPos(null); playlist.draw();
+      showPos(null); playlist.draw(); roll.draw();
       if (T.on && !T.rec) play();
     },
     trackChanged: (t) => { if (T.on && T.M) T.M.update(t); if (liveM) liveM.update(t); mixer.render(); },
@@ -2133,6 +2155,19 @@
     lfoLive();
   });
   on('lfoDepth', 'change', () => { if (lfoBefore != null) { end(lfoBefore); lfoBefore = null; autosave(); } });
+
+  const syncGhosts = () => { $('ghostBtn').classList.toggle('on', ghostsOn); $('ghostBtn').setAttribute('aria-pressed', String(ghostsOn)); };
+  on('ghostBtn', 'click', () => {
+    ghostsOn = !ghostsOn;
+    try { localStorage.setItem('browserdj.ui.ghosts', ghostsOn ? '1' : '0'); } catch (err) { /* storage blocked */ }
+    syncGhosts();
+    roll.draw();
+    const inSong = P.clips.some((c) => c.patternId === P.sel.patternId);
+    say(!ghostsOn ? 'Ghost notes off: the piano roll shows only this pattern.'
+      : inSong ? 'Ghost notes: the other tracks\' notes at this point in the song show faintly behind yours, in their colours. Click the playlist ruler to look at another spot.'
+        : 'Ghost notes are on. This pattern is not in the song yet; place it in the playlist to see what plays alongside it.');
+  });
+  syncGhosts();
 
   // live keys
   const syncKeys = () => {

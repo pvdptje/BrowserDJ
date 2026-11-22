@@ -38,6 +38,7 @@ The **Examples** button opens the songs in `examples/`. First-time visitors star
 
 - **Tracks** are instruments: a synth (piano roll) or a drum kit (step sequencer).
 - **Patterns** belong to a track. Clips in the playlist are links to a pattern, so editing it changes every clip.
+- **Ghost notes**: the piano roll faintly shows what the other synth tracks play at the same point in the song (the pass of the pattern under the playhead or song marker). The Ghosts button turns them off; the choice is kept in this browser.
 - **Splitting**: a clip can start part-way into its pattern (`off`, in beats). Double-click a clip, or Split / K at the song marker, cuts it in two; dragging a clip's left edge trims its start while the music stays where it is. For an audio take the offset is how far into the recording the clip begins.
 - **Pattern / Song** in the transport picks what Play (and export) plays. In Song mode with Loop on, a loop region (drag on the playlist ruler) limits the loop.
 - **Automation** lanes (the A button on a track) draw volume, filter, pan, drive, echo and reverb over the song; they play in Song mode and export to MIDI as controllers 7, 74, 10, 94 and 91.

@@ -80,6 +80,13 @@ BDJ.PianoRoll = (() => {
       let lo = 60, hi = 72;
       if (ns.length) { lo = Math.min(...ns.map((n) => n.pitch)); hi = Math.max(...ns.map((n) => n.pitch)); }
       const rows = (H - VEL - RULER) / v.rowH;
+      // take the ghost notes in too, when everything fits at this row height
+      const gh = this.host.ghosts ? this.host.ghosts() : null;
+      if (gh && gh.length) {
+        const all = gh.map((n) => n.pitch).concat(ns.length ? [lo, hi] : []);
+        const glo = Math.min(...all), ghi = Math.max(...all);
+        if (ghi - glo + 2 <= rows) { lo = glo; hi = ghi; }
+      }
       v.top = Math.round((lo + hi) / 2 + rows / 2);
       this.clampView();
       this.draw();
@@ -587,6 +594,29 @@ BDJ.PianoRoll = (() => {
         }
         g.stroke();
         g.globalAlpha = 1;
+      }
+
+      // ghost notes: the other tracks at this point in the song, faint and outlined in their colours
+      const gh = this.host.ghosts ? this.host.ghosts() : null;
+      if (gh && gh.length) {
+        g.lineWidth = 1;
+        for (const n of gh) {
+          const x = this.x(n.start), w = Math.max(3, n.len * v.ppb - 1.5);
+          if (x > W || x + w < KEYS) continue;
+          const y = this.y(n.pitch) + 1, h = Math.max(3, v.rowH - 2);
+          if (y > GB || y + h < RULER) continue;
+          g.globalAlpha = 0.26; g.fillStyle = n.color; this.rr(x, y, w, h, 3); g.fill();
+          g.globalAlpha = 0.65; g.strokeStyle = n.color; this.rr(x + 0.5, y + 0.5, w - 1, h - 1, 3); g.stroke();
+        }
+        g.globalAlpha = 1;
+        // ghosts out of sight above or below: say so at that edge
+        const up = gh.filter((n) => this.y(n.pitch) + v.rowH <= RULER + 1).length, dn = gh.filter((n) => this.y(n.pitch) >= GB - 1).length;
+        g.font = '500 11px ' + this.mono(); g.textBaseline = 'middle'; g.textAlign = 'right';
+        g.fillStyle = C.muted || 'rgba(255,255,255,0.5)';
+        const tag = (k, dir) => (dir + ' ' + k + ' ghost note' + (k === 1 ? '' : 's') + (dir === '▲' ? ' above' : ' below'));
+        if (up) g.fillText(tag(up, '▲'), W - 10, RULER + 10);
+        if (dn) g.fillText(tag(dn, '▼'), W - 10, GB - 10);
+        g.textAlign = 'left';
       }
 
       // slides: a line gliding in from the note before
