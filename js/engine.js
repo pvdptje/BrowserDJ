@@ -518,7 +518,64 @@ const HumEngine = (() => {
     return new Uint8Array(out);
   }
 
-  return { Analyzer, segment, detectKey, guessTempo, finalize, writeMidi, writeMidiTracks, snapPitch, noteName, midiToHz, hzToMidi, SCALES, NOTE_NAMES };
+  /* ---------- chord progressions ---------- */
+  // degrees count from 0 (the key note). Pentatonic and chromatic keys borrow the seven-note scale they sit in.
+  const PROGRESSIONS = {
+    major: [[0, 4, 5, 3], [5, 3, 0, 4], [0, 5, 3, 4], [0, 3, 4, 3], [1, 4, 0, 0], [0, 3, 5, 4]],
+    minor: [[0, 5, 2, 6], [0, 6, 5, 6], [0, 3, 4, 0], [0, 5, 6, 0], [0, 3, 5, 4], [0, 2, 6, 3], [0, 3, 6, 3], [0, 1, 0, 6]],
+  };
+  const fullScale = (scaleKey) => {
+    const s = SCALES[scaleKey] ? scaleKey : 'major';
+    if (s === 'chromatic' || s === 'majorPent') return 'major';
+    if (s === 'minorPent') return 'minor';
+    return s;
+  };
+  // which list of progressions suits a key: major-sounding (a major third over the key note) or minor
+  const progressionFamily = (scaleKey) => (SCALES[fullScale(scaleKey)].steps.includes(4) ? 'major' : 'minor');
+  /* the triad on scale degree d, as semitones above the key note: [root, third, fifth] */
+  function triadSteps(scaleKey, d) {
+    // harmonic minor: the natural minor chords, but with its major V (the reason to pick it)
+    const k = fullScale(scaleKey), key = k === 'harmonicMinor' && d % 7 !== 4 ? 'minor' : k;
+    const st = SCALES[key].steps, n = st.length;
+    return [0, 2, 4].map((k) => st[(d + k) % n] + 12 * Math.floor((d + k) / n));
+  }
+  /* Roman numeral for degree d: upper case major, lower case minor, ° diminished, + augmented */
+  function numeral(scaleKey, d) {
+    const [r, t, f] = triadSteps(scaleKey, d), third = t - r, fifth = f - r;
+    const R = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'][d % 7];
+    if (third === 4) return fifth === 8 ? R + '+' : R;
+    return fifth === 6 ? R.toLowerCase() + '\u00b0' : R.toLowerCase();
+  }
+  /* the progressions that suit a key: no diminished or augmented chords in them */
+  const progressionsFor = (scaleKey) => PROGRESSIONS[progressionFamily(scaleKey)].filter((pr) => pr.every((d) => !/[°+]/.test(numeral(scaleKey, d))));
+  /* Chords for a progression in a key, voiced near middle C with smooth voice leading: each chord takes the
+     inversion closest to the one before. Returns [{degree, pitches (low to high), bass}]. */
+  function progressionChords(root, scaleKey, degrees) {
+    const out = [];
+    let prev = null;
+    for (const d of degrees) {
+      const pcs = triadSteps(scaleKey, d).map((x) => (((x + root) % 12) + 12) % 12);
+      // every voicing of these pitch classes with all notes between E3 and G5, spanning no more than an octave
+      let best = null;
+      for (let lo = 52; lo <= 67; lo++) {
+        if (!pcs.includes(lo % 12)) continue;
+        const v = [lo];
+        for (const pc of pcs) if (pc !== lo % 12) { let q = lo + 1; while (q % 12 !== pc) q++; v.push(q); }
+        v.sort((a, b) => a - b);
+        if (v[2] - v[0] > 12 || v[2] > 79) continue;
+        // first chord: close to C4 to E4; after that, as little movement as possible
+        const cost = prev ? v.reduce((a, q, i) => a + Math.abs(q - prev[i]), 0) : Math.abs(v[0] - 60) + (v[0] % 12 === pcs[0] ? 0 : 0.5);
+        if (!best || cost < best.cost) best = { v, cost };
+      }
+      prev = best.v;
+      const bass = 36 + pcs[0]; // the chord's root in the C2 octave
+      out.push({ degree: d, pitches: best.v, bass });
+    }
+    return out;
+  }
+
+  return { Analyzer, segment, detectKey, guessTempo, finalize, writeMidi, writeMidiTracks, snapPitch, noteName, midiToHz, hzToMidi, SCALES, NOTE_NAMES,
+    PROGRESSIONS, progressionFamily, progressionsFor, triadSteps, numeral, progressionChords };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = HumEngine;

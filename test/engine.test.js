@@ -728,6 +728,30 @@ test('a split take picks up the recording part-way through', () => {
   eq(late, [[20, 12]]);
 });
 
+test('chord progressions: numerals, voicing, the right chords for each key', () => {
+  eq(E.progressionsFor('major')[0].map((d) => E.numeral('major', d)), ['I', 'V', 'vi', 'IV']);
+  assert.strictEqual(E.numeral('minor', 1), 'ii°');
+  assert.strictEqual(E.numeral('harmonicMinor', 4), 'V');
+  for (const k of Object.keys(E.SCALES)) {
+    const list = E.progressionsFor(k);
+    assert.ok(list.length >= 4, k + ' has progressions');
+    for (let root = 0; root < 12; root++) for (const pr of list) {
+      const cs = E.progressionChords(root, k, pr);
+      cs.forEach((c, i) => {
+        // three notes, an octave or less apart, around middle C; the bass is the chord's root
+        assert.strictEqual(c.pitches.length, 3);
+        assert.ok(c.pitches[0] >= 52 && c.pitches[2] <= 79 && c.pitches[2] - c.pitches[0] <= 12, k + ' ' + root + ' ' + c.pitches);
+        assert.ok(c.bass >= 36 && c.bass < 48 && c.pitches.some((q) => q % 12 === c.bass % 12));
+        // and in the key (harmonic minor: its V borrows the raised seventh, which is in its scale too)
+        const steps = E.SCALES[k === 'chromatic' || k === 'majorPent' ? 'major' : k === 'minorPent' ? 'minor' : k].steps;
+        for (const q of c.pitches) assert.ok(steps.includes((((q - root) % 12) + 12) % 12) || (k === 'harmonicMinor' && (((q - root) % 12) + 12) % 12 === 10), k + ' out of key ' + q);
+        // smooth: no voice jumps more than a fifth from one chord to the next
+        if (i) cs[i - 1].pitches.forEach((q, j) => assert.ok(Math.abs(c.pitches[j] - q) <= 7, 'jump in ' + k + ' ' + pr));
+      });
+    }
+  }
+});
+
 test('history undo/redo', () => {
   const h = new PJ.History();
   h.push('a'); h.push('b');

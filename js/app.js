@@ -1480,6 +1480,7 @@
     const type = curTrack().type, synth = type === 'synth';
     renderEditorHead();
     $('rollTools').hidden = !synth;
+    if (synth) fillProgressions();
     $('rollWrap').hidden = !synth;
     $('rack').hidden = type !== 'drums';
     $('audioWrap').hidden = type !== 'audio';
@@ -2096,6 +2097,43 @@
     else say('Arpeggiate works on chords: notes that start at the same time. Draw some with Draw: Triad.', 'warn');
   });
   on('humanBtn', 'click', () => { roll.humanize(); say('Velocities loosened up a little. Do it again for more.'); });
+
+  /* Chord progressions: the list follows the song's key; picking one fills the pattern (a bass track gets roots). */
+  const isBassy = (t) => t && (t.instrument === 'bass' || t.instrument === 'acid');
+  function fillProgressions() {
+    const sel = $('progSel'), key = E.NOTE_NAMES[P.root] + ' ' + P.scale + (isBassy(curTrack()) ? ' bass' : '');
+    if (sel.dataset.key === key) return;
+    sel.dataset.key = key;
+    const head = '<option value="">' + (isBassy(curTrack()) ? 'Bass line\u2026' : 'Chords\u2026') + '</option>';
+    sel.innerHTML = head + E.progressionsFor(P.scale).map((pr) => {
+      const names = E.progressionChords(P.root, P.scale, pr).map((c) => E.NOTE_NAMES[c.bass % 12] + (/^[a-z]/.test(E.numeral(P.scale, c.degree)) ? 'm' : ''));
+      return '<option value="' + pr.join(',') + '">' + pr.map((d) => E.numeral(P.scale, d)).join(' \u2013 ') + '  (' + names.join(' ') + ')</option>';
+    }).join('');
+  }
+  for (const ev of ['focus', 'pointerdown', 'keydown']) $('progSel').addEventListener(ev, fillProgressions);
+  on('progSel', 'change', () => {
+    const sel = $('progSel'), v = sel.value, pat = curPat(), t = curTrack();
+    sel.value = '';
+    if (!v || !pat || !pat.notes) return;
+    const degrees = v.split(',').map(Number), chords = E.progressionChords(P.root, P.scale, degrees);
+    // one chord per bar; a shorter pattern changes chord more often so the whole progression fits
+    const total = pat.bars * 4, each = pat.bars >= degrees.length ? 4 : total / degrees.length;
+    const bass = isBassy(t), had = pat.notes.length;
+    commit(() => {
+      pat.notes = [];
+      for (let k = 0, at = 0; at < total - 1e-6; k++, at += each) {
+        const c = chords[k % chords.length];
+        const ps = bass ? [c.bass] : c.pitches;
+        for (const q of ps) pat.notes.push({ id: P.nextId++, start: at, len: each, pitch: q, vel: bass ? 105 : 90 });
+      }
+      pat.fromTake = false;
+    }, 'notes');
+    roll.sel.clear();
+    roll.fit();
+    const label = degrees.map((d) => E.numeral(P.scale, d)).join('\u2013');
+    say((bass ? 'Bass line for ' : 'Chords ') + label + ' in ' + E.NOTE_NAMES[P.root] + ' ' + E.SCALES[P.scale].name.toLowerCase() + (had ? '. Undo brings your notes back.' : '.')
+      + (bass ? '' : ' Try Arpeggiate on them, or put a Bass track under them with the same progression.'));
+  });
   on('chordType', 'change', () => { try { localStorage.setItem('browserdj.ui.chord', $('chordType').value); } catch (err) { /* storage blocked */ } });
   try { const c = localStorage.getItem('browserdj.ui.chord'); if (c) $('chordType').value = c; } catch (err) { /* storage blocked */ }
   on('clearMelBtn', 'click', () => {
