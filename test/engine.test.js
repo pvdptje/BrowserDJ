@@ -621,6 +621,8 @@ test('MIDI import: every example survives export -> import, note for note', () =
     }
     for (const t of orig.tracks.filter((x) => x.type === 'synth' && a[x.name])) assert.strictEqual(back.tracks.find((x) => x.name === t.name).instrument, t.instrument, f + ': instrument of ' + t.name);
     eq(back.markers.map((m) => [m.beat, m.name]), orig.markers.map((m) => [m.beat, m.name]));
+    // drum rolls come back as rolls
+    assert.strictEqual(back.patterns.some((x) => x.rolls), orig.patterns.some((x) => x.rolls), f + ': rolls');
     // repeats come back as patterns used more than once, not one pattern per block
     assert.ok(back.patterns.length < back.clips.length + back.tracks.length, f + ': ' + back.patterns.length + ' patterns for ' + back.clips.length + ' clips');
   }

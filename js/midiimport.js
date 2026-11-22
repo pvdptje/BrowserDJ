@@ -169,12 +169,28 @@
         let body;
         if (drums) {
           const steps = Object.fromEntries(DRUM_IDS.map((d) => [d, new Array(64).fill(0)]));
-          for (const n of blocks.get(bi)) {
-            const d = GM_DRUM[n.pitch];
-            const s = Math.round((n.start - base) * 4);
-            if (d && s >= 0 && s < 64) steps[d][s] = Math.max(steps[d][s], n.vel);
+          let rolls = null;
+          // per drum, in time order: 2 to 4 evenly spaced hits filling one 16th step are a roll on that step
+          const byDrum = new Map();
+          for (const n of blocks.get(bi)) { const d = GM_DRUM[n.pitch]; if (d) (byDrum.get(d) || byDrum.set(d, []).get(d)).push(n); }
+          for (const [d, hits] of byDrum) {
+            hits.sort((x, y) => x.start - y.start);
+            for (let i = 0; i < hits.length;) {
+              let j = i + 1;
+              const gap = j < hits.length ? hits[j].start - hits[i].start : 0;
+              if (gap > 0.04 && gap < 0.2) while (j < hits.length && j - i < 4 && (j - i + 1) * gap < 0.27 && Math.abs(hits[j].start - hits[j - 1].start - gap) < 0.01) j++;
+              const r = j - i;
+              const isRoll = r > 1 && Math.abs(gap * r - 0.25) < 0.02;
+              const group = isRoll ? hits.slice(i, j) : [hits[i]];
+              const s = Math.round((hits[i].start - base) * 4);
+              if (s >= 0 && s < 64) {
+                steps[d][s] = Math.max(steps[d][s], group[0].vel);
+                if (isRoll) ((rolls = rolls || {})[d] = rolls[d] || new Array(64).fill(0))[s] = r;
+              }
+              i += group.length;
+            }
           }
-          body = { bars: 4, steps };
+          body = { bars: 4, steps, ...(rolls ? { rolls } : {}) };
         } else {
           const notes = blocks.get(bi).map((n) => ({
             start: Math.round((n.start - base) * 1000) / 1000,

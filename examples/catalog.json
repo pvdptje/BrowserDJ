@@ -1,5 +1,6 @@
 [
   { "id":"firstlight", "file":"first-light.browserdj.json", "title":"First Light", "style":"Melodic house", "blurb":"Warm chords, a rippling arp and a melody that opens up after the breakdown." },
+  { "id":"tidewater", "file":"tidewater.browserdj.json", "title":"Tidewater", "style":"Neo-soul to drum & bass", "blurb":"Electric piano, marimba and flute at 86 BPM, then the tempo doubles into a drum & bass drop with a sliding Reese bass." },
   { "id":"hemelhoog", "file":"hemelhoog.browserdj.json", "title":"Hemelhoog", "style":"Trance", "blurb":"Soaring leads, a rolling bass and two breakdowns that build back up." },
   { "id":"sera", "file":"sera-d-estate.browserdj.json", "title":"Sera d'Estate", "style":"Melodic house", "blurb":"A summer-evening pluck melody floating over strings." },
   { "id":"luce", "file":"luce.json", "title":"Luce", "style":"Melodic house", "blurb":"A bright melody and its answer, carried by warm strings." },
