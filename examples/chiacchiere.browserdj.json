@@ -1,7 +1,7 @@
 {
  "version": 2,
  "name": "Chiacchiere",
- "bpm": 132,
+ "bpm": 160,
  "root": 4,
  "scale": "minor",
  "snap": 16,
@@ -284,10 +284,10 @@
    "type": "synth",
    "name": "Chatter",
    "color": "#ffe066",
-   "instrument": "acid",
-   "volume": 0.62,
+   "instrument": "voice",
+   "volume": 0.54,
    "pan": 0.05,
-   "drive": 0.15,
+   "drive": 0.1,
    "filter": 0.5,
    "reverb": 0.12,
    "pump": 0,
@@ -295,17 +295,17 @@
    "shape": {
     "attack": 0,
     "release": 0.05,
-    "tone": 0.6,
-    "glide": 0.5
+    "tone": 0.5,
+    "glide": 0.4
    },
    "lfo": {
-    "target": "filter",
+    "target": "off",
     "rate": "1/8",
-    "depth": 0.85
+    "depth": 0.6
    },
    "eq": {
-    "low": -6,
-    "mid": 3
+    "low": -4,
+    "mid": 2
    },
    "auto": {
     "echo": [
@@ -337,7 +337,7 @@
     "volume": [
      {
       "b": 304,
-      "v": 0.62
+      "v": 0.54
      },
      {
       "b": 320,
@@ -1002,7 +1002,7 @@
      "start": 2.25,
      "len": 0.2,
      "pitch": 64,
-     "vel": 92
+     "vel": 74
     },
     {
      "id": 80,
@@ -1031,7 +1031,7 @@
      "start": 4.5,
      "len": 0.3,
      "pitch": 59,
-     "vel": 96
+     "vel": 74
     },
     {
      "id": 84,
@@ -1102,7 +1102,7 @@
      "start": 10.25,
      "len": 0.2,
      "pitch": 64,
-     "vel": 92
+     "vel": 74
     },
     {
      "id": 94,
@@ -1131,7 +1131,7 @@
      "start": 12.25,
      "len": 0.2,
      "pitch": 67,
-     "vel": 94
+     "vel": 74
     },
     {
      "id": 98,
@@ -1159,7 +1159,7 @@
      "start": 14.25,
      "len": 0.2,
      "pitch": 62,
-     "vel": 96
+     "vel": 74
     },
     {
      "id": 102,
@@ -1173,7 +1173,7 @@
      "start": 15.25,
      "len": 0.2,
      "pitch": 62,
-     "vel": 96
+     "vel": 74
     },
     {
      "id": 104,

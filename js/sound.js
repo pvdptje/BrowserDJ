@@ -25,6 +25,7 @@ BDJ.Sound = (() => {
     { id: 'sub', name: 'Sub bass', program: 32 },
     { id: 'reese', name: 'Reese bass', program: 87 },
     { id: 'guitar', name: 'Nylon guitar', program: 24 },
+    { id: 'voice', name: 'Voice (says la)', program: 54 },
     { id: 'sampler', name: 'Sampler (your sound)', program: 52 },
   ];
 
@@ -653,6 +654,32 @@ BDJ.Sound = (() => {
       src.connect(body); body.connect(filt);
       mine.push(src);
       filt.frequency.value = 5200; att = 0.0015; rel = 0.12; peak = v * 2.4;
+    } else if (preset === 'voice') {
+      // a singing mouth: a buzz (the vocal cords) through three formants that start closed, as on an "l" or a "b",
+      // and open into a vowel. Harder notes open the mouth wider: soft ones say "lo", hard ones "la".
+      const hard = note.vel / 127, open = hard * hard;
+      const cords = ac.createGain();
+      const o = ac.createOscillator();
+      o.type = 'sawtooth'; o.frequency.value = f;
+      o.connect(cords);
+      mine.push(o);
+      const T = 0.045 + 0.03 * (1 - hard); // how long the mouth takes to open
+      for (const [from, to, q, level] of [[260, 330 + 480 * open, 7, 1], [1000, 880 + 360 * open, 9, 0.7], [2300, 2500 + 200 * open, 10, 0.3]]) {
+        const bp = ac.createBiquadFilter(), g = ac.createGain();
+        bp.type = 'bandpass'; bp.Q.value = q;
+        bp.frequency.setValueAtTime(from, a);
+        bp.frequency.exponentialRampToValueAtTime(to, a + T);
+        g.gain.value = level;
+        cords.connect(bp); bp.connect(g); g.connect(filt);
+      }
+      // the chest: a little of the note itself under the formants, so low notes keep their body
+      const chest = ac.createBiquadFilter(), cg = ac.createGain();
+      chest.type = 'lowpass'; chest.frequency.value = f * 1.5; cg.gain.value = 0.35;
+      cords.connect(chest); chest.connect(cg); cg.connect(filt);
+      // a small scoop up into the pitch, as a voice does, and vibrato on held notes
+      if (note.glideFrom == null) { o.detune.setValueAtTime(-60, a); o.detune.linearRampToValueAtTime(0, a + 0.05); }
+      vibrato(5.4, 18, 0.22);
+      filt.frequency.value = 7000; att = 0.012; rel = 0.07; peak = v * 2.6;
     } else if (preset === 'organ') {
       // drawbar-style stack of sine harmonics
       for (const [h, l] of [[1, 0.5], [2, 0.32], [3, 0.22], [4, 0.14], [6, 0.08], [8, 0.06]]) {

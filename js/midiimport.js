@@ -51,7 +51,7 @@
   /* ---------- sounds ---------- */
   // BrowserDJ's own exports first (so a round trip comes back exactly), then General MIDI families
   const OWN = { 45: 'pluck', 81: 'lead', 4: 'soft', 80: 'chip', 38: 'bass', 14: 'bell', 89: 'pad', 82: 'supersaw', 39: 'acid', 17: 'organ',
-    5: 'ep', 12: 'marimba', 48: 'strings', 61: 'brass', 73: 'flute', 32: 'sub', 87: 'reese', 24: 'guitar' };
+    5: 'ep', 12: 'marimba', 48: 'strings', 61: 'brass', 73: 'flute', 32: 'sub', 87: 'reese', 24: 'guitar', 54: 'voice' };
   function instrumentFor(program) {
     if (program == null) return 'pluck';
     if (OWN[program]) return OWN[program];
