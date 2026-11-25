@@ -335,7 +335,7 @@ test('synth shape: defaults, round trip, clamping; new instruments are known', (
   const s2 = back.tracks.find((t) => t.type === 'synth');
   eq(s2.shape, { attack: 0.4, release: 1, tone: 0, glide: 0.3 });
   assert.strictEqual(s2.instrument, 'supersaw');
-  for (const id of ['supersaw', 'acid', 'organ']) assert.ok(ctx.BDJ.Sound.INSTRUMENTS.some((i) => i.id === id));
+  for (const id of ['supersaw', 'acid', 'organ', 'voice']) assert.ok(ctx.BDJ.Sound.INSTRUMENTS.some((i) => i.id === id));
   // older saves without a shape get the neutral one
   const old = PJ.normalize({ version: 2, tracks: [{ id: 1, type: 'synth', instrument: 'acid' }] });
   eq(old.tracks[0].shape, { attack: 0, release: 0, tone: 0.5, glide: 0.3 });

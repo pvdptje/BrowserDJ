@@ -1,8 +1,8 @@
 /* Writes examples/chiacchiere.browserdj.json: "Chiacchiere" (Italian for chatter).
-   Italo dance at 132 BPM in E minor. A deep, funky bass that hops octaves and slides between the kicks, an acid
-   line with a filter LFO that "talks" in short syllables, off-beat organ stabs and a simple lead tune in the drops.
+   Italo dance at 160 BPM in E minor. A deep, funky bass that hops octaves and slides between the kicks, the Voice
+   instrument chattering in short syllables (soft notes say "lo", hard ones "la"), off-beat organ stabs and a simple lead tune in the drops.
    The second break is the bass on its own with claps.
-   Shows off: slides, the filter LFO as a talking voice, pump, a sub layer, EQ and automation.
+   Shows off: slides, the Voice instrument, pump, a sub layer, EQ and automation.
    Run: node tools/make-chiacchiere.js && node tools/pack-examples.js */
 'use strict';
 const fs = require('fs');
@@ -25,8 +25,8 @@ const T = {
     eq: { low: 2, high: 1.5 }, kit: kit({ kick: { vol: 1 }, snare: { vol: 0.6 }, clap: { vol: 0.7 }, chat: { vol: 0.45 }, ohat: { vol: 0.5 }, rim: { vol: 0.4 }, crash: { vol: 0.45 } }) },
   bass: synth('Funky bass', '#a58bff', 'bass', { volume: 0.58, pump: 0.3, drive: 0.22, eq: { low: 2, mid: 3 }, shape: { attack: 0, release: 0.06, tone: 0.55, glide: 0.35 } }),
   sub: synth('Sub', '#7a6cff', 'sub', { volume: 0.5, pump: 0.6, shape: { attack: 0, release: 0.1, tone: 0.4, glide: 0.3 } }),
-  talk: synth('Chatter', '#ffe066', 'acid', { volume: 0.62, pan: 0.05, drive: 0.15, reverb: 0.12, echoSend: 0.18, eq: { low: -6, mid: 3 },
-    shape: { attack: 0, release: 0.05, tone: 0.6, glide: 0.5 }, lfo: { target: 'filter', rate: '1/8', depth: 0.85 } }),
+  talk: synth('Chatter', '#ffe066', 'voice', { volume: 0.54, pan: 0.05, drive: 0.1, reverb: 0.12, echoSend: 0.18, eq: { low: -4, mid: 2 },
+    shape: { attack: 0, release: 0.05, tone: 0.5, glide: 0.4 } }),
   organ: synth('Organ', '#ff7a59', 'organ', { volume: 0.46, pan: -0.15, reverb: 0.2, pump: 0.3, eq: { low: -8, high: -1 }, shape: { attack: 0, release: 0.08, tone: 0.5, glide: 0.3 } }),
   lead: synth('Lead', '#ffb04f', 'pluck', { volume: 0.62, pan: 0.12, reverb: 0.3, echoSend: 0.32, eq: { low: -5, high: 1.5 } }),
   pad: synth('Strings', '#5fb4ff', 'strings', { volume: 0.46, reverb: 0.5, pump: 0.4, eq: { low: -8 }, shape: { attack: 0.3, release: 0.5, tone: 0.45, glide: 0.3 } }),
@@ -62,14 +62,14 @@ pat('bassE', T.bass, 'Bassline (on E)', { bars: 2, notes: notes([...riff(E2, 0),
 // sub: the root, an octave under, in the gap after each kick
 pat('sub', T.sub, 'Sub', { bars: 4, notes: notes([28, 28, 24, 26].flatMap((r, b) => [0.5, 1.5, 2.5, 3.5].map((s) => [r, b * BAR + s, 0.4, 104]))) });
 
-// the chatter: short syllables on two or three pitches, like someone talking over the beat; the LFO opens and
+// the chatter: short syllables on two or three pitches, like someone talking over the beat; velocity opens and
 // closes its mouth. Four bars: a phrase, its answer, the phrase again, and a longer reply.
 const B3 = 59, D4 = 62, E4 = 64, G4 = 67, A4 = 69;
 const TALK = [
-  [E4, 0, 0.3, 112], [E4, 0.5, 0.3, 100], [G4, 1, 0.45, 110], [E4, 2, 0.2, 104], [E4, 2.25, 0.2, 92], [D4, 2.75, 0.3, 100], [E4, 3.5, 0.4, 108, true],
-  [B3, 4, 0.3, 108], [B3, 4.5, 0.3, 96], [D4, 5, 0.45, 106], [E4, 5.75, 0.2, 100], [G4, 6.5, 0.3, 110], [E4, 7, 0.2, 100], [D4, 7.25, 0.5, 104, true],
-  [E4, 8, 0.3, 112], [E4, 8.5, 0.3, 100], [G4, 9, 0.45, 110], [E4, 10, 0.2, 104], [E4, 10.25, 0.2, 92], [G4, 10.75, 0.3, 104], [A4, 11.5, 0.4, 110, true],
-  [G4, 12, 0.2, 108], [G4, 12.25, 0.2, 94], [A4, 12.75, 0.3, 106], [G4, 13.5, 0.3, 104], [E4, 14, 0.2, 104], [D4, 14.25, 0.2, 96], [E4, 14.75, 0.2, 100], [D4, 15.25, 0.2, 96], [B3, 15.5, 0.45, 108, true],
+  [E4, 0, 0.3, 112], [E4, 0.5, 0.3, 100], [G4, 1, 0.45, 110], [E4, 2, 0.2, 104], [E4, 2.25, 0.2, 74], [D4, 2.75, 0.3, 100], [E4, 3.5, 0.4, 108, true],
+  [B3, 4, 0.3, 108], [B3, 4.5, 0.3, 74], [D4, 5, 0.45, 106], [E4, 5.75, 0.2, 100], [G4, 6.5, 0.3, 110], [E4, 7, 0.2, 100], [D4, 7.25, 0.5, 104, true],
+  [E4, 8, 0.3, 112], [E4, 8.5, 0.3, 100], [G4, 9, 0.45, 110], [E4, 10, 0.2, 104], [E4, 10.25, 0.2, 74], [G4, 10.75, 0.3, 104], [A4, 11.5, 0.4, 110, true],
+  [G4, 12, 0.2, 108], [G4, 12.25, 0.2, 74], [A4, 12.75, 0.3, 106], [G4, 13.5, 0.3, 104], [E4, 14, 0.2, 104], [D4, 14.25, 0.2, 74], [E4, 14.75, 0.2, 100], [D4, 15.25, 0.2, 74], [B3, 15.5, 0.45, 108, true],
 ];
 pat('talk', T.talk, 'Chatter', { bars: 4, notes: notes(TALK) });
 // just the first three syllables of every other bar, for the intro and the breaks
@@ -163,14 +163,14 @@ T.bass.auto = {
 };
 T.talk.auto = {
   echo: [{ b: b(24), v: 0.18 }, { b: b(25), v: 0.5 }, { b: b(31), v: 0.5 }, { b: b(32), v: 0.18 }, { b: b(76), v: 0.18 }, { b: b(77), v: 0.5 }],
-  volume: [{ b: b(76), v: 0.62 }, { b: b(80), v: 0.2 }],
+  volume: [{ b: b(76), v: 0.54 }, { b: b(80), v: 0.2 }],
 };
 T.pad.auto = { filter: [{ b: b(24), v: 0.3 }, { b: b(31.5), v: 0.6 }, { b: b(32), v: 0.5 }], volume: [{ b: b(24), v: 0.75 }, { b: b(31.9), v: 0.75 }, { b: b(32), v: 0.42 }] };
 T.organ.auto = { filter: [{ b: b(28), v: 0.3 }, { b: b(32), v: 0.5 }] };
 T.drums.auto = { filter: [{ b: b(76), v: 0.5 }, { b: b(80), v: 0.3 }] };
 
 const project = {
-  version: 2, name: 'Chiacchiere', bpm: 132, root: ROOT, scale: SCALE, snap: 16, loop: true, click: false, mode: 'song',
+  version: 2, name: 'Chiacchiere', bpm: 160, root: ROOT, scale: SCALE, snap: 16, loop: true, click: false, mode: 'song',
   capture: { detail: 0.5, fixTuning: true, playBeat: false, mode: 'melody' },
   master: 0.85, loud: 0.15, region: null, tempo: [], tempoOpen: false,
   markers: [
