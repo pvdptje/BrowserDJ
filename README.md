@@ -32,8 +32,8 @@ A small music studio that runs in the browser: hum a melody, edit it in a piano 
 
 The **Examples** button opens the songs in `examples/`. First-time visitors start in one of them, with a short welcome.
 
-- A link like `?example=gabber` opens that song directly (ids are in `examples/catalog.json`; `starter` is the small built-in song).
-- The page loads the songs from `examples/examples.js`, a bundle of the `.browserdj.json` files that also works when `index.html` is opened from disk. After adding or changing a song, list it in `examples/catalog.json` and run `node tools/pack-examples.js`; a unit test fails if the bundle is out of date.
+- The Examples button opens a gallery of every example song: search, a style filter, sorting, and a small map of each arrangement. A link like `?example=gabber` opens that song directly (ids are in `examples/catalog.json`; `starter` is the small built-in song), and `?gallery` opens the gallery.
+- The songs live in `examples/*.browserdj.json`. `node tools/pack-examples.js` turns them into `examples/index.js` (the gallery list, no notes, so it stays small as songs are added) and `examples/songs/<id>.js` (one per song, loaded only when it is opened). Scripts, unlike fetch, also work when `index.html` is opened from disk. After adding or changing a song, list it in `examples/catalog.json` with `id`, `file`, `title`, `style`, `blurb`, `added` (a date like `2026-11-26`) and `tags` (a few lowercase genre or mood words; reuse existing ones where they fit), then run the pack script; a unit test fails if the packed files are out of date.
 
 ## Model
 

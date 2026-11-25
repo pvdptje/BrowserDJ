@@ -492,29 +492,40 @@ test('offline: the service worker keeps every file the page loads, and they all 
   const shell = JSON.parse(sw.match(/const SHELL = (\[[\s\S]*?\]);/)[1].replace(/'/g, '"').replace(/,\s*\]/, ']'));
   const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
   const used = [...html.matchAll(/(?:src|href)="([^"#:]+)"/g)].map((m) => m[1]);
-  used.push('examples/examples.js');
+  used.push('examples/index.js');
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest.webmanifest'), 'utf8'));
   for (const i of manifest.icons) used.push(i.src);
   for (const u of used) assert.ok(shell.includes(u), u + ' is not in the service worker list');
   for (const u of shell) if (u !== './') assert.ok(fs.existsSync(path.join(root, u)), u + ' does not exist');
 });
 
-test('example library: examples.js matches the song files, and every song loads cleanly', () => {
+test('example library: the packed files match the song files, and every song loads cleanly', () => {
   const { build } = require('../tools/pack-examples.js');
-  const packed = fs.readFileSync(path.join(__dirname, '..', 'examples', 'examples.js'), 'utf8');
-  assert.strictEqual(packed, build(), 'examples/examples.js is out of date: run node tools/pack-examples.js');
+  const dir = path.join(__dirname, '..', 'examples');
+  const built = build();
+  const stale = 'is out of date: run node tools/pack-examples.js';
+  for (const [name, text] of Object.entries(built)) {
+    assert.ok(fs.existsSync(path.join(dir, name)), 'examples/' + name + ' is missing: run node tools/pack-examples.js');
+    assert.strictEqual(fs.readFileSync(path.join(dir, name), 'utf8'), text, 'examples/' + name + ' ' + stale);
+  }
+  for (const f of fs.readdirSync(path.join(dir, 'songs'))) assert.ok(built['songs/' + f], 'examples/songs/' + f + ' is not in the catalog ' + stale);
   const lib = { window: {} };
   lib.BDJ = lib.window.BDJ = {};
-  vm.runInNewContext(packed, lib);
-  const list = lib.BDJ.EXAMPLES;
+  vm.runInNewContext(built['index.js'], lib);
+  const list = lib.BDJ.EXAMPLE_INDEX;
   assert.ok(list.length >= 4);
   assert.strictEqual(new Set(list.map((x) => x.id)).size, list.length);
+  assert.ok(list.some((x) => x.id === 'firstlight'), 'the first-visit song (firstlight) is in the library');
   for (const ex of list) {
-    const raw = JSON.parse(JSON.stringify(ex.project));
+    vm.runInNewContext(built['songs/' + ex.id + '.js'], lib);
+    const raw = JSON.parse(JSON.stringify(lib.BDJ.EXAMPLE_SONGS[ex.id]));
     const p = PJ.normalize(raw);
     assert.strictEqual(p.clips.length, raw.clips.length, ex.id + ': every clip survives');
     assert.ok(ex.title && ex.style && ex.blurb && ex.bpm === p.bpm && ex.secs > 30, ex.id + ': catalogue details');
+    assert.ok(ex.tags.length && /^\d{4}-\d{2}-\d{2}$/.test(ex.added) && ex.map.length, ex.id + ': tags, date and map');
   }
+  // the gallery list stays small: no notes in it
+  assert.ok(built['index.js'].length < list.length * 1500, 'examples/index.js is ' + built['index.js'].length + ' bytes');
 });
 
 test('share links: every example survives the trip, links stay short, bad links fail clearly', async () => {

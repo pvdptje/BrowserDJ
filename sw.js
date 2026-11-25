@@ -1,9 +1,10 @@
 /* BrowserDJ service worker: keeps the studio working offline.
    Online, every request goes to the network first, so a new version shows up on the next visit; the copy that
    comes back is kept. Offline, the kept copy is used. The app files are fetched once at install, so the whole
-   studio (examples included) works offline after the first visit. Fonts come from Google and are kept the same way.
+   studio works offline after the first visit. Of the example songs only the gallery list (examples/index.js) is
+   fetched up front; a song (examples/songs/<id>.js) is kept once it has been opened, since the list keeps growing. Fonts come from Google and are kept the same way.
    SHELL must list every file index.html loads: test/engine.test.js checks that. */
-const CACHE = 'browserdj-v3';
+const CACHE = 'browserdj-v4';
 const SHELL = [
   './',
   'index.html',
@@ -14,7 +15,7 @@ const SHELL = [
   'icons/icon-512.png',
   'icons/icon-maskable-512.png',
   'icons/apple-touch-icon.png',
-  'examples/examples.js',
+  'examples/index.js',
   'js/engine.js',
   'js/sound.js',
   'js/samples.js',

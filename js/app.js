@@ -1189,23 +1189,37 @@
   }
 
   /* ---------- example songs ----------
-     The library lives in examples/examples.js, loaded the first time it is needed. A script tag works even
-     when the page is opened straight from disk, where fetch() is not allowed. */
+     examples/index.js lists every song with what the gallery shows (no notes, so it stays small as the list
+     grows); examples/songs/<id>.js holds one song and is loaded only when that song is opened. Script tags,
+     unlike fetch(), also work when the page is opened straight from disk. tools/pack-examples.js writes both. */
   const FIRST_EXAMPLE = 'firstlight';
   const TOUCH = window.matchMedia && window.matchMedia('(pointer: coarse)').matches; // a phone or tablet
-  let examplesReady = null;
-  function loadExamples() {
-    if (BDJ.EXAMPLES) return Promise.resolve(BDJ.EXAMPLES);
-    if (!examplesReady) {
-      examplesReady = new Promise((resolve, reject) => {
+  const scripts = new Map();
+  function loadScript(src) {
+    if (!scripts.has(src)) {
+      scripts.set(src, new Promise((resolve, reject) => {
         const s = document.createElement('script');
-        s.src = 'examples/examples.js';
-        s.onload = () => (BDJ.EXAMPLES ? resolve(BDJ.EXAMPLES) : reject(new Error('empty')));
-        s.onerror = () => { examplesReady = null; s.remove(); reject(new Error('could not load the examples')); };
+        s.src = src;
+        s.onload = resolve;
+        s.onerror = () => { scripts.delete(src); s.remove(); reject(new Error('could not load ' + src)); };
         document.head.appendChild(s);
-      });
+      }));
     }
-    return examplesReady;
+    return scripts.get(src);
+  }
+  async function loadExamples() {
+    if (!BDJ.EXAMPLE_INDEX) await loadScript('examples/index.js');
+    if (!BDJ.EXAMPLE_INDEX) throw new Error('empty');
+    return BDJ.EXAMPLE_INDEX;
+  }
+  /* -> the index entry with its project, or null when there is no such song */
+  async function loadExample(id) {
+    const ex = (await loadExamples()).find((x) => x.id === id);
+    if (!ex) return null;
+    const songs = () => BDJ.EXAMPLE_SONGS || {};
+    if (!songs()[id]) await loadScript('examples/songs/' + encodeURIComponent(id) + '.js');
+    if (!songs()[id]) throw new Error('empty');
+    return { ...ex, project: songs()[id] };
   }
 
   /* replace: swap it in without an undo step (first visit); otherwise undo brings the old project back */
@@ -1224,33 +1238,102 @@
       ? 'This is "' + ex.title + '", one of the example songs. ' + (TOUCH ? 'Tap Play to hear it, then tap any clip' : 'Press Space to play it, then click any clip') + ' to see how it is made.'
       : 'Loaded "' + ex.title + '". Press Space to play it; click any clip to see how it is made. Undo brings back what you had.');
   }
-
-  const fmtLen = (s) => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-  function closeExamples() {
-    $('exPanel').hidden = true;
-    $('examplesBtn').setAttribute('aria-expanded', 'false');
-  }
-  async function toggleExamples() {
-    const panel = $('exPanel');
-    if (!panel.hidden) { closeExamples(); return; }
-    closeShare(); closeSongs();
-    panel.hidden = false;
-    $('examplesBtn').setAttribute('aria-expanded', 'true');
-    panel.innerHTML = '<p class="exnote">Loading the example songs…</p>';
-    let list = [];
-    try { list = await loadExamples(); } catch (err) {
-      panel.innerHTML = '<p class="exnote">The example songs could not be loaded here. Open a project file instead.</p>';
-      return;
+  async function openExampleById(id) {
+    if (id === 'starter') { openExample({ title: 'Starter', project: PJ.example() }); return; }
+    try {
+      const ex = await loadExample(id);
+      if (ex) openExample(ex);
+      else say('There is no example called "' + id + '".', 'warn');
+    } catch (err) {
+      say('That example could not be loaded. Check the connection and try again.', 'warn');
     }
-    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    const items = list.map((ex) => `<button type="button" class="exitem" role="menuitem" data-ex="${esc(ex.id)}">` +
-      `<span class="t">${esc(ex.title)}</span><span class="m">${ex.bpm} BPM · ${fmtLen(ex.secs)}</span>` +
-      `<span class="b"><span class="s">${esc(ex.style)}</span> · ${esc(ex.blurb)}</span></button>`);
-    items.push('<button type="button" class="exitem" role="menuitem" data-ex="starter"><span class="t">Starter</span><span class="m">124 BPM · 0:15</span>' +
-      '<span class="b"><span class="s">House</span> · Drums, bass and a hook: a small song that is easy to take apart.</span></button>');
-    panel.innerHTML = items.join('') + '<p class="exnote">Opening an example replaces what is loaded; Undo brings it back.</p>';
-    const firstItem = panel.querySelector('.exitem');
-    if (firstItem) firstItem.focus();
+  }
+
+  /* ---------- the example gallery ----------
+     A full-screen list of every example: search, a style filter, sorting, and a map of each arrangement. */
+  const fmtLen = (s) => Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  const GAL_PAGE = 24;
+  const gal = { q: '', tag: '', sort: 'new', shown: GAL_PAGE, list: [] };
+  const exKey = (ex) => (ex.scale === 'chromatic' || !E.SCALES[ex.scale] ? '' : E.NOTE_NAMES[ex.root] + ' ' + E.SCALES[ex.scale].name.toLowerCase());
+  const exDate = (d) => new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const isNew = (d) => Date.now() - new Date(d + 'T12:00:00').getTime() < 4 * 86400e3;
+  const SORTS = {
+    new: (a, b) => b.added.localeCompare(a.added) || b.n - a.n,
+    old: (a, b) => a.added.localeCompare(b.added) || a.n - b.n,
+    az: (a, b) => a.title.localeCompare(b.title),
+    slow: (a, b) => a.bpm - b.bpm || a.title.localeCompare(b.title),
+    fast: (a, b) => b.bpm - a.bpm || a.title.localeCompare(b.title),
+    short: (a, b) => a.secs - b.secs,
+    long: (a, b) => b.secs - a.secs,
+  };
+
+  function exMap(ex) {
+    const rows = ex.map.length, w = Math.max(1, ex.bars);
+    const rects = ex.map.map(([color, runs], r) => runs.map(([s, n]) =>
+      `<rect x="${s}" y="${r + 0.15}" width="${n}" height="0.7" rx="0.3" fill="${escHtml(color)}"/>`).join('')).join('');
+    return `<svg class="galmap" viewBox="0 0 ${w} ${Math.max(rows, 1)}" preserveAspectRatio="none" aria-hidden="true">${rects}</svg>`;
+  }
+  function galFiltered() {
+    const words = gal.q.toLowerCase().split(/\s+/).filter(Boolean);
+    return gal.list.filter((ex) => {
+      if (gal.tag && !ex.tags.includes(gal.tag)) return false;
+      if (!words.length) return true;
+      const hay = (ex.title + ' ' + ex.style + ' ' + ex.blurb + ' ' + ex.tags.join(' ') + ' ' + exKey(ex) + ' ' + ex.bpm + ' bpm').toLowerCase();
+      return words.every((w) => hay.includes(w));
+    }).sort(SORTS[gal.sort] || SORTS.new);
+  }
+  function renderGalleryTags() {
+    const count = new Map();
+    for (const ex of gal.list) for (const t of ex.tags) count.set(t, (count.get(t) || 0) + 1);
+    const tags = [...count].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    $('galTags').innerHTML = [['', gal.list.length]].concat(tags).map(([t, n]) =>
+      `<button type="button" class="galtag${t === gal.tag ? ' on' : ''}" data-tag="${escHtml(t)}" aria-pressed="${t === gal.tag}">${t ? escHtml(t) : 'All'} <span>${n}</span></button>`).join('');
+  }
+  function renderGallery() {
+    const list = galFiltered();
+    const page = list.slice(0, gal.shown);
+    $('galCount').textContent = list.length === gal.list.length ? gal.list.length + ' songs' : list.length + ' of ' + gal.list.length + ' songs';
+    $('galGrid').innerHTML = page.length ? page.map((ex) => {
+      const key = exKey(ex);
+      return `<article class="galcard">` +
+        `<button type="button" class="galopen" data-ex="${escHtml(ex.id)}" aria-label="Open ${escHtml(ex.title)}">` +
+          exMap(ex) +
+          `<span class="galt">${escHtml(ex.title)}${isNew(ex.added) ? '<span class="galnew">new</span>' : ''}</span>` +
+          `<span class="galm"${ex.tempoChanges ? ' title="The tempo changes during the song"' : ''}>${ex.bpm} BPM${ex.tempoChanges ? ' (changes)' : ''} · ${fmtLen(ex.secs)}${key ? ' · ' + escHtml(key) : ''}</span>` +
+          `<span class="gals">${escHtml(ex.style)}</span>` +
+          `<span class="galb">${escHtml(ex.blurb)}</span>` +
+        `</button>` +
+        `<div class="galfoot">` +
+          ex.tags.map((t) => `<button type="button" class="galtag small" data-tag="${escHtml(t)}">${escHtml(t)}</button>`).join('') +
+          `<span class="galend2"><span class="galdate">${exDate(ex.added)}</span>` +
+          `<button type="button" class="galcopy" data-copy="${escHtml(ex.id)}" title="Copy a link that opens this song">Link</button></span>` +
+        `</div></article>`;
+    }).join('') : '<p class="galempty">No songs match that. Try another word, or pick All.</p>';
+    const left = list.length - page.length;
+    $('galMore').hidden = left <= 0;
+    $('galMore').textContent = 'Show more (' + left + ' left)';
+  }
+  async function openGallery() {
+    closeShare(); closeSongs();
+    const dlg = $('gallery');
+    if (!dlg.open) dlg.showModal();
+    $('examplesBtn').setAttribute('aria-expanded', 'true');
+    if (!gal.list.length) {
+      $('galGrid').innerHTML = '<p class="galempty">Loading the example songs…</p>';
+      try {
+        gal.list = (await loadExamples()).map((ex, n) => ({ ...ex, n }));
+      } catch (err) {
+        $('galGrid').innerHTML = '<p class="galempty">The example songs could not be loaded here. Open a project file instead.</p>';
+        return;
+      }
+    }
+    gal.shown = GAL_PAGE;
+    renderGalleryTags();
+    renderGallery();
+    if (!TOUCH) $('galSearch').focus();
+  }
+  function closeGallery() {
+    if ($('gallery').open) $('gallery').close();
   }
 
   /* ---------- share links ----------
@@ -1306,7 +1389,7 @@
   async function toggleSongs() {
     const panel = $('songsPanel');
     if (!panel.hidden) { closeSongs(); return; }
-    closeExamples(); closeShare();
+    closeGallery(); closeShare();
     panel.hidden = false;
     $('songsBtn').setAttribute('aria-expanded', 'true');
     panel.innerHTML = '<p class="exnote">Loading…</p>';
@@ -1330,7 +1413,7 @@
   async function toggleShare() {
     const panel = $('sharePanel');
     if (!panel.hidden) { closeShare(); return; }
-    closeExamples(); closeSongs();
+    closeGallery(); closeSongs();
     panel.hidden = false;
     $('shareBtn').setAttribute('aria-expanded', 'true');
     panel.innerHTML = '<p class="exnote">Making a link…</p>';
@@ -1836,24 +1919,37 @@
   on('undoBtn', 'click', undo);
   on('redoBtn', 'click', redo);
   // example picker and welcome card
-  on('examplesBtn', 'click', (e) => { e.stopPropagation(); toggleExamples(); });
-  on('exPanel', 'click', (e) => {
-    const b = e.target.closest('[data-ex]');
-    if (!b) return;
-    const id = b.dataset.ex;
-    closeExamples();
-    if (id === 'starter') { openExample({ title: 'Starter', project: PJ.example() }); return; }
-    const ex = (BDJ.EXAMPLES || []).find((x) => x.id === id);
-    if (ex) openExample(ex);
+  on('examplesBtn', 'click', (e) => { e.stopPropagation(); openGallery(); });
+  on('gallery', 'close', () => { $('examplesBtn').setAttribute('aria-expanded', 'false'); $('examplesBtn').focus(); });
+  on('gallery', 'click', (e) => {
+    if (e.target === $('gallery')) { closeGallery(); return; } // the backdrop
+    const t = e.target.closest('[data-tag],[data-ex],[data-copy],#galMore,#galRandom,#galClose');
+    if (!t) return;
+    if (t.id === 'galClose') closeGallery();
+    else if (t.id === 'galMore') { gal.shown += GAL_PAGE; renderGallery(); }
+    else if (t.id === 'galRandom') {
+      const list = galFiltered();
+      if (list.length) { closeGallery(); openExampleById(list[Math.floor(Math.random() * list.length)].id); }
+    } else if (t.dataset.tag !== undefined) {
+      gal.tag = gal.tag === t.dataset.tag && t.classList.contains('small') ? '' : t.dataset.tag;
+      gal.shown = GAL_PAGE;
+      renderGalleryTags(); renderGallery();
+      $('galGrid').scrollIntoView({ block: 'nearest' });
+    } else if (t.dataset.copy) {
+      const url = shareBase() + '?example=' + encodeURIComponent(t.dataset.copy);
+      (navigator.clipboard ? navigator.clipboard.writeText(url) : Promise.reject(new Error('no clipboard')))
+        .then(() => { t.textContent = 'Copied'; setTimeout(() => { t.textContent = 'Link'; }, 1500); })
+        .catch(() => { window.prompt('Copy this link:', url); });
+    } else if (t.dataset.ex) { closeGallery(); openExampleById(t.dataset.ex); }
   });
+  on('galSearch', 'input', () => { gal.q = $('galSearch').value; gal.shown = GAL_PAGE; renderGallery(); });
+  on('galSort', 'change', () => { gal.sort = $('galSort').value; gal.shown = GAL_PAGE; renderGallery(); });
   document.addEventListener('click', (e) => {
-    if (!$('exPanel').hidden && !e.target.closest('.exwrap:not(.sharewrap):not(.songswrap)')) closeExamples();
     if (!$('sharePanel').hidden && !e.target.closest('.sharewrap')) closeShare();
     if (!$('songsPanel').hidden && !e.target.closest('.songswrap')) closeSongs();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    if (!$('exPanel').hidden) { closeExamples(); $('examplesBtn').focus(); }
     if (!$('sharePanel').hidden) { closeShare(); $('shareBtn').focus(); }
     if (!$('songsPanel').hidden) { closeSongs(); $('songsBtn').focus(); }
   });
@@ -1890,7 +1986,7 @@
   };
   on('wClose', 'click', closeWelcome);
   on('wPlay', 'click', () => { closeWelcome(); if (!T.on) togglePlay(); });
-  on('wExamples', 'click', (e) => { e.stopPropagation(); closeWelcome(); toggleExamples(); });
+  on('wExamples', 'click', (e) => { e.stopPropagation(); closeWelcome(); openGallery(); });
   on('wNew', 'click', () => { closeWelcome(); $('newBtn').click(); });
 
   /* ---------- the tour: six steps, each pointing at the real thing; doing it moves on ---------- */
@@ -2391,24 +2487,27 @@
   try { welcomed = localStorage.getItem('browserdj.ui.welcomed') === '1'; plain = localStorage.getItem('browserdj.dev.plain') === '1'; } catch (err) { /* storage blocked */ }
   const shared = sharedToken();
   if (shared) openShared(shared, !restored);
-  const wanted = shared ? null : new URLSearchParams(location.search).get('example');
+  const params = new URLSearchParams(location.search);
+  const wanted = shared ? null : params.get('example');
   if (wanted) {
     const dropParam = () => { try { history.replaceState(null, '', location.pathname + location.hash); } catch (err) { /* fine */ } };
     if (wanted === 'starter') { if (restored) openExample({ title: 'Starter', project: PJ.example() }); dropParam(); }
     else {
-      loadExamples().then((list) => {
-        const ex = list.find((x) => x.id === wanted);
+      loadExample(wanted).then((ex) => {
         if (ex) openExample(ex, { replace: !restored });
         else say('There is no example called "' + wanted + '". The Examples button lists them all.', 'warn');
       }).catch(() => say('The example songs could not be loaded here.', 'warn')).finally(dropParam);
     }
+  } else if (!shared && params.has('gallery')) {
+    // ?gallery opens the example gallery; dropped like ?example so a reload does not open it again
+    try { history.replaceState(null, '', location.pathname + location.hash); } catch (err) { /* fine */ }
+    openGallery();
   }
   if (!restored && !plain) {
     if (!welcomed) $('welcome').hidden = false;
     if (!wanted && !shared) {
-      loadExamples().then((list) => {
+      loadExample(FIRST_EXAMPLE).then((first) => {
         if (P.name !== 'Example' || H.undo.length) return; // the visitor already started on something
-        const first = list.find((x) => x.id === FIRST_EXAMPLE) || list[0];
         if (first) openExample(first, { replace: true });
       }).catch(() => { /* the small built-in song stays */ });
     }

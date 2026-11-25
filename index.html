@@ -30,10 +30,7 @@
     <h1>Browser<span>DJ</span></h1>
     <p>Hum a melody, shape it in the piano roll, put a beat under it, and take it to your music program.</p>
     <div class="hactions">
-      <div class="exwrap">
-        <button id="examplesBtn" class="btn small exbtn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="exPanel">&#9835; Examples</button>
-        <div id="exPanel" class="expanel" role="menu" aria-label="Example songs" hidden></div>
-      </div>
+      <button id="examplesBtn" class="btn small exbtn" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="gallery">&#9835; Examples</button>
       <div class="exwrap songswrap">
         <button id="songsBtn" class="btn small" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="songsPanel" title="Every song you have worked on in this browser">My songs</button>
         <div id="songsPanel" class="expanel songspanel" role="menu" aria-label="My songs" hidden></div>
@@ -414,6 +411,34 @@
 <input id="sampleInput" class="hiddenfile" type="file" accept="audio/*,.wav,.mp3,.ogg,.flac" tabindex="-1">
 <input id="samplerInput" class="hiddenfile" type="file" accept="audio/*,.wav,.mp3,.ogg,.flac,.m4a" tabindex="-1">
 
+<dialog id="gallery" class="gallery" aria-labelledby="galTitle">
+  <div class="galhead">
+    <div class="galtitle">
+      <h2 id="galTitle">Example songs</h2>
+      <span id="galCount" class="galcount"></span>
+      <button id="galClose" class="btn small galclose" type="button" aria-label="Close the examples">&times;</button>
+    </div>
+    <div class="galtools">
+      <input id="galSearch" type="search" placeholder="Search by title, style, mood, key or tempo" aria-label="Search the examples" autocomplete="off">
+      <select id="galSort" aria-label="Sort the examples">
+        <option value="new">Newest first</option>
+        <option value="old">Oldest first</option>
+        <option value="az">Title A to Z</option>
+        <option value="slow">Slowest first</option>
+        <option value="fast">Fastest first</option>
+        <option value="short">Shortest first</option>
+        <option value="long">Longest first</option>
+      </select>
+      <button id="galRandom" class="btn small" type="button" title="Open a random song from the ones shown">Surprise me</button>
+    </div>
+    <div id="galTags" class="galtags" role="group" aria-label="Show only one style"></div>
+  </div>
+  <div id="galGrid" class="galgrid"></div>
+  <div class="galend">
+    <button id="galMore" class="btn" type="button" hidden>Show more</button>
+    <p class="exnote">Opening a song replaces what is loaded; Undo brings it back. Want something tiny to take apart? Open the <button type="button" class="linkbtn" data-ex="starter">Starter song</button>.</p>
+  </div>
+</dialog>
 <script src="js/engine.js"></script>
 <script src="js/sound.js"></script>
 <script src="js/samples.js"></script>
