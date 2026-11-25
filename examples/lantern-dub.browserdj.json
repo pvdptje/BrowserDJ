@@ -1,0 +1,4907 @@
+{
+ "version": 2,
+ "name": "Lantern Dub",
+ "bpm": 74,
+ "root": 7,
+ "scale": "minor",
+ "snap": 16,
+ "loop": true,
+ "click": false,
+ "mode": "song",
+ "capture": {
+  "detail": 0.5,
+  "fixTuning": true,
+  "playBeat": false,
+  "mode": "melody"
+ },
+ "master": 0.85,
+ "loud": 0.35,
+ "region": null,
+ "tempo": [],
+ "tempoOpen": false,
+ "markers": [
+  {
+   "id": 501,
+   "beat": 0,
+   "name": "Intro"
+  },
+  {
+   "id": 502,
+   "beat": 16,
+   "name": "Riddim"
+  },
+  {
+   "id": 503,
+   "beat": 80,
+   "name": "Horns"
+  },
+  {
+   "id": 504,
+   "beat": 112,
+   "name": "Dub"
+  },
+  {
+   "id": 505,
+   "beat": 176,
+   "name": "Steppers"
+  },
+  {
+   "id": 506,
+   "beat": 224,
+   "name": "Outro"
+  }
+ ],
+ "tracks": [
+  {
+   "id": 1,
+   "type": "drums",
+   "name": "One drop",
+   "color": "#ffb04f",
+   "kitStyle": "acoustic",
+   "volume": 0.92,
+   "pan": 0,
+   "drive": 0.05,
+   "filter": 0.5,
+   "reverb": 0.1,
+   "pump": 0,
+   "echoSend": 0,
+   "swing": 0.3,
+   "eq": {
+    "low": 2
+   },
+   "kit": [
+    {
+     "id": "kick",
+     "vol": 0.95,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "hkick",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "snare",
+     "vol": 0.7,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "clap",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "chat",
+     "vol": 0.5,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "ohat",
+     "vol": 0.4,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "tom",
+     "vol": 0.7,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "rim",
+     "vol": 0.75,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "crash",
+     "vol": 0.45,
+     "mute": false,
+     "solo": false
+    }
+   ],
+   "auto": {
+    "filter": [
+     {
+      "b": 143.9,
+      "v": 0.5
+     },
+     {
+      "b": 144,
+      "v": 0.7
+     },
+     {
+      "b": 151.9,
+      "v": 0.6
+     },
+     {
+      "b": 152,
+      "v": 0.5
+     }
+    ]
+   }
+  },
+  {
+   "id": 2,
+   "type": "drums",
+   "name": "Echo throws",
+   "color": "#ff7a59",
+   "kitStyle": "acoustic",
+   "volume": 0.5,
+   "pan": 0.15,
+   "drive": 0,
+   "filter": 0.6,
+   "reverb": 0.35,
+   "pump": 0,
+   "echoSend": 0.85,
+   "swing": 0,
+   "eq": {
+    "low": -6
+   },
+   "kit": [
+    {
+     "id": "kick",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "hkick",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "snare",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "clap",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "chat",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "ohat",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "tom",
+     "vol": 0.7,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "rim",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    },
+    {
+     "id": "crash",
+     "vol": 0.8,
+     "mute": false,
+     "solo": false
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "type": "synth",
+   "name": "Bass",
+   "color": "#a58bff",
+   "instrument": "bass",
+   "volume": 0.52,
+   "pan": 0,
+   "drive": 0.06,
+   "filter": 0.5,
+   "reverb": 0,
+   "pump": 0,
+   "echoSend": 0,
+   "shape": {
+    "attack": 0,
+    "release": 0.1,
+    "tone": 0.3,
+    "glide": 0.3
+   },
+   "lfo": {
+    "target": "off",
+    "rate": "1/8",
+    "depth": 0.6
+   },
+   "eq": {
+    "low": 1.5,
+    "high": -6
+   },
+   "auto": {
+    "filter": [
+     {
+      "b": 152,
+      "v": 0.3
+     },
+     {
+      "b": 160,
+      "v": 0.5
+     }
+    ]
+   }
+  },
+  {
+   "id": 4,
+   "type": "synth",
+   "name": "Skank guitar",
+   "color": "#58d6c5",
+   "instrument": "guitar",
+   "volume": 0.5,
+   "pan": -0.2,
+   "drive": 0,
+   "filter": 0.5,
+   "reverb": 0.18,
+   "pump": 0,
+   "echoSend": 0.08,
+   "shape": {
+    "attack": 0,
+    "release": 0,
+    "tone": 0.5,
+    "glide": 0.3
+   },
+   "lfo": {
+    "target": "off",
+    "rate": "1/8",
+    "depth": 0.6
+   },
+   "eq": {
+    "low": -6,
+    "high": 1.5
+   },
+   "auto": {
+    "filter": [
+     {
+      "b": 0,
+      "v": 0.38
+     },
+     {
+      "b": 16,
+      "v": 0.5
+     }
+    ],
+    "echo": [
+     {
+      "b": 111.9,
+      "v": 0.08
+     },
+     {
+      "b": 112,
+      "v": 0.8
+     },
+     {
+      "b": 175.9,
+      "v": 0.8
+     },
+     {
+      "b": 176,
+      "v": 0.08
+     },
+     {
+      "b": 224,
+      "v": 0.08
+     },
+     {
+      "b": 232,
+      "v": 0.7
+     }
+    ],
+    "volume": [
+     {
+      "b": 0,
+      "v": 0.7
+     },
+     {
+      "b": 15.9,
+      "v": 0.7
+     },
+     {
+      "b": 16,
+      "v": 0.5
+     },
+     {
+      "b": 224,
+      "v": 0.5
+     },
+     {
+      "b": 240,
+      "v": 0.12
+     }
+    ]
+   }
+  },
+  {
+   "id": 5,
+   "type": "synth",
+   "name": "Organ bubble",
+   "color": "#5fb4ff",
+   "instrument": "organ",
+   "volume": 0.42,
+   "pan": 0.2,
+   "drive": 0,
+   "filter": 0.5,
+   "reverb": 0.15,
+   "pump": 0,
+   "echoSend": 0,
+   "shape": {
+    "attack": 0,
+    "release": 0.05,
+    "tone": 0.42,
+    "glide": 0.3
+   },
+   "lfo": {
+    "target": "off",
+    "rate": "1/8",
+    "depth": 0.6
+   },
+   "swing": 0.3,
+   "eq": {
+    "low": -4,
+    "high": -2
+   },
+   "auto": {
+    "filter": [
+     {
+      "b": 0,
+      "v": 0.36
+     },
+     {
+      "b": 16,
+      "v": 0.5
+     },
+     {
+      "b": 127.9,
+      "v": 0.5
+     },
+     {
+      "b": 128,
+      "v": 0.24
+     },
+     {
+      "b": 144,
+      "v": 0.5
+     },
+     {
+      "b": 159.9,
+      "v": 0.5
+     },
+     {
+      "b": 160,
+      "v": 0.76
+     },
+     {
+      "b": 176,
+      "v": 0.5
+     }
+    ],
+    "echo": [
+     {
+      "b": 112,
+      "v": 0
+     },
+     {
+      "b": 128,
+      "v": 0.45
+     },
+     {
+      "b": 175.9,
+      "v": 0.45
+     },
+     {
+      "b": 176,
+      "v": 0
+     },
+     {
+      "b": 224,
+      "v": 0
+     },
+     {
+      "b": 232,
+      "v": 0.5
+     }
+    ],
+    "volume": [
+     {
+      "b": 0,
+      "v": 0.6
+     },
+     {
+      "b": 15.9,
+      "v": 0.6
+     },
+     {
+      "b": 16,
+      "v": 0.42
+     },
+     {
+      "b": 224,
+      "v": 0.42
+     },
+     {
+      "b": 240,
+      "v": 0.1
+     }
+    ]
+   }
+  },
+  {
+   "id": 6,
+   "type": "synth",
+   "name": "Horns",
+   "color": "#ffe066",
+   "instrument": "brass",
+   "volume": 0.62,
+   "pan": 0.05,
+   "drive": 0,
+   "filter": 0.5,
+   "reverb": 0.3,
+   "pump": 0,
+   "echoSend": 0.2,
+   "shape": {
+    "attack": 0.12,
+    "release": 0.2,
+    "tone": 0.5,
+    "glide": 0.3
+   },
+   "lfo": {
+    "target": "off",
+    "rate": "1/8",
+    "depth": 0.6
+   },
+   "eq": {
+    "low": -3
+   },
+   "auto": {
+    "echo": [
+     {
+      "b": 111.9,
+      "v": 0.2
+     },
+     {
+      "b": 112,
+      "v": 0.75
+     },
+     {
+      "b": 175.9,
+      "v": 0.75
+     },
+     {
+      "b": 176,
+      "v": 0.2
+     }
+    ]
+   }
+  },
+  {
+   "id": 7,
+   "type": "synth",
+   "name": "Voice",
+   "color": "#ff8fd0",
+   "instrument": "voice",
+   "volume": 0.56,
+   "pan": -0.1,
+   "drive": 0,
+   "filter": 0.5,
+   "reverb": 0.35,
+   "pump": 0,
+   "echoSend": 0.55,
+   "shape": {
+    "attack": 0,
+    "release": 0,
+    "tone": 0.5,
+    "glide": 0.3
+   },
+   "lfo": {
+    "target": "off",
+    "rate": "1/8",
+    "depth": 0.6
+   },
+   "eq": {
+    "low": -3
+   }
+  }
+ ],
+ "patterns": [
+  {
+   "id": 56,
+   "trackId": 4,
+   "name": "Skank",
+   "bars": 4,
+   "notes": [
+    {
+     "id": 8,
+     "start": 0.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 100
+    },
+    {
+     "id": 9,
+     "start": 0.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 10,
+     "start": 0.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 11,
+     "start": 1.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 100
+    },
+    {
+     "id": 12,
+     "start": 1.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 13,
+     "start": 1.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 14,
+     "start": 2.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 100
+    },
+    {
+     "id": 15,
+     "start": 2.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 16,
+     "start": 2.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 17,
+     "start": 3.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 88
+    },
+    {
+     "id": 18,
+     "start": 3.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 19,
+     "start": 3.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 96
+    },
+    {
+     "id": 20,
+     "start": 4.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 100
+    },
+    {
+     "id": 21,
+     "start": 4.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 22,
+     "start": 4.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 23,
+     "start": 5.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 100
+    },
+    {
+     "id": 24,
+     "start": 5.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 25,
+     "start": 5.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 26,
+     "start": 6.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 100
+    },
+    {
+     "id": 27,
+     "start": 6.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 28,
+     "start": 6.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 29,
+     "start": 7.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 88
+    },
+    {
+     "id": 30,
+     "start": 7.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 31,
+     "start": 7.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 96
+    },
+    {
+     "id": 32,
+     "start": 8.5,
+     "len": 0.22,
+     "pitch": 60,
+     "vel": 100
+    },
+    {
+     "id": 33,
+     "start": 8.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 104
+    },
+    {
+     "id": 34,
+     "start": 8.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 35,
+     "start": 9.5,
+     "len": 0.22,
+     "pitch": 60,
+     "vel": 100
+    },
+    {
+     "id": 36,
+     "start": 9.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 104
+    },
+    {
+     "id": 37,
+     "start": 9.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 38,
+     "start": 10.5,
+     "len": 0.22,
+     "pitch": 60,
+     "vel": 100
+    },
+    {
+     "id": 39,
+     "start": 10.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 104
+    },
+    {
+     "id": 40,
+     "start": 10.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 41,
+     "start": 11.5,
+     "len": 0.22,
+     "pitch": 60,
+     "vel": 88
+    },
+    {
+     "id": 42,
+     "start": 11.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 43,
+     "start": 11.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 96
+    },
+    {
+     "id": 44,
+     "start": 12.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 100
+    },
+    {
+     "id": 45,
+     "start": 12.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 46,
+     "start": 12.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 108
+    },
+    {
+     "id": 47,
+     "start": 13.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 100
+    },
+    {
+     "id": 48,
+     "start": 13.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 49,
+     "start": 13.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 108
+    },
+    {
+     "id": 50,
+     "start": 14.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 100
+    },
+    {
+     "id": 51,
+     "start": 14.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 52,
+     "start": 14.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 108
+    },
+    {
+     "id": 53,
+     "start": 15.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 88
+    },
+    {
+     "id": 54,
+     "start": 15.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 55,
+     "start": 15.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 96
+    }
+   ]
+  },
+  {
+   "id": 105,
+   "trackId": 4,
+   "name": "Skank (horn section)",
+   "bars": 4,
+   "notes": [
+    {
+     "id": 57,
+     "start": 0.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 100
+    },
+    {
+     "id": 58,
+     "start": 0.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 104
+    },
+    {
+     "id": 59,
+     "start": 0.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 60,
+     "start": 1.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 100
+    },
+    {
+     "id": 61,
+     "start": 1.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 104
+    },
+    {
+     "id": 62,
+     "start": 1.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 63,
+     "start": 2.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 100
+    },
+    {
+     "id": 64,
+     "start": 2.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 104
+    },
+    {
+     "id": 65,
+     "start": 2.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 66,
+     "start": 3.5,
+     "len": 0.22,
+     "pitch": 58,
+     "vel": 88
+    },
+    {
+     "id": 67,
+     "start": 3.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 68,
+     "start": 3.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 96
+    },
+    {
+     "id": 69,
+     "start": 4.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 100
+    },
+    {
+     "id": 70,
+     "start": 4.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 71,
+     "start": 4.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 108
+    },
+    {
+     "id": 72,
+     "start": 5.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 100
+    },
+    {
+     "id": 73,
+     "start": 5.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 74,
+     "start": 5.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 108
+    },
+    {
+     "id": 75,
+     "start": 6.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 100
+    },
+    {
+     "id": 76,
+     "start": 6.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 77,
+     "start": 6.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 108
+    },
+    {
+     "id": 78,
+     "start": 7.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 88
+    },
+    {
+     "id": 79,
+     "start": 7.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 80,
+     "start": 7.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 96
+    },
+    {
+     "id": 81,
+     "start": 8.5,
+     "len": 0.22,
+     "pitch": 60,
+     "vel": 100
+    },
+    {
+     "id": 82,
+     "start": 8.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 104
+    },
+    {
+     "id": 83,
+     "start": 8.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 84,
+     "start": 9.5,
+     "len": 0.22,
+     "pitch": 60,
+     "vel": 100
+    },
+    {
+     "id": 85,
+     "start": 9.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 104
+    },
+    {
+     "id": 86,
+     "start": 9.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 87,
+     "start": 10.5,
+     "len": 0.22,
+     "pitch": 60,
+     "vel": 100
+    },
+    {
+     "id": 88,
+     "start": 10.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 104
+    },
+    {
+     "id": 89,
+     "start": 10.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 108
+    },
+    {
+     "id": 90,
+     "start": 11.5,
+     "len": 0.22,
+     "pitch": 60,
+     "vel": 88
+    },
+    {
+     "id": 91,
+     "start": 11.52,
+     "len": 0.22,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 92,
+     "start": 11.54,
+     "len": 0.22,
+     "pitch": 67,
+     "vel": 96
+    },
+    {
+     "id": 93,
+     "start": 12.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 100
+    },
+    {
+     "id": 94,
+     "start": 12.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 95,
+     "start": 12.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 108
+    },
+    {
+     "id": 96,
+     "start": 13.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 100
+    },
+    {
+     "id": 97,
+     "start": 13.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 98,
+     "start": 13.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 108
+    },
+    {
+     "id": 99,
+     "start": 14.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 100
+    },
+    {
+     "id": 100,
+     "start": 14.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 104
+    },
+    {
+     "id": 101,
+     "start": 14.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 108
+    },
+    {
+     "id": 102,
+     "start": 15.5,
+     "len": 0.22,
+     "pitch": 57,
+     "vel": 88
+    },
+    {
+     "id": 103,
+     "start": 15.52,
+     "len": 0.22,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 104,
+     "start": 15.54,
+     "len": 0.22,
+     "pitch": 65,
+     "vel": 96
+    }
+   ]
+  },
+  {
+   "id": 218,
+   "trackId": 5,
+   "name": "Bubble",
+   "bars": 4,
+   "notes": [
+    {
+     "id": 106,
+     "start": 0.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 107,
+     "start": 0.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 108,
+     "start": 0.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 109,
+     "start": 0.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 110,
+     "start": 0.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 111,
+     "start": 0.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 112,
+     "start": 0.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 113,
+     "start": 1.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 114,
+     "start": 1.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 115,
+     "start": 1.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 116,
+     "start": 1.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 117,
+     "start": 1.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 118,
+     "start": 1.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 119,
+     "start": 1.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 120,
+     "start": 2.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 121,
+     "start": 2.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 122,
+     "start": 2.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 123,
+     "start": 2.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 124,
+     "start": 2.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 125,
+     "start": 2.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 126,
+     "start": 2.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 127,
+     "start": 3.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 128,
+     "start": 3.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 129,
+     "start": 3.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 130,
+     "start": 3.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 131,
+     "start": 3.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 132,
+     "start": 3.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 133,
+     "start": 3.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 134,
+     "start": 4.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 135,
+     "start": 4.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 136,
+     "start": 4.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 137,
+     "start": 4.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 138,
+     "start": 4.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 139,
+     "start": 4.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 140,
+     "start": 4.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 141,
+     "start": 5.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 142,
+     "start": 5.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 143,
+     "start": 5.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 144,
+     "start": 5.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 145,
+     "start": 5.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 146,
+     "start": 5.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 147,
+     "start": 5.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 148,
+     "start": 6.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 149,
+     "start": 6.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 150,
+     "start": 6.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 151,
+     "start": 6.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 152,
+     "start": 6.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 153,
+     "start": 6.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 154,
+     "start": 6.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 155,
+     "start": 7.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 156,
+     "start": 7.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 157,
+     "start": 7.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 158,
+     "start": 7.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 159,
+     "start": 7.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 160,
+     "start": 7.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 161,
+     "start": 7.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 162,
+     "start": 8.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 163,
+     "start": 8.25,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 58
+    },
+    {
+     "id": 164,
+     "start": 8.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 165,
+     "start": 8.5,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 92
+    },
+    {
+     "id": 166,
+     "start": 8.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 167,
+     "start": 8.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 168,
+     "start": 8.75,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 60
+    },
+    {
+     "id": 169,
+     "start": 9.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 170,
+     "start": 9.25,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 58
+    },
+    {
+     "id": 171,
+     "start": 9.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 172,
+     "start": 9.5,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 92
+    },
+    {
+     "id": 173,
+     "start": 9.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 174,
+     "start": 9.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 175,
+     "start": 9.75,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 60
+    },
+    {
+     "id": 176,
+     "start": 10.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 177,
+     "start": 10.25,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 58
+    },
+    {
+     "id": 178,
+     "start": 10.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 179,
+     "start": 10.5,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 92
+    },
+    {
+     "id": 180,
+     "start": 10.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 181,
+     "start": 10.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 182,
+     "start": 10.75,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 60
+    },
+    {
+     "id": 183,
+     "start": 11.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 184,
+     "start": 11.25,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 58
+    },
+    {
+     "id": 185,
+     "start": 11.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 186,
+     "start": 11.5,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 92
+    },
+    {
+     "id": 187,
+     "start": 11.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 188,
+     "start": 11.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 189,
+     "start": 11.75,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 60
+    },
+    {
+     "id": 190,
+     "start": 12.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 191,
+     "start": 12.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 192,
+     "start": 12.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 193,
+     "start": 12.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 194,
+     "start": 12.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 195,
+     "start": 12.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 196,
+     "start": 12.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 197,
+     "start": 13.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 198,
+     "start": 13.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 199,
+     "start": 13.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 200,
+     "start": 13.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 201,
+     "start": 13.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 202,
+     "start": 13.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 203,
+     "start": 13.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 204,
+     "start": 14.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 205,
+     "start": 14.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 206,
+     "start": 14.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 207,
+     "start": 14.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 208,
+     "start": 14.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 209,
+     "start": 14.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 210,
+     "start": 14.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 211,
+     "start": 15.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 212,
+     "start": 15.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 213,
+     "start": 15.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 214,
+     "start": 15.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 215,
+     "start": 15.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 216,
+     "start": 15.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 217,
+     "start": 15.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    }
+   ]
+  },
+  {
+   "id": 331,
+   "trackId": 5,
+   "name": "Bubble (horn section)",
+   "bars": 4,
+   "notes": [
+    {
+     "id": 219,
+     "start": 0.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 220,
+     "start": 0.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 221,
+     "start": 0.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 222,
+     "start": 0.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 223,
+     "start": 0.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 224,
+     "start": 0.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 225,
+     "start": 0.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 226,
+     "start": 1.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 227,
+     "start": 1.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 228,
+     "start": 1.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 229,
+     "start": 1.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 230,
+     "start": 1.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 231,
+     "start": 1.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 232,
+     "start": 1.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 233,
+     "start": 2.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 234,
+     "start": 2.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 235,
+     "start": 2.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 236,
+     "start": 2.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 237,
+     "start": 2.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 238,
+     "start": 2.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 239,
+     "start": 2.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 240,
+     "start": 3.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 241,
+     "start": 3.25,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 58
+    },
+    {
+     "id": 242,
+     "start": 3.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 243,
+     "start": 3.5,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 92
+    },
+    {
+     "id": 244,
+     "start": 3.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 245,
+     "start": 3.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 246,
+     "start": 3.75,
+     "len": 0.2,
+     "pitch": 58,
+     "vel": 60
+    },
+    {
+     "id": 247,
+     "start": 4.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 248,
+     "start": 4.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 249,
+     "start": 4.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 250,
+     "start": 4.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 251,
+     "start": 4.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 252,
+     "start": 4.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 253,
+     "start": 4.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 254,
+     "start": 5.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 255,
+     "start": 5.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 256,
+     "start": 5.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 257,
+     "start": 5.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 258,
+     "start": 5.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 259,
+     "start": 5.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 260,
+     "start": 5.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 261,
+     "start": 6.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 262,
+     "start": 6.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 263,
+     "start": 6.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 264,
+     "start": 6.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 265,
+     "start": 6.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 266,
+     "start": 6.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 267,
+     "start": 6.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 268,
+     "start": 7.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 269,
+     "start": 7.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 270,
+     "start": 7.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 271,
+     "start": 7.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 272,
+     "start": 7.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 273,
+     "start": 7.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 274,
+     "start": 7.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 275,
+     "start": 8.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 276,
+     "start": 8.25,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 58
+    },
+    {
+     "id": 277,
+     "start": 8.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 278,
+     "start": 8.5,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 92
+    },
+    {
+     "id": 279,
+     "start": 8.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 280,
+     "start": 8.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 281,
+     "start": 8.75,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 60
+    },
+    {
+     "id": 282,
+     "start": 9.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 283,
+     "start": 9.25,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 58
+    },
+    {
+     "id": 284,
+     "start": 9.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 285,
+     "start": 9.5,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 92
+    },
+    {
+     "id": 286,
+     "start": 9.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 287,
+     "start": 9.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 288,
+     "start": 9.75,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 60
+    },
+    {
+     "id": 289,
+     "start": 10.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 290,
+     "start": 10.25,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 58
+    },
+    {
+     "id": 291,
+     "start": 10.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 292,
+     "start": 10.5,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 92
+    },
+    {
+     "id": 293,
+     "start": 10.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 294,
+     "start": 10.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 295,
+     "start": 10.75,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 60
+    },
+    {
+     "id": 296,
+     "start": 11.25,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 62
+    },
+    {
+     "id": 297,
+     "start": 11.25,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 58
+    },
+    {
+     "id": 298,
+     "start": 11.5,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 92
+    },
+    {
+     "id": 299,
+     "start": 11.5,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 92
+    },
+    {
+     "id": 300,
+     "start": 11.5,
+     "len": 0.2,
+     "pitch": 63,
+     "vel": 92
+    },
+    {
+     "id": 301,
+     "start": 11.75,
+     "len": 0.2,
+     "pitch": 55,
+     "vel": 66
+    },
+    {
+     "id": 302,
+     "start": 11.75,
+     "len": 0.2,
+     "pitch": 60,
+     "vel": 60
+    },
+    {
+     "id": 303,
+     "start": 12.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 304,
+     "start": 12.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 305,
+     "start": 12.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 306,
+     "start": 12.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 307,
+     "start": 12.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 308,
+     "start": 12.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 309,
+     "start": 12.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 310,
+     "start": 13.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 311,
+     "start": 13.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 312,
+     "start": 13.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 313,
+     "start": 13.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 314,
+     "start": 13.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 315,
+     "start": 13.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 316,
+     "start": 13.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 317,
+     "start": 14.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 318,
+     "start": 14.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 319,
+     "start": 14.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 320,
+     "start": 14.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 321,
+     "start": 14.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 322,
+     "start": 14.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 323,
+     "start": 14.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    },
+    {
+     "id": 324,
+     "start": 15.25,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 62
+    },
+    {
+     "id": 325,
+     "start": 15.25,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 58
+    },
+    {
+     "id": 326,
+     "start": 15.5,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 92
+    },
+    {
+     "id": 327,
+     "start": 15.5,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 92
+    },
+    {
+     "id": 328,
+     "start": 15.5,
+     "len": 0.2,
+     "pitch": 62,
+     "vel": 92
+    },
+    {
+     "id": 329,
+     "start": 15.75,
+     "len": 0.2,
+     "pitch": 53,
+     "vel": 66
+    },
+    {
+     "id": 330,
+     "start": 15.75,
+     "len": 0.2,
+     "pitch": 57,
+     "vel": 60
+    }
+   ]
+  },
+  {
+   "id": 354,
+   "trackId": 3,
+   "name": "Riddim",
+   "bars": 4,
+   "notes": [
+    {
+     "id": 332,
+     "start": 0,
+     "len": 0.75,
+     "pitch": 43,
+     "vel": 118
+    },
+    {
+     "id": 333,
+     "start": 1,
+     "len": 0.25,
+     "pitch": 43,
+     "vel": 96
+    },
+    {
+     "id": 334,
+     "start": 1.5,
+     "len": 0.5,
+     "pitch": 46,
+     "vel": 104
+    },
+    {
+     "id": 335,
+     "start": 2.5,
+     "len": 0.5,
+     "pitch": 43,
+     "vel": 108
+    },
+    {
+     "id": 336,
+     "start": 3.25,
+     "len": 0.25,
+     "pitch": 41,
+     "vel": 92
+    },
+    {
+     "id": 337,
+     "start": 3.5,
+     "len": 0.5,
+     "pitch": 43,
+     "vel": 100
+    },
+    {
+     "id": 338,
+     "start": 4,
+     "len": 0.75,
+     "pitch": 43,
+     "vel": 118
+    },
+    {
+     "id": 339,
+     "start": 5.5,
+     "len": 0.5,
+     "pitch": 50,
+     "vel": 104
+    },
+    {
+     "id": 340,
+     "start": 6,
+     "len": 0.5,
+     "pitch": 48,
+     "vel": 100
+    },
+    {
+     "id": 341,
+     "start": 6.5,
+     "len": 0.5,
+     "pitch": 46,
+     "vel": 100
+    },
+    {
+     "id": 342,
+     "start": 7,
+     "len": 0.5,
+     "pitch": 43,
+     "vel": 106
+    },
+    {
+     "id": 343,
+     "start": 8,
+     "len": 0.75,
+     "pitch": 48,
+     "vel": 118
+    },
+    {
+     "id": 344,
+     "start": 9,
+     "len": 0.25,
+     "pitch": 48,
+     "vel": 96
+    },
+    {
+     "id": 345,
+     "start": 9.5,
+     "len": 0.5,
+     "pitch": 51,
+     "vel": 104
+    },
+    {
+     "id": 346,
+     "start": 10.5,
+     "len": 0.5,
+     "pitch": 48,
+     "vel": 108
+    },
+    {
+     "id": 347,
+     "start": 11.25,
+     "len": 0.25,
+     "pitch": 46,
+     "vel": 92
+    },
+    {
+     "id": 348,
+     "start": 11.5,
+     "len": 0.5,
+     "pitch": 48,
+     "vel": 100
+    },
+    {
+     "id": 349,
+     "start": 12,
+     "len": 0.75,
+     "pitch": 50,
+     "vel": 118
+    },
+    {
+     "id": 350,
+     "start": 13.5,
+     "len": 0.5,
+     "pitch": 50,
+     "vel": 104
+    },
+    {
+     "id": 351,
+     "start": 14,
+     "len": 0.5,
+     "pitch": 48,
+     "vel": 100
+    },
+    {
+     "id": 352,
+     "start": 14.5,
+     "len": 0.5,
+     "pitch": 45,
+     "vel": 100
+    },
+    {
+     "id": 353,
+     "start": 15,
+     "len": 0.75,
+     "pitch": 38,
+     "vel": 110
+    }
+   ]
+  },
+  {
+   "id": 376,
+   "trackId": 3,
+   "name": "Horn section",
+   "bars": 4,
+   "notes": [
+    {
+     "id": 355,
+     "start": 0,
+     "len": 1,
+     "pitch": 39,
+     "vel": 118
+    },
+    {
+     "id": 356,
+     "start": 1.5,
+     "len": 0.5,
+     "pitch": 46,
+     "vel": 100
+    },
+    {
+     "id": 357,
+     "start": 2,
+     "len": 0.5,
+     "pitch": 43,
+     "vel": 100
+    },
+    {
+     "id": 358,
+     "start": 2.5,
+     "len": 0.75,
+     "pitch": 39,
+     "vel": 108
+    },
+    {
+     "id": 359,
+     "start": 3.5,
+     "len": 0.5,
+     "pitch": 39,
+     "vel": 98
+    },
+    {
+     "id": 360,
+     "start": 4,
+     "len": 1,
+     "pitch": 38,
+     "vel": 118
+    },
+    {
+     "id": 361,
+     "start": 5.5,
+     "len": 0.5,
+     "pitch": 45,
+     "vel": 100
+    },
+    {
+     "id": 362,
+     "start": 6,
+     "len": 0.5,
+     "pitch": 41,
+     "vel": 100
+    },
+    {
+     "id": 363,
+     "start": 6.5,
+     "len": 0.75,
+     "pitch": 38,
+     "vel": 108
+    },
+    {
+     "id": 364,
+     "start": 7.5,
+     "len": 0.5,
+     "pitch": 38,
+     "vel": 98
+    },
+    {
+     "id": 365,
+     "start": 8,
+     "len": 1,
+     "pitch": 36,
+     "vel": 118
+    },
+    {
+     "id": 366,
+     "start": 9.5,
+     "len": 0.5,
+     "pitch": 43,
+     "vel": 100
+    },
+    {
+     "id": 367,
+     "start": 10,
+     "len": 0.5,
+     "pitch": 39,
+     "vel": 100
+    },
+    {
+     "id": 368,
+     "start": 10.5,
+     "len": 0.75,
+     "pitch": 36,
+     "vel": 108
+    },
+    {
+     "id": 369,
+     "start": 11.5,
+     "len": 0.5,
+     "pitch": 36,
+     "vel": 98
+    },
+    {
+     "id": 370,
+     "start": 12,
+     "len": 0.75,
+     "pitch": 38,
+     "vel": 118
+    },
+    {
+     "id": 371,
+     "start": 13.5,
+     "len": 0.5,
+     "pitch": 45,
+     "vel": 100
+    },
+    {
+     "id": 372,
+     "start": 14,
+     "len": 0.5,
+     "pitch": 48,
+     "vel": 100
+    },
+    {
+     "id": 373,
+     "start": 14.5,
+     "len": 0.5,
+     "pitch": 50,
+     "vel": 104
+    },
+    {
+     "id": 374,
+     "start": 15.25,
+     "len": 0.25,
+     "pitch": 38,
+     "vel": 92
+    },
+    {
+     "id": 375,
+     "start": 15.5,
+     "len": 0.5,
+     "pitch": 41,
+     "vel": 100
+    }
+   ]
+  },
+  {
+   "id": 405,
+   "trackId": 6,
+   "name": "Tune",
+   "bars": 4,
+   "notes": [
+    {
+     "id": 377,
+     "start": 0,
+     "len": 1.5,
+     "pitch": 74,
+     "vel": 104
+    },
+    {
+     "id": 378,
+     "start": 0,
+     "len": 1.5,
+     "pitch": 70,
+     "vel": 86
+    },
+    {
+     "id": 379,
+     "start": 1.5,
+     "len": 0.5,
+     "pitch": 72,
+     "vel": 104
+    },
+    {
+     "id": 380,
+     "start": 1.5,
+     "len": 0.5,
+     "pitch": 69,
+     "vel": 86
+    },
+    {
+     "id": 381,
+     "start": 2,
+     "len": 1,
+     "pitch": 70,
+     "vel": 104
+    },
+    {
+     "id": 382,
+     "start": 2,
+     "len": 1,
+     "pitch": 67,
+     "vel": 86
+    },
+    {
+     "id": 383,
+     "start": 3,
+     "len": 1,
+     "pitch": 67,
+     "vel": 104
+    },
+    {
+     "id": 384,
+     "start": 3,
+     "len": 1,
+     "pitch": 63,
+     "vel": 86
+    },
+    {
+     "id": 385,
+     "start": 4,
+     "len": 0.5,
+     "pitch": 70,
+     "vel": 104
+    },
+    {
+     "id": 386,
+     "start": 4,
+     "len": 0.5,
+     "pitch": 67,
+     "vel": 86
+    },
+    {
+     "id": 387,
+     "start": 4.5,
+     "len": 0.5,
+     "pitch": 72,
+     "vel": 104
+    },
+    {
+     "id": 388,
+     "start": 4.5,
+     "len": 0.5,
+     "pitch": 69,
+     "vel": 86
+    },
+    {
+     "id": 389,
+     "start": 5,
+     "len": 2,
+     "pitch": 70,
+     "vel": 104
+    },
+    {
+     "id": 390,
+     "start": 5,
+     "len": 2,
+     "pitch": 67,
+     "vel": 86
+    },
+    {
+     "id": 391,
+     "start": 8,
+     "len": 1.5,
+     "pitch": 75,
+     "vel": 104
+    },
+    {
+     "id": 392,
+     "start": 8,
+     "len": 1.5,
+     "pitch": 72,
+     "vel": 86
+    },
+    {
+     "id": 393,
+     "start": 9.5,
+     "len": 0.5,
+     "pitch": 74,
+     "vel": 104
+    },
+    {
+     "id": 394,
+     "start": 9.5,
+     "len": 0.5,
+     "pitch": 70,
+     "vel": 86
+    },
+    {
+     "id": 395,
+     "start": 10,
+     "len": 1,
+     "pitch": 72,
+     "vel": 104
+    },
+    {
+     "id": 396,
+     "start": 10,
+     "len": 1,
+     "pitch": 69,
+     "vel": 86
+    },
+    {
+     "id": 397,
+     "start": 11,
+     "len": 1,
+     "pitch": 67,
+     "vel": 104
+    },
+    {
+     "id": 398,
+     "start": 11,
+     "len": 1,
+     "pitch": 63,
+     "vel": 86
+    },
+    {
+     "id": 399,
+     "start": 12,
+     "len": 0.5,
+     "pitch": 69,
+     "vel": 104
+    },
+    {
+     "id": 400,
+     "start": 12,
+     "len": 0.5,
+     "pitch": 65,
+     "vel": 86
+    },
+    {
+     "id": 401,
+     "start": 12.5,
+     "len": 0.5,
+     "pitch": 72,
+     "vel": 104
+    },
+    {
+     "id": 402,
+     "start": 12.5,
+     "len": 0.5,
+     "pitch": 69,
+     "vel": 86
+    },
+    {
+     "id": 403,
+     "start": 13,
+     "len": 2.5,
+     "pitch": 74,
+     "vel": 104
+    },
+    {
+     "id": 404,
+     "start": 13,
+     "len": 2.5,
+     "pitch": 70,
+     "vel": 86
+    }
+   ]
+  },
+  {
+   "id": 426,
+   "trackId": 6,
+   "name": "Long notes",
+   "bars": 4,
+   "notes": [
+    {
+     "id": 406,
+     "start": 0,
+     "len": 3,
+     "pitch": 79,
+     "vel": 100
+    },
+    {
+     "id": 407,
+     "start": 0,
+     "len": 3,
+     "pitch": 75,
+     "vel": 82
+    },
+    {
+     "id": 408,
+     "start": 3,
+     "len": 1,
+     "pitch": 77,
+     "vel": 96
+    },
+    {
+     "id": 409,
+     "start": 3,
+     "len": 1,
+     "pitch": 74,
+     "vel": 78
+    },
+    {
+     "id": 410,
+     "start": 4,
+     "len": 3,
+     "pitch": 77,
+     "vel": 100
+    },
+    {
+     "id": 411,
+     "start": 4,
+     "len": 3,
+     "pitch": 74,
+     "vel": 82
+    },
+    {
+     "id": 412,
+     "start": 7,
+     "len": 1,
+     "pitch": 74,
+     "vel": 96
+    },
+    {
+     "id": 413,
+     "start": 7,
+     "len": 1,
+     "pitch": 70,
+     "vel": 78
+    },
+    {
+     "id": 414,
+     "start": 8,
+     "len": 2,
+     "pitch": 75,
+     "vel": 100
+    },
+    {
+     "id": 415,
+     "start": 8,
+     "len": 2,
+     "pitch": 72,
+     "vel": 82
+    },
+    {
+     "id": 416,
+     "start": 10,
+     "len": 1,
+     "pitch": 74,
+     "vel": 96
+    },
+    {
+     "id": 417,
+     "start": 10,
+     "len": 1,
+     "pitch": 70,
+     "vel": 78
+    },
+    {
+     "id": 418,
+     "start": 11,
+     "len": 1,
+     "pitch": 72,
+     "vel": 96
+    },
+    {
+     "id": 419,
+     "start": 11,
+     "len": 1,
+     "pitch": 69,
+     "vel": 78
+    },
+    {
+     "id": 420,
+     "start": 12,
+     "len": 1.5,
+     "pitch": 74,
+     "vel": 104
+    },
+    {
+     "id": 421,
+     "start": 12,
+     "len": 1.5,
+     "pitch": 70,
+     "vel": 86
+    },
+    {
+     "id": 422,
+     "start": 13.5,
+     "len": 0.5,
+     "pitch": 72,
+     "vel": 96
+    },
+    {
+     "id": 423,
+     "start": 13.5,
+     "len": 0.5,
+     "pitch": 69,
+     "vel": 78
+    },
+    {
+     "id": 424,
+     "start": 14,
+     "len": 2,
+     "pitch": 69,
+     "vel": 100
+    },
+    {
+     "id": 425,
+     "start": 14,
+     "len": 2,
+     "pitch": 65,
+     "vel": 82
+    }
+   ]
+  },
+  {
+   "id": 433,
+   "trackId": 7,
+   "name": "Call",
+   "bars": 2,
+   "notes": [
+    {
+     "id": 427,
+     "start": 0.5,
+     "len": 0.5,
+     "pitch": 67,
+     "vel": 78
+    },
+    {
+     "id": 428,
+     "start": 1,
+     "len": 0.5,
+     "pitch": 70,
+     "vel": 96
+    },
+    {
+     "id": 429,
+     "start": 1.5,
+     "len": 1.5,
+     "pitch": 72,
+     "vel": 116
+    },
+    {
+     "id": 430,
+     "start": 4.5,
+     "len": 0.5,
+     "pitch": 70,
+     "vel": 80
+    },
+    {
+     "id": 431,
+     "start": 5,
+     "len": 0.5,
+     "pitch": 67,
+     "vel": 96
+    },
+    {
+     "id": 432,
+     "start": 5.5,
+     "len": 2,
+     "pitch": 62,
+     "vel": 112
+    }
+   ]
+  },
+  {
+   "id": 441,
+   "trackId": 7,
+   "name": "Under the horns",
+   "bars": 4,
+   "notes": [
+    {
+     "id": 434,
+     "start": 6.5,
+     "len": 0.5,
+     "pitch": 62,
+     "vel": 80
+    },
+    {
+     "id": 435,
+     "start": 7,
+     "len": 0.5,
+     "pitch": 65,
+     "vel": 96
+    },
+    {
+     "id": 436,
+     "start": 7.5,
+     "len": 0.5,
+     "pitch": 67,
+     "vel": 104
+    },
+    {
+     "id": 437,
+     "start": 8,
+     "len": 2,
+     "pitch": 67,
+     "vel": 116
+    },
+    {
+     "id": 438,
+     "start": 14,
+     "len": 0.5,
+     "pitch": 65,
+     "vel": 84
+    },
+    {
+     "id": 439,
+     "start": 14.5,
+     "len": 0.5,
+     "pitch": 67,
+     "vel": 100
+    },
+    {
+     "id": 440,
+     "start": 15,
+     "len": 1,
+     "pitch": 62,
+     "vel": 112
+    }
+   ]
+  },
+  {
+   "id": 442,
+   "trackId": 1,
+   "name": "One drop",
+   "bars": 2,
+   "steps": {
+    "kick": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     122,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     122,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "rim": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     0,
+     0,
+     38,
+     0
+    ],
+    "chat": [
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     64,
+     0,
+     100,
+     38
+    ],
+    "ohat": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     64,
+     0
+    ]
+   }
+  },
+  {
+   "id": 443,
+   "trackId": 1,
+   "name": "Rockers",
+   "bars": 2,
+   "steps": {
+    "kick": [
+     122,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     122,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     122,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     122,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "rim": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     0,
+     0,
+     38,
+     0
+    ],
+    "chat": [
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     64,
+     0,
+     100,
+     38
+    ],
+    "ohat": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     64,
+     0
+    ]
+   }
+  },
+  {
+   "id": 444,
+   "trackId": 1,
+   "name": "Steppers",
+   "bars": 2,
+   "steps": {
+    "kick": [
+     122,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     122,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     122,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     122,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0
+    ],
+    "snare": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "rim": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     38,
+     0,
+     0,
+     38,
+     0
+    ],
+    "chat": [
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     64,
+     0,
+     100,
+     38
+    ],
+    "ohat": [
+     0,
+     0,
+     64,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     64,
+     0,
+     0,
+     0,
+     64,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     64,
+     0
+    ]
+   }
+  },
+  {
+   "id": 445,
+   "trackId": 1,
+   "name": "Fill",
+   "bars": 1,
+   "steps": {
+    "kick": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     122,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "snare": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     100,
+     0,
+     100,
+     100
+    ],
+    "tom": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     100,
+     0,
+     100,
+     0,
+     0
+    ],
+    "chat": [
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "crash": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   "rolls": {
+    "snare": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     2,
+     0
+    ],
+    "tom": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     2,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "id": 446,
+   "trackId": 1,
+   "name": "Pick-up",
+   "bars": 1,
+   "steps": {
+    "snare": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     100,
+     100,
+     0,
+     100,
+     0,
+     100
+    ],
+    "tom": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     100,
+     0
+    ],
+    "kick": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0
+    ]
+   },
+   "rolls": {
+    "snare": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     2,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "id": 447,
+   "trackId": 1,
+   "name": "Hats",
+   "bars": 2,
+   "steps": {
+    "chat": [
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     100,
+     0,
+     100,
+     38,
+     64,
+     0,
+     100,
+     38
+    ],
+    "rim": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     38,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "id": 448,
+   "trackId": 2,
+   "name": "Throw (every 4 bars)",
+   "bars": 4,
+   "steps": {
+    "snare": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  },
+  {
+   "id": 449,
+   "trackId": 2,
+   "name": "Throws (dub)",
+   "bars": 2,
+   "steps": {
+    "snare": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ],
+    "rim": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     100,
+     0,
+     0,
+     100,
+     0,
+     0
+    ],
+    "tom": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     64,
+     0
+    ]
+   }
+  }
+ ],
+ "clips": [
+  {
+   "id": 450,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 0,
+   "len": 16
+  },
+  {
+   "id": 451,
+   "trackId": 5,
+   "patternId": 218,
+   "start": 0,
+   "len": 16
+  },
+  {
+   "id": 452,
+   "trackId": 1,
+   "patternId": 446,
+   "start": 12,
+   "len": 4
+  },
+  {
+   "id": 453,
+   "trackId": 1,
+   "patternId": 442,
+   "start": 16,
+   "len": 32
+  },
+  {
+   "id": 454,
+   "trackId": 1,
+   "patternId": 443,
+   "start": 48,
+   "len": 28
+  },
+  {
+   "id": 455,
+   "trackId": 1,
+   "patternId": 445,
+   "start": 76,
+   "len": 4
+  },
+  {
+   "id": 456,
+   "trackId": 3,
+   "patternId": 354,
+   "start": 16,
+   "len": 64
+  },
+  {
+   "id": 457,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 16,
+   "len": 64
+  },
+  {
+   "id": 458,
+   "trackId": 5,
+   "patternId": 218,
+   "start": 16,
+   "len": 64
+  },
+  {
+   "id": 459,
+   "trackId": 6,
+   "patternId": 405,
+   "start": 48,
+   "len": 32
+  },
+  {
+   "id": 460,
+   "trackId": 2,
+   "patternId": 448,
+   "start": 16,
+   "len": 64
+  },
+  {
+   "id": 461,
+   "trackId": 1,
+   "patternId": 443,
+   "start": 80,
+   "len": 28
+  },
+  {
+   "id": 462,
+   "trackId": 1,
+   "patternId": 445,
+   "start": 108,
+   "len": 4
+  },
+  {
+   "id": 463,
+   "trackId": 3,
+   "patternId": 376,
+   "start": 80,
+   "len": 32
+  },
+  {
+   "id": 464,
+   "trackId": 4,
+   "patternId": 105,
+   "start": 80,
+   "len": 32
+  },
+  {
+   "id": 465,
+   "trackId": 5,
+   "patternId": 331,
+   "start": 80,
+   "len": 32
+  },
+  {
+   "id": 466,
+   "trackId": 6,
+   "patternId": 426,
+   "start": 80,
+   "len": 32
+  },
+  {
+   "id": 467,
+   "trackId": 2,
+   "patternId": 448,
+   "start": 80,
+   "len": 32
+  },
+  {
+   "id": 468,
+   "trackId": 1,
+   "patternId": 442,
+   "start": 112,
+   "len": 32
+  },
+  {
+   "id": 469,
+   "trackId": 1,
+   "patternId": 447,
+   "start": 144,
+   "len": 8
+  },
+  {
+   "id": 470,
+   "trackId": 1,
+   "patternId": 442,
+   "start": 152,
+   "len": 20
+  },
+  {
+   "id": 471,
+   "trackId": 1,
+   "patternId": 445,
+   "start": 172,
+   "len": 4
+  },
+  {
+   "id": 472,
+   "trackId": 3,
+   "patternId": 354,
+   "start": 112,
+   "len": 32
+  },
+  {
+   "id": 473,
+   "trackId": 3,
+   "patternId": 354,
+   "start": 152,
+   "len": 24,
+   "off": 8
+  },
+  {
+   "id": 474,
+   "trackId": 2,
+   "patternId": 449,
+   "start": 112,
+   "len": 64
+  },
+  {
+   "id": 475,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 112,
+   "len": 4
+  },
+  {
+   "id": 476,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 124,
+   "len": 4,
+   "off": 12
+  },
+  {
+   "id": 477,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 132,
+   "len": 4,
+   "off": 4
+  },
+  {
+   "id": 478,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 144,
+   "len": 8
+  },
+  {
+   "id": 479,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 160,
+   "len": 4
+  },
+  {
+   "id": 480,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 172,
+   "len": 4,
+   "off": 12
+  },
+  {
+   "id": 481,
+   "trackId": 5,
+   "patternId": 218,
+   "start": 128,
+   "len": 16
+  },
+  {
+   "id": 482,
+   "trackId": 5,
+   "patternId": 218,
+   "start": 160,
+   "len": 16
+  },
+  {
+   "id": 483,
+   "trackId": 6,
+   "patternId": 405,
+   "start": 120,
+   "len": 4
+  },
+  {
+   "id": 484,
+   "trackId": 6,
+   "patternId": 405,
+   "start": 136,
+   "len": 4,
+   "off": 8
+  },
+  {
+   "id": 485,
+   "trackId": 6,
+   "patternId": 405,
+   "start": 152,
+   "len": 8
+  },
+  {
+   "id": 486,
+   "trackId": 7,
+   "patternId": 433,
+   "start": 144,
+   "len": 8
+  },
+  {
+   "id": 487,
+   "trackId": 7,
+   "patternId": 433,
+   "start": 168,
+   "len": 8
+  },
+  {
+   "id": 488,
+   "trackId": 1,
+   "patternId": 444,
+   "start": 176,
+   "len": 44
+  },
+  {
+   "id": 489,
+   "trackId": 1,
+   "patternId": 445,
+   "start": 220,
+   "len": 4
+  },
+  {
+   "id": 490,
+   "trackId": 3,
+   "patternId": 354,
+   "start": 176,
+   "len": 48
+  },
+  {
+   "id": 491,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 176,
+   "len": 48
+  },
+  {
+   "id": 492,
+   "trackId": 5,
+   "patternId": 218,
+   "start": 176,
+   "len": 48
+  },
+  {
+   "id": 493,
+   "trackId": 6,
+   "patternId": 405,
+   "start": 176,
+   "len": 48
+  },
+  {
+   "id": 494,
+   "trackId": 7,
+   "patternId": 441,
+   "start": 192,
+   "len": 32
+  },
+  {
+   "id": 495,
+   "trackId": 2,
+   "patternId": 448,
+   "start": 176,
+   "len": 48
+  },
+  {
+   "id": 496,
+   "trackId": 4,
+   "patternId": 56,
+   "start": 224,
+   "len": 16
+  },
+  {
+   "id": 497,
+   "trackId": 5,
+   "patternId": 218,
+   "start": 224,
+   "len": 16
+  },
+  {
+   "id": 498,
+   "trackId": 1,
+   "patternId": 447,
+   "start": 224,
+   "len": 8
+  },
+  {
+   "id": 499,
+   "trackId": 2,
+   "patternId": 449,
+   "start": 224,
+   "len": 16
+  },
+  {
+   "id": 500,
+   "trackId": 3,
+   "patternId": 354,
+   "start": 224,
+   "len": 4
+  }
+ ],
+ "sel": {
+  "trackId": 3,
+  "patternId": 354
+ },
+ "nextId": 507
+}
